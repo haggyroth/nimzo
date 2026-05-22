@@ -310,10 +310,18 @@ async def play_game(
         if chosen_move not in board.legal_moves:
             chosen_move = candidates[0][0]
 
-        quality = stockfish.evaluate_move_quality(board, chosen_move, candidates)
-        san     = board.san(chosen_move)
+        quality  = stockfish.evaluate_move_quality(board, chosen_move, candidates)
+        san      = board.san(chosen_move)
 
-        if board.turn == chess.WHITE:
+        # Score from White's perspective (for centipawn graph).
+        # candidates are scored from the current player's POV, so negate for Black.
+        was_white    = board.turn == chess.WHITE
+        chosen_score = next((s for m, s in candidates if m == chosen_move), candidates[0][1])
+        score_cp_white = chosen_score if was_white else (
+            -chosen_score if chosen_score is not None else None
+        )
+
+        if was_white:
             move_qualities_white.append((san, quality))
         else:
             move_qualities_black.append((san, quality))
@@ -330,7 +338,7 @@ async def play_game(
             "move_san":       san,
             "candidate_rank": decision.candidate_rank,
             "quality":        quality,
-            "score_cp":       None,
+            "score_cp":       score_cp_white,
             "reasoning":      decision.reasoning,
             "fen_after":      board.fen(),
         })
@@ -345,6 +353,7 @@ async def play_game(
             "quality":        quality,
             "candidate_rank": decision.candidate_rank,
             "reasoning":      decision.reasoning,
+            "score_cp_white": score_cp_white,
             "fen":            board.fen(),
         })
 

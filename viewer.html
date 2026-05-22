@@ -315,6 +315,17 @@
       display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
     }
 
+    /* ── Eval graph ──────────────────────────────────────────────── */
+    .eval-pane { border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .eval-svg  { display: block; width: 100%; height: 46px; }
+
+    /* ── Collapsible panels ──────────────────────────────────────── */
+    .ctrl-head { cursor: pointer; user-select: none; }
+    .ctrl-head:hover { color: var(--text-mid); }
+    .chevron { font-size: 9px; transition: transform .15s; }
+    .ctrl-section.collapsed .chevron { transform: rotate(-90deg); }
+    .ctrl-section.collapsed > *:not(.ctrl-head) { display: none !important; }
+
     /* ── Right control panel ─────────────────────────────────────── */
     .right-panel {
       border-left: 1px solid var(--border);
@@ -579,6 +590,10 @@
         <div class="idle-hint"><div class="king">♚</div><div>Waiting for game start</div></div>
       </div>
     </div>
+    <div class="eval-pane" id="evalPane" style="display:none">
+      <div class="pane-head">Evaluation</div>
+      <svg id="evalGraph" class="eval-svg" viewBox="0 0 280 46" preserveAspectRatio="none"></svg>
+    </div>
     <div class="pane-head">Move History</div>
     <div class="history-pane" id="historyPane"></div>
   </div>
@@ -588,9 +603,12 @@
 
     <!-- Tournament section -->
     <div class="ctrl-section" id="tournamentSection">
-      <div class="ctrl-head">
+      <div class="ctrl-head" onclick="toggleSection('tournamentSection')">
         Tournament
-        <span class="ctrl-badge" id="tournamentBadge">Idle</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="ctrl-badge" id="tournamentBadge">Idle</span>
+          <span class="chevron">▾</span>
+        </div>
       </div>
 
       <!-- Setup form (shown when idle) -->
@@ -626,7 +644,7 @@
               <option value="anthropic">Anthropic</option>
             </select>
             <div class="url-row" id="blackUrlRow">
-              <input class="ctrl-input" id="blackUrl" placeholder="http://localhost:1235/v1" value="http://localhost:1235/v1">
+              <input class="ctrl-input" id="blackUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
               <button class="fetch-btn" onclick="fetchModels('black')" title="Load models">⟳</button>
             </div>
             <select class="ctrl-select" id="blackModel" onchange="onModelSelect('black')"><option value="">— select model —</option></select>
@@ -657,7 +675,7 @@
           <!-- Games count -->
           <div class="games-row">
             <span>Number of games</span>
-            <input type="number" id="gamesCount" value="10" min="1" max="200">
+            <input type="number" id="gamesCount" value="1" min="1" max="200">
           </div>
 
           <button class="start-btn" id="startBtn" onclick="startTournament()">▶ Start Tournament</button>
@@ -676,9 +694,12 @@
 
     <!-- Leaderboard section -->
     <div class="ctrl-section" id="leaderboardSection">
-      <div class="ctrl-head">
+      <div class="ctrl-head" onclick="toggleSection('leaderboardSection')">
         Leaderboard
-        <span style="font-size:8px;color:var(--text-dim);cursor:pointer" onclick="loadLeaderboard()">↻</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadLeaderboard()">↻</span>
+          <span class="chevron">▾</span>
+        </div>
       </div>
       <div id="leaderboardBody">
         <div class="lb-empty">No games yet</div>
@@ -687,7 +708,7 @@
 
     <!-- Lessons section -->
     <div class="ctrl-section" id="lessonsSection">
-      <div class="ctrl-head">Latest Lessons</div>
+      <div class="ctrl-head" onclick="toggleSection('lessonsSection')">Latest Lessons <span class="chevron">▾</span></div>
       <div id="lessonsBody">
         <div class="lessons-empty">Lessons appear here after each game</div>
       </div>
@@ -695,9 +716,12 @@
 
     <!-- Recent games section -->
     <div class="ctrl-section" id="historySection">
-      <div class="ctrl-head">
+      <div class="ctrl-head" onclick="toggleSection('historySection')">
         Recent Games
-        <span style="font-size:8px;color:var(--text-dim);cursor:pointer" onclick="loadHistory()">↻</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadHistory()">↻</span>
+          <span class="chevron">▾</span>
+        </div>
       </div>
       <div id="historyBody">
         <div class="lb-empty">No games yet</div>
@@ -1119,6 +1143,8 @@ function onGameStart(d) {
   gameState.thinking = null;
   gameState.candidates = [];
   _allLessons = {};
+  evalHistory = [];
+  document.getElementById('evalPane').style.display = 'none';
   document.getElementById('historyPane').innerHTML = '';
   document.getElementById('overlay').classList.remove('show');
   updatePlayers(); updateAnalysis(); renderBoard();
@@ -1140,6 +1166,7 @@ function onMove(d) {
   gameState.candidates = [];
   updatePlayers(); updateAnalysis(); renderBoard();
   addMoveCard(d);
+  pushEval(d.move_number, d.score_cp_white);
 }
 
 function onGameOver(d) {
@@ -1221,6 +1248,50 @@ function connect() {
 }
 
 function schedReconn() { reconnTimer = setTimeout(connect, 2500); }
+
+// ── Collapsible panels ────────────────────────────────────────────────────
+function toggleSection(id) {
+  document.getElementById(id).classList.toggle('collapsed');
+}
+
+// ── Eval graph ────────────────────────────────────────────────────────────
+let evalHistory = [];   // [{move, eval}]  eval = centipawns from White's POV
+
+function pushEval(moveNumber, scoreCpWhite) {
+  if (scoreCpWhite == null) return;
+  evalHistory.push({ move: moveNumber, eval: scoreCpWhite });
+  renderEvalGraph();
+}
+
+function renderEvalGraph() {
+  const pane = document.getElementById('evalPane');
+  const svg  = document.getElementById('evalGraph');
+  if (evalHistory.length < 2) { pane.style.display = 'none'; return; }
+  pane.style.display = '';
+
+  const W = 280, H = 46, MID = H / 2, MAX = 800;
+  const n = evalHistory.length;
+
+  const pts = evalHistory.map((e, i) => {
+    const x = (i / (n - 1)) * W;
+    const clamped = Math.max(-MAX, Math.min(MAX, e.eval));
+    const y = MID - (clamped / MAX) * (MID - 2);
+    return [x, y];
+  });
+
+  // Filled area: white advantage above mid, black below
+  const polyPts = pts.map(([x,y]) => `${x},${y}`).join(' ');
+  const fillAbove = `M 0,${MID} ` + pts.map(([x,y]) => `L ${x},${Math.min(y,MID)}`).join(' ') + ` L ${W},${MID} Z`;
+  const fillBelow = `M 0,${MID} ` + pts.map(([x,y]) => `L ${x},${Math.max(y,MID)}`).join(' ') + ` L ${W},${MID} Z`;
+
+  svg.innerHTML = `
+    <rect width="${W}" height="${MID}" fill="rgba(255,255,255,0.025)"/>
+    <rect y="${MID}" width="${W}" height="${MID}" fill="rgba(0,0,0,0.25)"/>
+    <path d="${fillAbove}" fill="rgba(232,184,74,0.18)"/>
+    <path d="${fillBelow}" fill="rgba(22,22,22,0.5)"/>
+    <line x1="0" y1="${MID}" x2="${W}" y2="${MID}" stroke="#1a2535" stroke-width="1"/>
+    <polyline points="${polyPts}" fill="none" stroke="#c8921e" stroke-width="1.5" stroke-linejoin="round"/>`;
+}
 
 // ── Utility ───────────────────────────────────────────────────────────────
 function escHtml(s) {
