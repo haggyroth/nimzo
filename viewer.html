@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nimzo — Live Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:           #07090c;
+      --bg-panel:     #0c1018;
+      --bg-card:      #111820;
+      --border:       #1a2535;
+      --border-hi:    #2a3d55;
+      --text:         #c8d8e8;
+      --text-dim:     #3d5570;
+      --text-mid:     #6a8aaa;
+      --gold:         #c8921e;
+      --gold-bright:  #e8b84a;
+      --sq-light:     #e8d5b0;
+      --sq-dark:      #8b6148;
+      --sq-from:      rgba(255, 200, 30, 0.45);
+      --sq-to:        rgba(255, 200, 30, 0.28);
+      --q-best:       #ffd700;
+      --q-excellent:  #56c45a;
+      --q-good:       #90c83a;
+      --q-inaccuracy: #f0d030;
+      --q-mistake:    #f09020;
+      --q-blunder:    #e83030;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    header {
+      padding: 0 28px;
+      height: 48px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      font-family: 'Cinzel', serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: var(--gold-bright);
+    }
+
+    .logo span {
+      font-weight: 400;
+      color: var(--gold);
+      font-size: 12px;
+      letter-spacing: 2px;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+
+    .conn-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .dot.live    { background: #56c45a; box-shadow: 0 0 8px #56c45a88; }
+    .dot.dead    { background: var(--q-blunder); }
+    .dot.waiting { background: var(--gold); animation: blink 1s ease-in-out infinite; }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+    /* ── Layout ─────────────────────────────────────────── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: auto 340px;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ── Board column ───────────────────────────────────── */
+    .board-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 20px 20px 28px;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    /* ── Player strip ───────────────────────────────────── */
+    .player-strip {
+      width: 100%;
+      max-width: var(--board-px, 480px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+    }
+
+    .p-left  { display: flex; align-items: center; gap: 10px; }
+    .p-swatch {
+      width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+    }
+    .p-name {
+      font-family: 'Cinzel', serif;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--text);
+    }
+    .p-right { display: flex; align-items: center; gap: 14px; }
+    .p-elo   { font-size: 11px; color: var(--gold); letter-spacing: 1px; }
+    .p-think {
+      font-size: 10px;
+      color: var(--gold-bright);
+      letter-spacing: 0.5px;
+      display: none;
+    }
+    .p-think.on { display: flex; align-items: center; gap: 4px; animation: blink .7s infinite; }
+
+    /* ── Chess board ────────────────────────────────────── */
+    .board-wrap {
+      position: relative;
+      width:  var(--board-px, 480px);
+      height: var(--board-px, 480px);
+    }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      width: 100%;
+      height: 100%;
+      border: 1px solid var(--border-hi);
+      box-shadow:
+        0 24px 64px rgba(0,0,0,.85),
+        0 0 0 1px rgba(255,255,255,.02),
+        inset 0 0 80px rgba(0,0,0,.2);
+    }
+
+    .sq {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: default;
+      transition: background 0.15s;
+    }
+    .sq.light { background: var(--sq-light); }
+    .sq.dark  { background: var(--sq-dark);  }
+    .sq.hi-from { background: var(--sq-from) !important; }
+    .sq.hi-to   { background: var(--sq-to)   !important; }
+
+    .sq-label {
+      position: absolute;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 500;
+      opacity: .45;
+      line-height: 1;
+      pointer-events: none;
+    }
+    .sq-label.rank { top: 3px; left: 4px; }
+    .sq-label.file { bottom: 2px; right: 3px; }
+
+    .piece {
+      font-size: calc(var(--board-px, 480px) / 8 * .76);
+      line-height: 1;
+      user-select: none;
+      pointer-events: none;
+      position: relative;
+      z-index: 1;
+    }
+    .piece.w { color: #f8f8f8; filter: drop-shadow(0 1px 3px rgba(0,0,0,.9)); }
+    .piece.b { color: #161616; filter: drop-shadow(0 1px 2px rgba(255,255,255,.12)); }
+
+    /* thinking shimmer overlay */
+    .board-wrap.thinking::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(
+        120deg,
+        transparent 30%,
+        rgba(201,146,42,.06) 50%,
+        transparent 70%
+      );
+      background-size: 250% 250%;
+      animation: shimmer 2.5s linear infinite;
+      pointer-events: none;
+      z-index: 10;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 200%; }
+      100% { background-position: -200% -200%; }
+    }
+
+    /* ── Right panel ────────────────────────────────────── */
+    .side-panel {
+      border-left: 1px solid var(--border);
+      background: var(--bg-panel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .pane-head {
+      padding: 10px 14px 8px;
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* analysis / thinking pane */
+    .analysis-pane {
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .analysis-body {
+      padding: 10px 14px;
+      min-height: 120px;
+      max-height: 200px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .thinking-tag {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--gold-bright);
+      margin-bottom: 6px;
+    }
+    .thinking-tag.on { display: flex; }
+
+    .thinking-tag .dot { width: 5px; height: 5px; background: var(--gold-bright); animation: blink .6s infinite; }
+
+    .cand-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      background: var(--bg-card);
+      border-left: 2px solid var(--border);
+      font-size: 11px;
+      animation: slideRight .15s ease;
+    }
+    .cand-row:first-of-type { border-left-color: var(--gold); }
+
+    @keyframes slideRight {
+      from { opacity: 0; transform: translateX(-6px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .cand-idx  { color: var(--text-dim); font-size: 9px; width: 12px; }
+    .cand-san  { font-weight: 500; min-width: 38px; color: var(--text); }
+    .cand-bar  {
+      flex: 1; height: 3px; background: var(--border);
+      position: relative; overflow: hidden;
+    }
+    .cand-bar-fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      background: var(--gold);
+      transition: width .3s ease;
+    }
+    .cand-score { color: var(--gold); font-size: 10px; min-width: 44px; text-align: right; }
+
+    .idle-hint {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 100%;
+      padding: 12px;
+      color: var(--text-dim);
+      font-size: 11px;
+      letter-spacing: .5px;
+      text-align: center;
+    }
+    .idle-hint .king { font-size: 36px; opacity: .15; }
+
+    /* ── Move history ───────────────────────────────────── */
+    .history-pane {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .history-pane::-webkit-scrollbar       { width: 3px; }
+    .history-pane::-webkit-scrollbar-track { background: transparent; }
+    .history-pane::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+    .move-card {
+      padding: 7px 9px;
+      background: var(--bg-card);
+      border-left: 2px solid var(--border);
+      animation: fadeUp .12s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(3px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .move-card.best       { border-left-color: var(--q-best); }
+    .move-card.excellent  { border-left-color: var(--q-excellent); }
+    .move-card.good       { border-left-color: var(--q-good); }
+    .move-card.inaccuracy { border-left-color: var(--q-inaccuracy); }
+    .move-card.mistake    { border-left-color: var(--q-mistake); }
+    .move-card.blunder    { border-left-color: var(--q-blunder); }
+
+    .move-top {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .move-num-label { font-size: 9px; color: var(--text-dim); min-width: 22px; }
+    .move-san-text  { font-size: 13px; font-weight: 500; color: var(--text); }
+    .move-badge {
+      margin-left: auto;
+      font-size: 8px;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      padding: 1px 5px;
+    }
+    .move-badge.best       { color: var(--q-best); }
+    .move-badge.excellent  { color: var(--q-excellent); }
+    .move-badge.good       { color: var(--q-good); }
+    .move-badge.inaccuracy { color: var(--q-inaccuracy); }
+    .move-badge.mistake    { color: var(--q-mistake); }
+    .move-badge.blunder    { color: var(--q-blunder); }
+
+    .move-rank-text { font-size: 9px; color: var(--text-dim); }
+    .move-reason {
+      font-size: 10px;
+      font-style: italic;
+      color: var(--text-mid);
+      line-height: 1.55;
+      margin-top: 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* ── Game-over overlay ──────────────────────────────── */
+    #overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(7,9,12,.88);
+      backdrop-filter: blur(10px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      text-align: center;
+    }
+    #overlay.show { display: flex; animation: fadeIn .5s ease; }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+    .ov-result {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(36px, 6vw, 64px);
+      font-weight: 700;
+      color: var(--gold-bright);
+      letter-spacing: 4px;
+      text-shadow: 0 0 50px rgba(232,184,74,.35);
+    }
+    .ov-sub {
+      font-size: 11px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .ov-elos {
+      display: flex; gap: 48px; margin: 12px 0;
+    }
+    .ov-elo-block { text-align: center; }
+    .ov-elo-name {
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+    .ov-elo-val { font-size: 24px; color: var(--gold-bright); }
+    .ov-btn {
+      margin-top: 8px;
+      padding: 9px 28px;
+      background: transparent;
+      border: 1px solid var(--border-hi);
+      color: var(--text-mid);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: border-color .2s, color .2s;
+    }
+    .ov-btn:hover { border-color: var(--gold); color: var(--gold); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">NIMZO <span>live viewer</span></div>
+  <div class="conn-status">
+    <div class="dot waiting" id="dot"></div>
+    <span id="connLabel">connecting</span>
+  </div>
+</header>
+
+<main>
+  <!-- Board column -->
+  <div class="board-col" id="boardCol">
+    <!-- Black (top) -->
+    <div class="player-strip" id="stripBlack">
+      <div class="p-left">
+        <div class="p-swatch" style="background:#1a1a1a;border:1px solid #444"></div>
+        <div class="p-name" id="nameBlack">—</div>
+      </div>
+      <div class="p-right">
+        <div class="p-think" id="thinkBlack">● thinking</div>
+        <div class="p-elo"  id="eloBlack">—</div>
+      </div>
+    </div>
+
+    <!-- Board -->
+    <div class="board-wrap" id="boardWrap">
+      <div id="board"></div>
+    </div>
+
+    <!-- White (bottom) -->
+    <div class="player-strip" id="stripWhite">
+      <div class="p-left">
+        <div class="p-swatch" style="background:#f0f0f0;border:1px solid #bbb"></div>
+        <div class="p-name" id="nameWhite">—</div>
+      </div>
+      <div class="p-right">
+        <div class="p-think" id="thinkWhite">● thinking</div>
+        <div class="p-elo"  id="eloWhite">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Side panel -->
+  <div class="side-panel">
+    <div class="analysis-pane">
+      <div class="pane-head">Analysis</div>
+      <div class="analysis-body" id="analysisBody">
+        <div class="idle-hint">
+          <div class="king">♚</div>
+          <div>Waiting for game start</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane-head">Move History</div>
+    <div class="history-pane" id="historyPane"></div>
+  </div>
+</main>
+
+<!-- Game-over overlay -->
+<div id="overlay">
+  <div class="ov-result" id="ovResult"></div>
+  <div class="ov-sub"    id="ovSub"></div>
+  <div class="ov-elos"   id="ovElos"></div>
+  <button class="ov-btn" onclick="document.getElementById('overlay').classList.remove('show')">
+    Continue Watching
+  </button>
+</div>
+
+<script>
+// ── Constants ───────────────────────────────────────────────────────────────
+
+const WS_URL = 'ws://localhost:8765';
+
+const PIECES = {
+  K:'♔', Q:'♕', R:'♖', B:'♗', N:'♘', P:'♙',
+  k:'♚', q:'♛', r:'♜', b:'♝', n:'♞', p:'♟',
+};
+const FILES = ['a','b','c','d','e','f','g','h'];
+
+// ── State ───────────────────────────────────────────────────────────────────
+
+let state = {
+  fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+  lastUci: null,
+  white: { name: '—', elo: null },
+  black: { name: '—', elo: null },
+  thinking: null,   // null | 'white' | 'black'
+  candidates: [],
+};
+
+// ── Board sizing ─────────────────────────────────────────────────────────────
+
+function sizeBoard() {
+  const col   = document.getElementById('boardCol');
+  const avail = Math.min(col.clientHeight - 120, col.clientWidth - 40, 560);
+  const px    = Math.max(280, avail);
+  document.getElementById('boardWrap').style.width  = px + 'px';
+  document.getElementById('boardWrap').style.height = px + 'px';
+  document.querySelectorAll('.player-strip').forEach(s => s.style.maxWidth = px + 'px');
+  document.documentElement.style.setProperty('--board-px', px + 'px');
+  renderBoard();
+}
+
+window.addEventListener('resize', sizeBoard);
+
+// ── FEN → board matrix ───────────────────────────────────────────────────────
+
+function parseFen(fen) {
+  const rows = fen.split(' ')[0].split('/');
+  return rows.map(row => {
+    const cells = [];
+    for (const ch of row) {
+      if (/\d/.test(ch)) for (let i = 0; i < +ch; i++) cells.push(null);
+      else cells.push(ch);
+    }
+    return cells;
+  });
+}
+
+// ── UCI → [from, to] square indices ─────────────────────────────────────────
+
+function uciToSquares(uci) {
+  if (!uci || uci.length < 4) return [null, null];
+  const fileIdx = c => c.charCodeAt(0) - 97;
+  const from = { col: fileIdx(uci[0]), row: 8 - parseInt(uci[1]) };
+  const to   = { col: fileIdx(uci[2]), row: 8 - parseInt(uci[3]) };
+  return [from, to];
+}
+
+// ── Render board ─────────────────────────────────────────────────────────────
+
+function renderBoard() {
+  const board   = document.getElementById('board');
+  const matrix  = parseFen(state.fen);
+  const [from, to] = uciToSquares(state.lastUci);
+  const squareKey  = (r, c) => r * 8 + c;
+  const fromKey    = from ? squareKey(from.row, from.col) : -1;
+  const toKey      = to   ? squareKey(to.row,   to.col)   : -1;
+
+  board.innerHTML = '';
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const sq    = document.createElement('div');
+      const light = (r + c) % 2 === 0;
+      sq.className = 'sq ' + (light ? 'light' : 'dark');
+
+      const key = squareKey(r, c);
+      if (key === fromKey) sq.classList.add('hi-from');
+      if (key === toKey)   sq.classList.add('hi-to');
+
+      // Rank label on first column
+      if (c === 0) {
+        const lbl = document.createElement('span');
+        lbl.className = 'sq-label rank';
+        lbl.textContent = 8 - r;
+        lbl.style.color = light ? '#8b6148' : '#e8d5b0';
+        sq.appendChild(lbl);
+      }
+      // File label on last row
+      if (r === 7) {
+        const lbl = document.createElement('span');
+        lbl.className = 'sq-label file';
+        lbl.textContent = FILES[c];
+        lbl.style.color = light ? '#8b6148' : '#e8d5b0';
+        sq.appendChild(lbl);
+      }
+
+      const piece = matrix[r][c];
+      if (piece) {
+        const span = document.createElement('span');
+        span.className = 'piece ' + (piece === piece.toUpperCase() ? 'w' : 'b');
+        span.textContent = PIECES[piece] || piece;
+        sq.appendChild(span);
+      }
+
+      board.appendChild(sq);
+    }
+  }
+}
+
+// ── Update player strips ──────────────────────────────────────────────────────
+
+function updatePlayers() {
+  document.getElementById('nameWhite').textContent = state.white.name;
+  document.getElementById('nameBlack').textContent = state.black.name;
+  document.getElementById('eloWhite').textContent  =
+    state.white.elo != null ? 'ELO ' + Math.round(state.white.elo) : '—';
+  document.getElementById('eloBlack').textContent  =
+    state.black.elo != null ? 'ELO ' + Math.round(state.black.elo) : '—';
+
+  document.getElementById('thinkWhite').classList.toggle('on', state.thinking === 'white');
+  document.getElementById('thinkBlack').classList.toggle('on', state.thinking === 'black');
+  document.getElementById('boardWrap').classList.toggle('thinking', state.thinking !== null);
+}
+
+// ── Analysis pane ─────────────────────────────────────────────────────────────
+
+function updateAnalysis() {
+  const body = document.getElementById('analysisBody');
+
+  if (!state.thinking) {
+    body.innerHTML = '<div class="idle-hint"><div class="king">♟</div><div>Awaiting next move</div></div>';
+    return;
+  }
+
+  const thinkerName = state.thinking === 'white' ? state.white.name : state.black.name;
+  const cands       = state.candidates || [];
+
+  // Find max absolute score for bar scaling
+  const scores   = cands.map(c => c.score_cp != null ? Math.abs(c.score_cp) : 0);
+  const maxScore = Math.max(...scores, 1);
+
+  let html = `<div class="thinking-tag on"><div class="dot"></div>${thinkerName}</div>`;
+
+  cands.forEach((c, i) => {
+    const score  = c.score_cp;
+    const scoreStr = score != null
+      ? (score > 0 ? '+' : '') + (score / 100).toFixed(2)
+      : '?';
+    const pct    = score != null ? Math.round(Math.abs(score) / maxScore * 100) : 50;
+    const barCol = score == null ? 'var(--text-dim)'
+                 : score > 0    ? 'var(--gold)'
+                 : score < -100 ? 'var(--q-blunder)'
+                 : 'var(--text-mid)';
+
+    html += `
+      <div class="cand-row">
+        <span class="cand-idx">${i + 1}</span>
+        <span class="cand-san">${c.san}</span>
+        <div class="cand-bar">
+          <div class="cand-bar-fill" style="width:${pct}%;background:${barCol}"></div>
+        </div>
+        <span class="cand-score">${scoreStr}</span>
+      </div>`;
+  });
+
+  body.innerHTML = html;
+}
+
+// ── Move history ──────────────────────────────────────────────────────────────
+
+function addMoveCard(data) {
+  const pane = document.getElementById('historyPane');
+
+  const colorOf = data.color;   // 'white' | 'black'
+  const num     = data.move_number;
+  const label   = colorOf === 'white'
+    ? `${Math.ceil(num / 2)}.`
+    : `${Math.ceil(num / 2)}…`;
+
+  const q       = (data.quality || 'good').toLowerCase();
+  const rank    = data.candidate_rank;
+  const rankStr = rank === 1 ? '★ top pick'
+                : rank ? `#${rank} candidate`
+                : '';
+
+  const card = document.createElement('div');
+  card.className = `move-card ${q}`;
+  card.innerHTML = `
+    <div class="move-top">
+      <span class="move-num-label">${label}</span>
+      <span class="move-san-text">${data.san}</span>
+      <span class="move-badge ${q}">${q}</span>
+    </div>
+    ${rankStr ? `<div class="move-rank-text">${rankStr}</div>` : ''}
+    ${data.reasoning && data.reasoning !== '(no reasoning)' && data.reasoning !== '(parse failed — defaulted to top candidate)'
+      ? `<div class="move-reason">${escHtml(data.reasoning)}</div>`
+      : ''}
+  `;
+
+  pane.appendChild(card);
+  pane.scrollTop = pane.scrollHeight;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Event handlers ────────────────────────────────────────────────────────────
+
+function onGameStart(d) {
+  state.white    = { name: d.white, elo: d.white_elo };
+  state.black    = { name: d.black, elo: d.black_elo };
+  state.fen      = d.fen || state.fen;
+  state.lastUci  = null;
+  state.thinking = null;
+  state.candidates = [];
+  document.getElementById('historyPane').innerHTML = '';
+  document.getElementById('overlay').classList.remove('show');
+  updatePlayers();
+  updateAnalysis();
+  renderBoard();
+}
+
+function onThinking(d) {
+  state.fen        = d.fen || state.fen;
+  state.thinking   = d.color;
+  state.candidates = d.candidates || [];
+  // Update name in case viewer connected after game_start
+  if (d.color === 'white' && d.player) state.white.name = d.player;
+  if (d.color === 'black' && d.player) state.black.name = d.player;
+  updatePlayers();
+  updateAnalysis();
+  renderBoard();
+}
+
+function onMove(d) {
+  state.fen      = d.fen;
+  state.lastUci  = d.uci;
+  state.thinking = null;
+  state.candidates = [];
+  updatePlayers();
+  updateAnalysis();
+  renderBoard();
+  addMoveCard(d);
+}
+
+function onGameOver(d) {
+  state.thinking = null;
+  updatePlayers();
+
+  const resultMap = { '1-0': 'White Wins', '0-1': 'Black Wins', '1/2-1/2': 'Draw' };
+  const label     = resultMap[d.result] || d.result;
+  const term      = d.termination ? d.termination.charAt(0).toUpperCase() + d.termination.slice(1) : '';
+
+  document.getElementById('ovResult').textContent = label;
+  document.getElementById('ovSub').textContent    =
+    [term, d.total_moves ? `${d.total_moves} moves` : ''].filter(Boolean).join(' · ');
+
+  const eloHtml = `
+    <div class="ov-elo-block">
+      <div class="ov-elo-name">${escHtml(state.white.name)}</div>
+      <div class="ov-elo-val">${d.white_elo_after != null ? Math.round(d.white_elo_after) : '—'}</div>
+    </div>
+    <div class="ov-elo-block">
+      <div class="ov-elo-name">${escHtml(state.black.name)}</div>
+      <div class="ov-elo-val">${d.black_elo_after != null ? Math.round(d.black_elo_after) : '—'}</div>
+    </div>`;
+  document.getElementById('ovElos').innerHTML = eloHtml;
+  document.getElementById('overlay').classList.add('show');
+
+  if (d.white_elo_after != null) state.white.elo = d.white_elo_after;
+  if (d.black_elo_after != null) state.black.elo = d.black_elo_after;
+  updatePlayers();
+}
+
+function dispatch(msg) {
+  try {
+    const d = JSON.parse(msg);
+    switch (d.type) {
+      case 'game_start': onGameStart(d); break;
+      case 'thinking':   onThinking(d);  break;
+      case 'move':       onMove(d);      break;
+      case 'game_over':  onGameOver(d);  break;
+    }
+  } catch (e) { console.warn('Bad message:', msg, e); }
+}
+
+// ── WebSocket with auto-reconnect ─────────────────────────────────────────────
+
+let ws, reconnTimer;
+
+function setConn(status) {
+  const dot   = document.getElementById('dot');
+  const label = document.getElementById('connLabel');
+  dot.className   = 'dot ' + { connected:'live', disconnected:'dead', reconnecting:'waiting' }[status];
+  label.textContent = status === 'connected' ? 'live' : status;
+}
+
+function connect() {
+  clearTimeout(reconnTimer);
+  setConn('reconnecting');
+  try { ws = new WebSocket(WS_URL); } catch(e) { schedReconn(); return; }
+
+  ws.onopen    = () => setConn('connected');
+  ws.onmessage = e  => dispatch(e.data);
+  ws.onerror   = () => {};
+  ws.onclose   = () => { setConn('disconnected'); schedReconn(); };
+}
+
+function schedReconn() {
+  reconnTimer = setTimeout(connect, 2500);
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+sizeBoard();
+connect();
+</script>
+</body>
+</html>
