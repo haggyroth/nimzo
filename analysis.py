@@ -1,19 +1,24 @@
 """
 ELO calculation and post-game adaptive learning.
-Generates lessons for the losing (or struggling) player via LLM analysis.
+Generates lessons for both players via a configurable tutor model.
+Tutor can be any LM Studio / Ollama (OpenAI-compatible) endpoint or Anthropic cloud.
 """
 
-import math
-import chess
-import chess.pgn
-import anthropic
-import os
-from io import StringIO
+from collections import Counter
+from dataclasses import dataclass
+from typing import Optional
 
 
-# --- ELO ---------------------------------------------------------------
+# ── ELO ─────────────────────────────────────────────────────────────────
 
-K_FACTOR = 32  # Standard K for developing players; tune down as games accumulate
+def dynamic_k_factor(games_played: int) -> float:
+    """K decays as a player accumulates experience."""
+    if games_played < 20:
+        return 32.0
+    elif games_played < 40:
+        return 24.0
+    else:
+        return 16.0
 
 
 def expected_score(player_elo: float, opponent_elo: float) -> float:
@@ -23,16 +28,20 @@ def expected_score(player_elo: float, opponent_elo: float) -> float:
 def new_elo(
     player_elo: float,
     opponent_elo: float,
-    score: float,  # 1.0 = win, 0.5 = draw, 0.0 = loss
+    score: float,           # 1.0 win / 0.5 draw / 0.0 loss
+    games_played: int = 0,
 ) -> float:
+    k = dynamic_k_factor(games_played)
     expected = expected_score(player_elo, opponent_elo)
-    return round(player_elo + K_FACTOR * (score - expected), 2)
+    return round(player_elo + k * (score - expected), 2)
 
 
 def calculate_elos(
     white_elo: float,
     black_elo: float,
-    result: str,  # '1-0' | '0-1' | '1/2-1/2'
+    result: str,                # '1-0' | '0-1' | '1/2-1/2'
+    white_games: int = 0,
+    black_games: int = 0,
 ) -> tuple[float, float]:
     if result == "1-0":
         w_score, b_score = 1.0, 0.0
@@ -41,91 +50,188 @@ def calculate_elos(
     else:
         w_score, b_score = 0.5, 0.5
 
-    new_white = new_elo(white_elo, black_elo, w_score)
-    new_black = new_elo(black_elo, white_elo, b_score)
+    new_white = new_elo(white_elo, black_elo, w_score, white_games)
+    new_black = new_elo(black_elo, white_elo, b_score, black_games)
     return new_white, new_black
 
 
-# --- Post-game lesson generation ----------------------------------------
+# ── Tutor configuration ──────────────────────────────────────────────────
 
-LESSON_PROMPT = """You are a chess coach analyzing a completed game.
+@dataclass
+class TutorConfig:
+    backend: str = "lmstudio"              # "lmstudio" | "anthropic"
+    model_id: str = ""                     # e.g. "qwen3-30b" or "claude-haiku-4-5-20251001"
+    base_url: str = "http://localhost:1234/v1"
+    api_key: Optional[str] = None
 
-The losing player was: {loser_color} ({loser_name})
-Game result: {result}
-Termination: {termination}
 
-Full PGN with reasoning annotations:
-{annotated_pgn}
+# ── Lesson prompts ───────────────────────────────────────────────────────
 
-Move quality summary for {loser_name}:
+_TUTOR_SYSTEM = (
+    "You are a concise chess coach. Analyze completed games and give players "
+    "targeted, specific feedback based on their actual moves — not generic advice."
+)
+
+_LESSON_TEMPLATE = """Game result: {result} ({termination})
+Player: {player_name} ({player_color}) — {outcome}
+
+PGN:
+{pgn}
+
+Move quality summary for {player_name}:
 {quality_summary}
 
-Write 2-3 concise, actionable lessons for {loser_name} to improve.
-Each lesson should identify a SPECIFIC pattern or mistake from THIS game.
-Format: one lesson per line, starting with a dash.
-Example:
-- Neglected king safety after move 18; avoid leaving the king on e1 after the center opens.
-- Allowed a knight outpost on d5 by not playing c5 on move 12.
+Write feedback for {player_name} in EXACTLY this format (no preamble):
 
-Do not add any preamble. Output only the lesson lines."""
+IMPROVE:
+- <one specific mistake from this game — reference the move in algebraic notation>
+- <second improvement if clearly supported by the game>
 
+STRENGTH:
+- <one specific thing {player_name} did well — reference the move>
+- <second strength if clearly supported>
+
+Be concrete. One line per bullet. Do not write more than two bullets per section."""
+
+
+# ── Backend callers ───────────────────────────────────────────────────────
+
+def _call_lmstudio(tutor: TutorConfig, prompt: str) -> str:
+    import os
+    from openai import OpenAI
+    client = OpenAI(
+        base_url=tutor.base_url,
+        api_key=tutor.api_key or os.environ.get("LMSTUDIO_API_KEY", "lm-studio"),
+    )
+    resp = client.chat.completions.create(
+        model=tutor.model_id,
+        max_tokens=500,
+        temperature=0.4,
+        messages=[
+            {"role": "system", "content": _TUTOR_SYSTEM},
+            {"role": "user",   "content": prompt},
+        ],
+        extra_body={"enable_thinking": False},
+    )
+    return resp.choices[0].message.content or ""
+
+
+def _call_anthropic(tutor: TutorConfig, prompt: str) -> str:
+    import os
+    import anthropic
+    client = anthropic.Anthropic(
+        api_key=tutor.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    )
+    msg = client.messages.create(
+        model=tutor.model_id or "claude-haiku-4-5-20251001",
+        max_tokens=500,
+        system=_TUTOR_SYSTEM,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text
+
+
+# ── Lesson parser ─────────────────────────────────────────────────────────
+
+def _parse_lessons(raw: str) -> dict[str, list[str]]:
+    """Parse IMPROVE: and STRENGTH: sections from raw tutor output.
+
+    Handles: <think>…</think> blocks, markdown bold (**IMPROVE:**),
+    numbered bullets (1.), lettered bullets, and mixed capitalisation.
+    """
+    import re
+
+    # Strip <think>…</think> reasoning blocks (Qwen3, DeepSeek-R1, etc.)
+    text = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE).strip()
+
+    improve: list[str] = []
+    strength: list[str] = []
+    section = None
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        # Strip markdown bold/italic wrappers and trailing punctuation for section detection
+        clean = re.sub(r"[*_`#]", "", stripped).strip().upper()
+
+        if re.match(r"IMPROVE", clean):
+            section = "improve"
+        elif re.match(r"STRENGTH", clean):
+            section = "strength"
+        elif section:
+            # Accept lines starting with -, *, •, numbers, or letters as bullets
+            bullet = re.match(r"^[-*•]|^\d+[.)]\s|^[a-z][.)]\s", stripped, re.IGNORECASE)
+            if bullet:
+                text_part = re.sub(r"^[-*•\d.)(a-z]\s*", "", stripped, count=1, flags=re.IGNORECASE).strip()
+                if text_part:
+                    if section == "improve":
+                        improve.append(text_part)
+                    else:
+                        strength.append(text_part)
+
+    return {"improve": improve[:2], "strength": strength[:2]}
+
+
+# ── Public API ────────────────────────────────────────────────────────────
 
 def generate_lessons(
     pgn: str,
-    loser_name: str,
-    loser_color: str,
+    player_name: str,
+    player_color: str,      # "White" | "Black"
     result: str,
     termination: str,
     quality_summary: str,
-    model: str = "claude-haiku-4-5-20251001",
-) -> list[str]:
+    tutor: Optional[TutorConfig] = None,
+) -> dict[str, list[str]]:
     """
-    Use Claude Haiku to generate improvement lessons from a completed game.
-    Uses Haiku to keep costs low — this runs after every game.
-    Returns empty list if ANTHROPIC_API_KEY is not set.
+    Generate lessons for one player from a completed game.
+    Returns {"improve": [...], "strength": [...]} — empty lists if no tutor configured.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return []
-    client = anthropic.Anthropic(api_key=api_key)
+    if tutor is None or not tutor.model_id:
+        return {"improve": [], "strength": []}
 
-    prompt = LESSON_PROMPT.format(
-        loser_color=loser_color,
-        loser_name=loser_name,
+    if result == "1-0":
+        outcome = "won" if player_color == "White" else "lost"
+    elif result == "0-1":
+        outcome = "lost" if player_color == "White" else "won"
+    else:
+        outcome = "drew"
+
+    prompt = _LESSON_TEMPLATE.format(
         result=result,
         termination=termination,
-        annotated_pgn=pgn,
+        player_name=player_name,
+        player_color=player_color,
+        outcome=outcome,
+        pgn=pgn,
         quality_summary=quality_summary,
     )
 
-    message = client.messages.create(
-        model=model,
-        max_tokens=400,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw = message.content[0].text
-    lessons = [
-        line.lstrip("- ").strip()
-        for line in raw.strip().splitlines()
-        if line.strip().startswith("-")
-    ]
-    return lessons[:3]  # cap at 3
+    try:
+        if tutor.backend == "anthropic":
+            raw = _call_anthropic(tutor, prompt)
+        else:
+            raw = _call_lmstudio(tutor, prompt)
+        result = _parse_lessons(raw)
+        if not result["improve"] and not result["strength"]:
+            print(f"  ⚠  Tutor returned no parseable lessons. Raw response:\n{raw[:600]}")
+        return result
+    except Exception as e:
+        print(f"  ⚠  Lesson generation failed ({tutor.backend}/{tutor.model_id}): {e}")
+        return {"improve": [], "strength": []}
 
 
 def build_quality_summary(move_qualities: list[tuple[str, str]]) -> str:
-    """
-    move_qualities: list of (move_san, quality) for one player.
-    Returns a readable summary string.
-    """
-    from collections import Counter
+    """Readable quality breakdown for one player's moves."""
     counts = Counter(q for _, q in move_qualities)
     lines = [f"{q}: {n}" for q, n in sorted(counts.items())]
     blunders = [m for m, q in move_qualities if q == "blunder"]
     mistakes = [m for m, q in move_qualities if q == "mistake"]
+    bests    = [m for m, q in move_qualities if q == "best"]
     summary = "Move quality: " + ", ".join(lines)
     if blunders:
         summary += f"\nBlunders: {', '.join(blunders)}"
     if mistakes:
         summary += f"\nMistakes: {', '.join(mistakes)}"
+    if bests:
+        summary += f"\nBest moves (Stockfish top): {', '.join(bests[:6])}"
     return summary

@@ -14,13 +14,13 @@ import chess
 class PlayerConfig:
     name: str                          # Display name, e.g. "Claude Sonnet 4"
     model_id: str                      # API model string
-    backend: str                       # "anthropic" | "lmstudio" | "ollama"
+    backend: str                       # "anthropic" | "lmstudio"
     base_url: Optional[str] = None     # For LM Studio / Ollama endpoints
     api_key: Optional[str] = None      # Override; else reads from env
     candidate_count: int = 5           # How many Stockfish candidates to offer
     temperature: float = 0.3
-    enable_thinking: bool = False      # Set True to allow extended thinking (slower)
-    system_prompt: str = ""            # Seeded with accumulated lessons
+    enable_thinking: bool = False      # Extended thinking (Qwen3, etc.)
+    system_prompt: str = ""            # Optional override (rarely needed)
     lesson_memory: list[str] = field(default_factory=list)
 
 
@@ -41,14 +41,9 @@ class ChessPlayer(ABC):
     def choose_move(
         self,
         board: chess.Board,
-        candidates: list[tuple[chess.Move, float]],  # (move, stockfish_score_cp)
+        candidates: list[tuple[chess.Move, float]],
         game_history_pgn: str,
-    ) -> MoveDecision:
-        """
-        Given the board and a ranked list of Stockfish candidate moves,
-        return the model's chosen move with reasoning.
-        """
-        ...
+    ) -> MoveDecision: ...
 
     def build_prompt(
         self,
@@ -67,12 +62,7 @@ class ChessPlayer(ABC):
 
         candidates_block = "\n".join(candidate_lines)
 
-        lessons_block = ""
-        if self.config.lesson_memory:
-            lessons = "\n".join(f"- {l}" for l in self.config.lesson_memory[-10:])
-            lessons_block = f"\n\nLessons from your previous games:\n{lessons}"
-
-        return f"""You are playing chess as {color}.{lessons_block}
+        return f"""You are playing chess as {color}.
 
 Current position (FEN): {fen}
 
@@ -95,11 +85,41 @@ Do not suggest any move not in the list above."""
             "You think strategically, consider your opponent's plans, "
             "and play to win. Be concise but show your reasoning."
         )
+
         if self.config.system_prompt:
-            return f"{base}\n\n{self.config.system_prompt}"
+            base = f"{base}\n\n{self.config.system_prompt}"
+
+        if not self.config.lesson_memory:
+            return base
+
+        # Separate lessons by type (prefixed by loader in db.py)
+        improve = []
+        strength = []
+        for entry in self.config.lesson_memory[-10:]:
+            if entry.startswith("[improve]"):
+                improve.append(entry[len("[improve]"):].strip())
+            elif entry.startswith("[strength]"):
+                strength.append(entry[len("[strength]"):].strip())
+            else:
+                improve.append(entry)  # legacy unprefixed lessons
+
+        sections = []
+        if improve:
+            sections.append(
+                "Areas to work on:\n" + "\n".join(f"- {l}" for l in improve[-5:])
+            )
+        if strength:
+            sections.append(
+                "What you've been doing well:\n" + "\n".join(f"- {l}" for l in strength[-5:])
+            )
+
+        if sections:
+            notes = "\n\n".join(sections)
+            return f"{base}\n\nCoach's notes from your recent games:\n{notes}"
         return base
 
     def add_lesson(self, lesson: str):
+        """lesson should already include [improve] or [strength] prefix."""
         self.config.lesson_memory.append(lesson)
 
     def update_elo(self, new_elo: float):
