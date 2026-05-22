@@ -69,6 +69,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [ ] **Achievement / badge system**: new `achievements` DB table; conditions computed post-game (e.g. "Flawless Game" — zero blunders, "Comeback King" — won from -5cp deficit, "Theorist" — 10+ book moves before first deviation)
 - [ ] **Trophy display**: badges shown on model cards, player strips during games, and leaderboard rows
 - [ ] **Model comparison view**: side-by-side stat comparison of any two models
+- [ ] **Model profile pictures**: generate a chess grandmaster portrait per model via Google AI Studio (Gemini Flash/Nano — free tier); prompt seeded deterministically from the model ID so the same model always gets the same image; stored as file + path in DB; displayed on model cards, leaderboard rows, and player strips during games — e.g. "Qwen3-30B is playing in the style of Mikhail Tal"
 
 ### Achievement ideas
 | Badge | Condition |
@@ -116,7 +117,9 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [ ] **Custom colors**: color picker for board squares, highlights, and UI accent color
 - [ ] **Piece sets**: current Unicode pieces render inconsistently across OS/fonts; add SVG piece set options (e.g. Merida, Alpha, Neo)
 - [ ] **Board orientation toggle**: flip board to show from Black's perspective; persists per session
-- [ ] **Settings persistence**: store theme/orientation preferences in `localStorage`
+- [ ] **Font & typography controls**: font family selector (monospace vs sans-serif), font size slider; CSS custom properties make this straightforward; persisted in `localStorage`
+- [ ] **UI framework consideration**: current hand-crafted CSS is lean and custom; Tailwind or Bootstrap are options if maintenance becomes painful — worth evaluating when the component count grows rather than rewriting speculatively
+- [ ] **Settings persistence**: store theme/orientation/font preferences in `localStorage`
 - [ ] **Animated piece moves**: smooth CSS transitions when pieces move rather than instant re-render
 
 ---
@@ -164,8 +167,21 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
+## Phase 13 — Standalone App & Distribution
+*Future*
+
+- [ ] **Tauri wrapper**: package the FastAPI + HTML SPA as a native desktop app (Mac/Windows/Linux); Tauri is significantly lighter than Electron — no bundled Chromium; the existing web frontend needs no changes
+- [ ] **Python runtime bundling**: bundle the Python backend using PyInstaller or `uv` standalone builds so users don't need a Python install; Stockfish binary included as a sidecar asset
+- [ ] **OS-native file dialogs**: replace browser download links with native save-file dialogs for PGN export and DB backup — Tauri's `dialog` plugin handles this
+- [ ] **Auto-update**: ship an update manifest; Tauri's updater plugin can pull new releases from GitHub releases on startup
+- [ ] **Installer / release packaging**: GitHub Actions workflow to build platform-specific installers (`.dmg`, `.exe`, `.AppImage`) on tag push
+- [ ] **App icon & branding**: design a Nimzo app icon; register as a protocol handler so `nimzo://` links can deep-link into specific tournaments or model cards
+
+---
+
 ## Open Questions
 
+- **Browser vs standalone**: stay browser-based (zero install friction, easy updates) vs Tauri desktop app (native dialogs, no Python required for end users, distributable to non-technical users) — not mutually exclusive; browser mode can remain the dev/power-user path
 - **Model metadata source**: parse filename vs HuggingFace API vs manual sidecar — what's the right default?
 - **Lesson compression trigger**: fixed game count, lesson list length threshold, or semantic similarity check?
 - **ELO floor/seeding**: start new players at 1200 or seed by model family/size?
