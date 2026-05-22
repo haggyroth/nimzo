@@ -322,9 +322,17 @@
     /* ── Collapsible panels ──────────────────────────────────────── */
     .ctrl-head { cursor: pointer; user-select: none; }
     .ctrl-head:hover { color: var(--text-mid); }
-    .chevron { font-size: 9px; transition: transform .15s; }
+    .pane-head { cursor: pointer; user-select: none; }
+    .pane-head:hover { color: var(--text-mid); }
+    .chevron { font-size: 11px; color: var(--text-mid); transition: transform .15s; line-height: 1; }
     .ctrl-section.collapsed .chevron { transform: rotate(-90deg); }
     .ctrl-section.collapsed > *:not(.ctrl-head) { display: none !important; }
+    .collapsible-pane.collapsed .chevron { transform: rotate(-90deg); }
+    .collapsible-pane.collapsed > *:not(.pane-head) { display: none !important; }
+    /* history wrapper needs flex layout so history-pane can scroll */
+    .history-section { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .history-section.collapsed { flex: 0; }
+    .history-section .history-pane { flex: 1; }
 
     /* ── Right control panel ─────────────────────────────────────── */
     .right-panel {
@@ -584,18 +592,20 @@
 
   <!-- ── Center panel ─────────────────────────────────────────────── -->
   <div class="center-panel">
-    <div class="analysis-pane">
-      <div class="pane-head">Analysis</div>
+    <div class="analysis-pane collapsible-pane" id="analysisSection">
+      <div class="pane-head" onclick="toggleSection('analysisSection')">Analysis <span class="chevron">▾</span></div>
       <div class="analysis-body" id="analysisBody">
         <div class="idle-hint"><div class="king">♚</div><div>Waiting for game start</div></div>
       </div>
     </div>
-    <div class="eval-pane" id="evalPane" style="display:none">
-      <div class="pane-head">Evaluation</div>
+    <div class="eval-pane collapsible-pane" id="evalPane" style="display:none">
+      <div class="pane-head" onclick="toggleSection('evalPane')">Evaluation <span class="chevron">▾</span></div>
       <svg id="evalGraph" class="eval-svg" viewBox="0 0 280 46" preserveAspectRatio="none"></svg>
     </div>
-    <div class="pane-head">Move History</div>
-    <div class="history-pane" id="historyPane"></div>
+    <div class="history-section collapsible-pane" id="movesSection">
+      <div class="pane-head" onclick="toggleSection('movesSection')">Move History <span class="chevron">▾</span></div>
+      <div class="history-pane" id="historyPane"></div>
+    </div>
   </div>
 
   <!-- ── Right control panel ──────────────────────────────────────── -->
