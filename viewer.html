@@ -770,7 +770,7 @@
               <option value="anthropic">Anthropic</option>
             </select>
             <div class="url-row" id="blackUrlRow">
-              <input class="ctrl-input" id="blackUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+              <input class="ctrl-input" id="blackUrl" placeholder="http://localhost:1235/v1" value="http://localhost:1235/v1">
               <button class="fetch-btn" onclick="fetchModels('black')" title="Load models">⟳</button>
             </div>
             <select class="ctrl-select" id="blackModel" onchange="onModelSelect('black')"><option value="">— select model —</option></select>
@@ -1705,6 +1705,19 @@ connect();
 loadLeaderboard();
 loadHistory();
 setInterval(loadLeaderboard, 30000);
+
+// Auto-fetch models for all lmstudio slots on page load
+['white', 'black', 'tutor'].forEach(side => {
+  const backend = document.getElementById(side + 'Backend');
+  if (backend && backend.value === 'lmstudio') fetchModels(side);
+});
+
+// Re-fetch when the URL input loses focus (user typed a different endpoint)
+['white', 'black', 'tutor'].forEach(side => {
+  const urlId = side === 'tutor' ? 'tutorUrl' : side + 'Url';
+  const el = document.getElementById(urlId);
+  if (el) el.addEventListener('change', () => fetchModels(side));
+});
 </script>
 </body>
 </html>
