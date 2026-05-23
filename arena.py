@@ -1,19 +1,17 @@
 """
-Nimzo — Orchestrator + HTTP/WebSocket server
+Nimzo — AI chess tournament server
 
-Serves the viewer at http://localhost:8765/ and exposes a REST API for
-tournament control. WebSocket events stream to the viewer at /ws.
-
-Usage (CLI mode — starts tournament immediately):
-    python arena.py \
-      --white-name Qwen --white-model qwen3-coder-30b --white-url http://localhost:1234/v1 \
-      --black-name Llama --black-model llama-3.1-70b  --black-url http://localhost:1235/v1 \
-      --tutor-model qwen3-coder-30b --tutor-url http://localhost:1234/v1 \
-      --games 20
-
-Usage (server mode — configure via browser UI):
+GUI mode (default — recommended):
     python arena.py
-    open http://localhost:8765
+    # Browser opens automatically at http://localhost:8765
+    # Select models, configure options, and start from the UI
+
+CLI mode (auto-starts tournament without opening the browser):
+    python arena.py --white-model qwen3-30b --black-model llama-70b --games 5
+    python arena.py --white-model qwen3-30b --black-model llama-70b --no-browser
+
+Port conflicts are handled automatically — stale processes on the port
+are cleared before binding.
 """
 
 from __future__ import annotations
@@ -660,37 +658,74 @@ async def _auto_start(cfg: TournamentStartConfig):
 
 # ── Entry point ───────────────────────────────────────────────────────────
 
+def _free_port(port: int) -> bool:
+    """Kill whatever is holding the port. Returns True if anything was killed."""
+    import signal
+    import subprocess
+    result = subprocess.run(
+        ["lsof", "-ti", f":{port}"],
+        capture_output=True, text=True
+    )
+    pids = result.stdout.strip().split()
+    if not pids:
+        return False
+    for pid in pids:
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    return True
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Nimzo chess tournament server")
+    parser = argparse.ArgumentParser(
+        description="Nimzo — AI chess tournament server",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "GUI mode (recommended):\n"
+            "  python arena.py\n"
+            "  → opens http://localhost:8765 — configure everything in the browser\n\n"
+            "CLI mode (auto-starts tournament):\n"
+            "  python arena.py --white-model qwen3-30b --black-model llama-70b\n"
+        ),
+    )
     parser.add_argument("--white-backend", default=os.environ.get("WHITE_BACKEND", "lmstudio"))
-    parser.add_argument("--white-name",    default=os.environ.get("WHITE_NAME",    "White"))
+    parser.add_argument("--white-name",    default=os.environ.get("WHITE_NAME",    ""))
     parser.add_argument("--white-model",   default=os.environ.get("WHITE_MODEL",   ""))
     parser.add_argument("--white-url",     default=os.environ.get("WHITE_URL",     "http://localhost:1234/v1"))
     parser.add_argument("--black-backend", default=os.environ.get("BLACK_BACKEND", "lmstudio"))
-    parser.add_argument("--black-name",    default=os.environ.get("BLACK_NAME",    "Black"))
+    parser.add_argument("--black-name",    default=os.environ.get("BLACK_NAME",    ""))
     parser.add_argument("--black-model",   default=os.environ.get("BLACK_MODEL",   ""))
     parser.add_argument("--black-url",     default=os.environ.get("BLACK_URL",     "http://localhost:1235/v1"))
     parser.add_argument("--tutor-backend", default=os.environ.get("TUTOR_BACKEND", "lmstudio"))
     parser.add_argument("--tutor-model",   default=os.environ.get("TUTOR_MODEL",   ""))
     parser.add_argument("--tutor-url",     default=os.environ.get("TUTOR_URL",     "http://localhost:1234/v1"))
-    parser.add_argument("--games",         type=int, default=int(os.environ.get("GAMES", 10)))
+    parser.add_argument("--games",         type=int, default=int(os.environ.get("GAMES", 1)))
     parser.add_argument("--thinking",      action="store_true", default=False,
                         help="Enable extended thinking for both players (LM Studio)")
     parser.add_argument("--port",          type=int, default=int(os.environ.get("PORT", 8765)))
+    parser.add_argument("--no-browser",    action="store_true", default=False,
+                        help="Don't auto-open the browser on startup")
     args = parser.parse_args()
 
     port = args.port
-    print(f"🌐  Nimzo server → http://localhost:{port}")
 
-    if args.white_model and args.black_model:
+    # Free the port if something is already holding it
+    if _free_port(port):
+        print(f"⚠  Port {port} was in use — cleared stale process.")
+        import time; time.sleep(0.4)   # brief pause for OS to release the socket
+
+    cli_mode = bool(args.white_model and args.black_model)
+
+    if cli_mode:
         _cli_config = TournamentStartConfig(
             white_backend=args.white_backend,
-            white_name=args.white_name,
+            white_name=args.white_name or args.white_model.split("/")[-1].split("@")[0].split(":")[0],
             white_model=args.white_model,
             white_url=args.white_url,
             white_thinking=args.thinking,
             black_backend=args.black_backend,
-            black_name=args.black_name,
+            black_name=args.black_name or args.black_model.split("/")[-1].split("@")[0].split(":")[0],
             black_model=args.black_model,
             black_url=args.black_url,
             black_thinking=args.thinking,
@@ -699,10 +734,22 @@ if __name__ == "__main__":
             tutor_url=args.tutor_url,
             games=args.games,
         )
-        print(f"    {args.white_name} vs {args.black_name}  ({args.games} games)")
+        w = _cli_config.white_name
+        b = _cli_config.black_name
+        print(f"🌐  Nimzo  →  http://localhost:{port}")
+        print(f"♟   {w} vs {b}  ·  {args.games} game(s)")
         if args.tutor_model:
-            print(f"    Tutor: {args.tutor_model} @ {args.tutor_url}")
+            print(f"🎓  Tutor: {args.tutor_model}")
     else:
-        print("    No players configured — open the viewer to set up a tournament.")
+        print(f"🌐  Nimzo  →  http://localhost:{port}")
+        print("    Open the browser to configure and start a tournament.")
+
+    # Auto-open browser unless suppressed or in CLI mode with --no-browser
+    if not args.no_browser:
+        import threading, webbrowser
+        def _open_browser():
+            import time; time.sleep(1.2)   # wait for uvicorn to be ready
+            webbrowser.open(f"http://localhost:{port}")
+        threading.Thread(target=_open_browser, daemon=True).start()
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
