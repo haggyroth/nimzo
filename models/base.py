@@ -52,15 +52,30 @@ class ChessPlayer(ABC):
         game_history_pgn: str,
     ) -> str:
         color = "White" if board.turn == chess.WHITE else "Black"
+        is_white = board.turn == chess.WHITE
         fen = board.fen()
 
         candidate_lines = []
         for i, (move, score_cp) in enumerate(candidates, 1):
             san = board.san(move)
-            score_str = f"{score_cp/100:+.2f}" if score_cp is not None else "?"
-            candidate_lines.append(f"  {i}. {san} (UCI: {move.uci()}) — eval: {score_str} pawns")
+            if score_cp is not None:
+                # Always show eval from White's perspective — standard chess convention
+                # (candidates arrive from current-player POV, so negate for Black)
+                white_cp = score_cp if is_white else -score_cp
+                score_str = f"{white_cp / 100:+.2f}"
+            else:
+                score_str = "?"
+            label = "  ← Stockfish's top pick" if i == 1 else ""
+            candidate_lines.append(
+                f"  {i}. {san} (UCI: {move.uci()}) — eval: {score_str}{label}"
+            )
 
         candidates_block = "\n".join(candidate_lines)
+
+        if is_white:
+            score_note = "higher eval = better for you"
+        else:
+            score_note = "lower eval = better for you; you want to minimise White's advantage"
 
         return f"""You are playing chess as {color}.
 
@@ -69,7 +84,7 @@ Current position (FEN): {fen}
 Game so far (PGN):
 {game_history_pgn or '(game just started)'}
 
-Stockfish's top {len(candidates)} candidate moves for this position:
+Stockfish's top {len(candidates)} candidates, ranked best to worst for {color} ({score_note}):
 {candidates_block}
 
 Choose ONE of the numbered candidates. Respond in this exact format:
