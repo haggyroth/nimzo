@@ -553,7 +553,8 @@
     @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 
     .ov-result { font-family: 'Cinzel', serif; font-size: clamp(32px,6vw,60px); font-weight: 700; color: var(--gold-bright); letter-spacing: 4px; text-shadow: 0 0 50px rgba(232,184,74,.35); }
-    .ov-sub { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); }
+    .ov-sub     { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); }
+    .ov-opening { font-size: 11px; color: var(--text-mid); letter-spacing: .5px; margin-top: -2px; }
     .ov-elos { display: flex; gap: 44px; margin: 10px 0; }
     .ov-elo-block { text-align: center; }
     .ov-elo-name { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 1px; color: var(--text-dim); margin-bottom: 4px; }
@@ -774,9 +775,10 @@
 
 <!-- Game-over overlay -->
 <div id="overlay">
-  <div class="ov-result" id="ovResult"></div>
-  <div class="ov-sub"    id="ovSub"></div>
-  <div class="ov-elos"   id="ovElos"></div>
+  <div class="ov-result"  id="ovResult"></div>
+  <div class="ov-sub"     id="ovSub"></div>
+  <div class="ov-opening" id="ovOpening"></div>
+  <div class="ov-elos"    id="ovElos"></div>
   <button class="ov-btn" onclick="document.getElementById('overlay').classList.remove('show')">
     Continue Watching
   </button>
@@ -1289,8 +1291,10 @@ function onGameOver(d) {
   const label = resultMap[d.result] || d.result;
   const term  = d.termination ? d.termination.charAt(0).toUpperCase()+d.termination.slice(1) : '';
 
-  document.getElementById('ovResult').textContent = label;
-  document.getElementById('ovSub').textContent    = [term, d.total_moves?`${d.total_moves} moves`:''].filter(Boolean).join(' · ');
+  document.getElementById('ovResult').textContent  = label;
+  document.getElementById('ovSub').textContent     = [term, d.total_moves?`${d.total_moves} moves`:''].filter(Boolean).join(' · ');
+  document.getElementById('ovOpening').textContent = d.opening_name
+    ? `${d.opening_eco} · ${d.opening_name}` : '';
 
   const eloHtml = `
     <div class="ov-elo-block"><div class="ov-elo-name">${escHtml(gameState.white.name)}</div>

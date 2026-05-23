@@ -74,7 +74,7 @@ _TUTOR_SYSTEM = (
 
 _LESSON_TEMPLATE = """Game result: {result} ({termination})
 Player: {player_name} ({player_color}) — {outcome}
-
+{opening_line}
 PGN:
 {pgn}
 
@@ -181,6 +181,7 @@ def generate_lessons(
     termination: str,
     quality_summary: str,
     tutor: Optional[TutorConfig] = None,
+    opening: Optional[tuple[str, str]] = None,   # (eco_code, name) or None
 ) -> dict[str, list[str]]:
     """
     Generate lessons for one player from a completed game.
@@ -196,12 +197,18 @@ def generate_lessons(
     else:
         outcome = "drew"
 
+    opening_line = (
+        f"Opening: {opening[1]} ({opening[0]})\n"
+        if opening else ""
+    )
+
     prompt = _LESSON_TEMPLATE.format(
         result=result,
         termination=termination,
         player_name=player_name,
         player_color=player_color,
         outcome=outcome,
+        opening_line=opening_line,
         pgn=pgn,
         quality_summary=quality_summary,
     )

@@ -41,6 +41,7 @@ from models.base import ChessPlayer, PlayerConfig
 from models.anthropic_player import AnthropicPlayer
 from models.lmstudio_player import LMStudioPlayer
 from analysis import TutorConfig, calculate_elos, generate_lessons, build_quality_summary
+from openings import detect_opening
 import db as database
 
 
@@ -375,6 +376,9 @@ async def play_game(
     game.headers["Result"] = result
     pgn_string = str(game)
 
+    # Opening detection
+    opening = detect_opening(game)   # (eco_code, name) or None
+
     # ELO — use game count for dynamic K
     w_count = database.get_player_game_count(white.config.model_id)
     b_count = database.get_player_game_count(black.config.model_id)
@@ -422,6 +426,8 @@ async def play_game(
         "white_elo_after": round(w_elo_after),
         "black_elo_after": round(b_elo_after),
         "pgn":             pgn_string,
+        "opening_eco":     opening[0] if opening else None,
+        "opening_name":    opening[1] if opening else None,
     })
 
     # ── Lessons for both players ───────────────────────────────────────
@@ -438,6 +444,7 @@ async def play_game(
             termination=termination,
             quality_summary=quality_summary,
             tutor=tutor,
+            opening=opening,
         )
 
         if lessons["improve"] or lessons["strength"]:
