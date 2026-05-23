@@ -4,8 +4,13 @@ Generates lessons for both players via a configurable tutor model.
 Tutor can be any LM Studio / Ollama (OpenAI-compatible) endpoint or Anthropic cloud.
 """
 
+from __future__ import annotations
+
+import json
 from collections import Counter
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 
@@ -53,6 +58,50 @@ def calculate_elos(
     new_white = new_elo(white_elo, black_elo, w_score, white_games)
     new_black = new_elo(black_elo, white_elo, b_score, black_games)
     return new_white, new_black
+
+
+# ── Opening detection ────────────────────────────────────────────────────
+
+_OPENINGS_PATH = Path(__file__).parent / "openings.json"
+
+
+@lru_cache(maxsize=1)
+def _load_openings() -> dict:
+    """Load ECO lookup table once; returns {} if file missing."""
+    if not _OPENINGS_PATH.exists():
+        return {}
+    with open(_OPENINGS_PATH) as f:
+        return json.load(f)
+
+
+def detect_opening(pgn_string: str) -> tuple[str, str] | None:
+    """
+    Replay the game and return the deepest ECO match as (code, name).
+    Returns None if no opening is recognised or openings.json is absent.
+    """
+    import chess
+    import chess.pgn
+    import io
+
+    openings = _load_openings()
+    if not openings:
+        return None
+
+    try:
+        game = chess.pgn.read_game(io.StringIO(pgn_string))
+        if game is None:
+            return None
+        board = game.board()
+        last_match: tuple[str, str] | None = None
+        for move in game.mainline_moves():
+            board.push(move)
+            epd = board.epd()
+            entry = openings.get(epd)
+            if entry:
+                last_match = (entry["eco"], entry["name"])
+        return last_match
+    except Exception:
+        return None
 
 
 # ── Tutor configuration ──────────────────────────────────────────────────

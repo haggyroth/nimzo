@@ -40,8 +40,7 @@ from engine import StockfishEngine
 from models.base import ChessPlayer, PlayerConfig
 from models.anthropic_player import AnthropicPlayer
 from models.lmstudio_player import LMStudioPlayer
-from analysis import TutorConfig, calculate_elos, generate_lessons, build_quality_summary
-from openings import detect_opening
+from analysis import TutorConfig, calculate_elos, generate_lessons, build_quality_summary, detect_opening
 import db as database
 
 
@@ -455,7 +454,7 @@ async def play_game(
     pgn_string = str(game)
 
     # Opening detection
-    opening = detect_opening(game)   # (eco_code, name) or None
+    opening = detect_opening(pgn_string)   # (eco_code, name) or None
 
     # ELO — use game count for dynamic K
     w_count = database.get_player_game_count(white.config.model_id)
