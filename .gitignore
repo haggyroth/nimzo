@@ -4,6 +4,9 @@
 # Database
 *.db
 
+# Runtime caches
+openings_cache.json
+
 # Python
 __pycache__/
 *.py[cod]
