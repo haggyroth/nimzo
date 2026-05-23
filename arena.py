@@ -713,7 +713,7 @@ if __name__ == "__main__":
     parser.add_argument("--black-backend", default=os.environ.get("BLACK_BACKEND", "lmstudio"))
     parser.add_argument("--black-name",    default="")
     parser.add_argument("--black-model",   default="")   # explicit only — no env fallback
-    parser.add_argument("--black-url",     default=os.environ.get("BLACK_URL",     "http://localhost:1235/v1"))
+    parser.add_argument("--black-url",     default=os.environ.get("BLACK_URL",     "http://localhost:1234/v1"))
     parser.add_argument("--tutor-backend", default=os.environ.get("TUTOR_BACKEND", "lmstudio"))
     parser.add_argument("--tutor-model",   default=os.environ.get("TUTOR_MODEL",   ""))
     parser.add_argument("--tutor-url",     default=os.environ.get("TUTOR_URL",     "http://localhost:1234/v1"))
