@@ -116,7 +116,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [ ] **Board themes**: preset color schemes (classic, green felt, blue ocean, high contrast) using CSS custom properties; `--sq-light` and `--sq-dark` already in use
 - [ ] **Custom colors**: color picker for board squares, highlights, and UI accent color
 - [ ] **Piece sets**: current Unicode pieces render inconsistently across OS/fonts; add SVG piece set options (e.g. Merida, Alpha, Neo)
-- [ ] **Board orientation toggle**: flip board to show from Black's perspective; persists per session
+- [x] **Board orientation toggle**: flip board to show from Black's perspective; persists per session
 - [ ] **Font & typography controls**: font family selector (monospace vs sans-serif), font size slider; CSS custom properties make this straightforward; persisted in `localStorage`
 - [ ] **UI framework consideration**: current hand-crafted CSS is lean and custom; Tailwind or Bootstrap are options if maintenance becomes painful — worth evaluating when the component count grows rather than rewriting speculatively
 - [ ] **Settings persistence**: store theme/orientation/font preferences in `localStorage`
