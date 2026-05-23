@@ -290,7 +290,16 @@ async def api_start(config: TournamentStartConfig):
     })
     await broadcast({"type": "tournament_status", **_state})
 
-    _tournament_task = asyncio.create_task(run_tournament(white, black, config.games, tutor))
+    async def _run_and_catch():
+        try:
+            await run_tournament(white, black, config.games, tutor)
+        except Exception as exc:
+            # Absorb any stray exceptions (e.g. engine death on Ctrl+C)
+            # so the task doesn't surface as "exception was never retrieved".
+            _state["status"] = "idle"
+            print(f"\n  Tournament ended: {type(exc).__name__}")
+
+    _tournament_task = asyncio.create_task(_run_and_catch())
     return {"ok": True}
 
 
@@ -363,9 +372,14 @@ async def play_game(
         current_player = white if board.turn == chess.WHITE else black
 
         # Run blocking Stockfish call in thread pool so event loop stays free
-        candidates = await loop.run_in_executor(
-            None, stockfish.get_candidates, board, current_player.config.candidate_count
-        )
+        try:
+            candidates = await loop.run_in_executor(
+                None, stockfish.get_candidates, board, current_player.config.candidate_count
+            )
+        except Exception as exc:
+            # Stockfish died (e.g. Ctrl+C sent SIGINT to the subprocess).
+            # Treat as a clean stop rather than crashing with a traceback.
+            raise TournamentAborted() from None
         if not candidates:
             break
 
@@ -689,13 +703,16 @@ if __name__ == "__main__":
             "  python arena.py --white-model qwen3-30b --black-model llama-70b\n"
         ),
     )
+    # Model IDs intentionally NOT read from env vars — they must be passed
+    # explicitly to trigger CLI mode.  Connection URLs and other non-model
+    # settings are still env-configurable for convenience.
     parser.add_argument("--white-backend", default=os.environ.get("WHITE_BACKEND", "lmstudio"))
-    parser.add_argument("--white-name",    default=os.environ.get("WHITE_NAME",    ""))
-    parser.add_argument("--white-model",   default=os.environ.get("WHITE_MODEL",   ""))
-    parser.add_argument("--white-url",     default=os.environ.get("WHITE_URL",     "http://localhost:1234/v1"))
+    parser.add_argument("--white-name",    default="")
+    parser.add_argument("--white-model",   default="")   # explicit only — no env fallback
+    parser.add_argument("--white-url",     default=os.environ.get("WHITE_URL", os.environ.get("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")))
     parser.add_argument("--black-backend", default=os.environ.get("BLACK_BACKEND", "lmstudio"))
-    parser.add_argument("--black-name",    default=os.environ.get("BLACK_NAME",    ""))
-    parser.add_argument("--black-model",   default=os.environ.get("BLACK_MODEL",   ""))
+    parser.add_argument("--black-name",    default="")
+    parser.add_argument("--black-model",   default="")   # explicit only — no env fallback
     parser.add_argument("--black-url",     default=os.environ.get("BLACK_URL",     "http://localhost:1235/v1"))
     parser.add_argument("--tutor-backend", default=os.environ.get("TUTOR_BACKEND", "lmstudio"))
     parser.add_argument("--tutor-model",   default=os.environ.get("TUTOR_MODEL",   ""))
