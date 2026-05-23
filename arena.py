@@ -132,6 +132,11 @@ async def api_leaderboard():
     return database.get_leaderboard()
 
 
+@app.get("/api/elo-history/{model_id:path}")
+async def api_elo_history(model_id: str):
+    return database.get_elo_history(model_id)
+
+
 @app.get("/api/games")
 async def api_games(limit: int = 20):
     return database.get_recent_games(limit)

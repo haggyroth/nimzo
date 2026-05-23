@@ -508,10 +508,12 @@
     }
     .lb-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
     .lb-table tr:last-child td { border-bottom: none; }
-    .lb-rank { color: var(--text-dim); font-size: 9px; }
-    .lb-name { color: var(--text); font-weight: 500; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .lb-elo  { color: var(--gold); }
-    .lb-wdl  { color: var(--text-mid); font-size: 9px; }
+    .lb-rank  { color: var(--text-dim); font-size: 9px; }
+    .lb-name  { color: var(--text); font-weight: 500; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lb-elo   { color: var(--gold); }
+    .lb-wdl   { color: var(--text-mid); font-size: 9px; }
+    .lb-spark { width: 60px; padding: 4px 6px 4px 2px; }
+    .lb-spark svg { display: block; overflow: visible; }
     .lb-empty { padding: 14px 12px; font-size: 10px; color: var(--text-dim); text-align: center; }
 
     /* lessons */
@@ -1017,21 +1019,49 @@ function renderLessons() {
   body.innerHTML = html;
 }
 
+// ── ELO sparkline ─────────────────────────────────────────────────────────
+function buildSparkline(history) {
+  // history: [{elo_after: number}, ...]
+  if (!history || history.length < 2) return '';
+  const W = 58, H = 20, pad = 1;
+  const vals = history.map(h => h.elo_after);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const range = hi - lo || 1;
+  const px = (i) => pad + (i / (vals.length - 1)) * (W - pad*2);
+  const py = (v) => H - pad - ((v - lo) / range) * (H - pad*2);
+  const pts = vals.map((v,i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+  // Closed fill path: line points + bottom-right + bottom-left
+  const fill = `${pts} ${(W-pad).toFixed(1)},${H} ${pad},${H}`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+    <polygon points="${fill}" fill="rgba(200,146,30,.18)" stroke="none"/>
+    <polyline points="${pts}" fill="none" stroke="var(--gold)" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
 // ── Leaderboard ───────────────────────────────────────────────────────────
 async function loadLeaderboard() {
   try {
     const rows = await fetch(`${API}/api/leaderboard`).then(r=>r.json());
     const body = document.getElementById('leaderboardBody');
     if (!rows.length) { body.innerHTML='<div class="lb-empty">No games yet</div>'; return; }
+
+    // Fetch ELO history for all players in parallel
+    const histories = await Promise.all(
+      rows.map(r => fetch(`${API}/api/elo-history/${encodeURIComponent(r.model_id)}`)
+        .then(res => res.json()).catch(() => []))
+    );
+
     let html = `<table class="lb-table"><thead><tr>
-      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th>
+      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th><th></th>
     </tr></thead><tbody>`;
-    rows.forEach((r,i) => {
+    rows.forEach((r, i) => {
+      const spark = buildSparkline(histories[i]);
       html += `<tr>
         <td class="lb-rank">${i+1}</td>
         <td class="lb-name" title="${escHtml(r.model_id)}">${escHtml(r.name)}</td>
         <td class="lb-elo">${r.elo}</td>
         <td class="lb-wdl">${r.wins}/${r.draws}/${r.losses}</td>
+        <td class="lb-spark">${spark}</td>
       </tr>`;
     });
     html += '</tbody></table>';
