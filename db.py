@@ -223,6 +223,38 @@ def record_move(
         )
 
 
+def get_game(game_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT g.*, wp.name AS white_name, bp.name AS black_name,
+                   wp.model_id AS white_model_id, bp.model_id AS black_model_id
+            FROM games g
+            JOIN players wp ON g.white_player_id = wp.id
+            JOIN players bp ON g.black_player_id = bp.id
+            WHERE g.id = ?
+            """,
+            (game_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_game_moves(game_id: int) -> list[dict]:
+    """All moves for a game in order, with player name and quality."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT m.move_number, m.move_san, m.move_uci, m.quality,
+                   m.candidate_rank, m.reasoning, m.score_cp
+            FROM moves m
+            WHERE m.game_id = ?
+            ORDER BY m.move_number ASC
+            """,
+            (game_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 # ── Lessons ──────────────────────────────────────────────────────────────
 
 def record_lesson(

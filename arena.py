@@ -138,6 +138,79 @@ async def api_elo_history(model_id: str):
     return database.get_elo_history(model_id)
 
 
+_QUALITY_GLYPH = {
+    "best":       "!!",
+    "excellent":  "!",
+    "inaccuracy": "?!",
+    "mistake":    "?",
+    "blunder":    "??",
+}
+
+@app.get("/api/games/{game_id}/pgn")
+async def api_game_pgn(game_id: int):
+    from fastapi.responses import PlainTextResponse
+    game_row = database.get_game(game_id)
+    if not game_row:
+        return PlainTextResponse("Game not found", status_code=404)
+    moves = database.get_game_moves(game_id)
+
+    lines = [
+        f'[Event "Nimzo Arena"]',
+        f'[Site "localhost"]',
+        f'[Date "{game_row["played_at"][:10]}"]',
+        f'[White "{game_row["white_name"]}"]',
+        f'[Black "{game_row["black_name"]}"]',
+        f'[Result "{game_row["result"]}"]',
+        f'[WhiteElo "{round(game_row["white_elo_before"])}"]',
+        f'[BlackElo "{round(game_row["black_elo_before"])}"]',
+        "",
+    ]
+
+    tokens: list[str] = []
+    for m in moves:
+        num     = m["move_number"]
+        san     = m["move_san"]
+        glyph   = _QUALITY_GLYPH.get(m["quality"] or "", "")
+        reason  = (m["reasoning"] or "").strip().replace("{", "(").replace("}", ")")
+        rank    = m["candidate_rank"]
+
+        # Move number prefix for white moves (odd) and black's first token
+        if num % 2 == 1:
+            tokens.append(f"{(num + 1) // 2}.")
+
+        tokens.append(san + glyph)
+
+        comment_parts = []
+        if reason and reason != "(no reasoning)" and reason != "(parse failed — defaulted to top candidate)":
+            comment_parts.append(reason)
+        if m["quality"] and m["quality"] != "good":
+            comment_parts.append(m["quality"].capitalize())
+        if rank:
+            comment_parts.append(f"candidate #{rank}")
+        if comment_parts:
+            tokens.append("{ " + " | ".join(comment_parts) + " }")
+
+    tokens.append(game_row["result"])
+
+    # Wrap at ~80 chars
+    pgn_body = ""
+    line = ""
+    for tok in tokens:
+        if line and len(line) + 1 + len(tok) > 78:
+            pgn_body += line + "\n"
+            line = tok
+        else:
+            line = (line + " " + tok).lstrip()
+    if line:
+        pgn_body += line + "\n"
+
+    filename = f"nimzo_{game_row['white_name']}_vs_{game_row['black_name']}_{game_id}.pgn".replace(" ", "_")
+    return PlainTextResponse(
+        "\n".join(lines) + pgn_body,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.get("/api/games")
 async def api_games(limit: int = 20):
     return database.get_recent_games(limit)
@@ -420,6 +493,7 @@ async def play_game(
 
     await broadcast({
         "type":            "game_over",
+        "game_id":         game_id,
         "result":          result,
         "termination":     termination,
         "total_moves":     move_number,

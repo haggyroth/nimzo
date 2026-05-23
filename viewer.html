@@ -559,8 +559,9 @@
     .ov-elo-block { text-align: center; }
     .ov-elo-name { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 1px; color: var(--text-dim); margin-bottom: 4px; }
     .ov-elo-val  { font-size: 22px; color: var(--gold-bright); }
+    .ov-actions { display: flex; gap: 10px; margin-top: 6px; }
     .ov-btn {
-      margin-top: 6px; padding: 8px 26px;
+      padding: 8px 26px;
       background: transparent; border: 1px solid var(--border-hi);
       color: var(--text-mid); font-family: 'JetBrains Mono', monospace;
       font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
@@ -779,9 +780,14 @@
   <div class="ov-sub"     id="ovSub"></div>
   <div class="ov-opening" id="ovOpening"></div>
   <div class="ov-elos"    id="ovElos"></div>
-  <button class="ov-btn" onclick="document.getElementById('overlay').classList.remove('show')">
-    Continue Watching
-  </button>
+  <div class="ov-actions">
+    <button class="ov-btn" id="ovDownloadBtn" onclick="downloadPgn()" style="display:none">
+      ↓ PGN
+    </button>
+    <button class="ov-btn" onclick="document.getElementById('overlay').classList.remove('show')">
+      Continue Watching
+    </button>
+  </div>
 </div>
 
 <script>
@@ -802,6 +808,7 @@ let gameState = {
   candidates: [],
   lastEvalCp:  null,
   boardFlipped: localStorage.getItem('boardFlipped') === 'true',
+  lastGameId:   null,
 };
 
 let tournamentStatus = 'idle';
@@ -1291,10 +1298,12 @@ function onGameOver(d) {
   const label = resultMap[d.result] || d.result;
   const term  = d.termination ? d.termination.charAt(0).toUpperCase()+d.termination.slice(1) : '';
 
+  gameState.lastGameId = d.game_id || null;
   document.getElementById('ovResult').textContent  = label;
   document.getElementById('ovSub').textContent     = [term, d.total_moves?`${d.total_moves} moves`:''].filter(Boolean).join(' · ');
   document.getElementById('ovOpening').textContent = d.opening_name
     ? `${d.opening_eco} · ${d.opening_name}` : '';
+  document.getElementById('ovDownloadBtn').style.display = d.game_id ? '' : 'none';
 
   const eloHtml = `
     <div class="ov-elo-block"><div class="ov-elo-name">${escHtml(gameState.white.name)}</div>
@@ -1366,6 +1375,17 @@ function connect() {
 function schedReconn() { reconnTimer = setTimeout(connect, 2500); }
 
 // ── Collapsible panels ────────────────────────────────────────────────────
+function downloadPgn() {
+  const id = gameState.lastGameId;
+  if (!id) return;
+  const a = document.createElement('a');
+  a.href = `${API}/api/games/${id}/pgn`;
+  a.download = '';   // server sets filename via Content-Disposition
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 function toggleSection(id) {
   document.getElementById(id).classList.toggle('collapsed');
 }
