@@ -174,6 +174,14 @@
     }
     .p-right { display: flex; align-items: center; gap: 12px; }
     .p-elo   { font-size: 10px; color: var(--gold); letter-spacing: 1px; }
+    .p-eval  {
+      font-size: 10px; font-weight: 500; letter-spacing: .5px;
+      min-width: 46px; text-align: right;
+      transition: color .3s;
+    }
+    .p-eval.adv-white { color: #e8d5b0; }   /* warm light — White ahead  */
+    .p-eval.adv-black { color: #8b9db8; }   /* cool dim  — Black ahead   */
+    .p-eval.adv-even  { color: var(--text-mid); }
     .p-think { font-size: 9px; color: var(--gold-bright); display: none; }
     .p-think.on { display: flex; align-items: center; gap: 3px; animation: blink .7s infinite; }
 
@@ -570,7 +578,8 @@
       </div>
       <div class="p-right">
         <div class="p-think" id="thinkBlack">● thinking</div>
-        <div class="p-elo"  id="eloBlack">—</div>
+        <div class="p-eval"  id="evalBlack"></div>
+        <div class="p-elo"   id="eloBlack">—</div>
       </div>
     </div>
 
@@ -585,7 +594,8 @@
       </div>
       <div class="p-right">
         <div class="p-think" id="thinkWhite">● thinking</div>
-        <div class="p-elo"  id="eloWhite">—</div>
+        <div class="p-eval"  id="evalWhite"></div>
+        <div class="p-elo"   id="eloWhite">—</div>
       </div>
     </div>
   </div>
@@ -859,6 +869,28 @@ function updatePlayers() {
   document.getElementById('thinkWhite').classList.toggle('on', gameState.thinking==='white');
   document.getElementById('thinkBlack').classList.toggle('on', gameState.thinking==='black');
   document.getElementById('boardWrap').classList.toggle('thinking', gameState.thinking!==null);
+
+  // Live eval readout — show current centipawn advantage in each player strip
+  const cp  = gameState.lastEvalCp;
+  const ewEl = document.getElementById('evalWhite');
+  const ebEl = document.getElementById('evalBlack');
+  if (cp == null) {
+    ewEl.textContent = ''; ebEl.textContent = '';
+    ewEl.className = 'p-eval'; ebEl.className = 'p-eval';
+  } else {
+    const clampedCp = Math.max(-2000, Math.min(2000, cp));
+    const pawns     = clampedCp / 100;
+    const absStr    = Math.abs(pawns).toFixed(1);
+    const whiteAhead = clampedCp > 15;
+    const blackAhead = clampedCp < -15;
+    const cls = whiteAhead ? 'adv-white' : blackAhead ? 'adv-black' : 'adv-even';
+    // White strip: show + when White is ahead, − when behind
+    ewEl.textContent = whiteAhead ? `+${absStr}` : blackAhead ? `−${absStr}` : '=';
+    ewEl.className   = `p-eval ${cls}`;
+    // Black strip: mirror — Black is ahead when cp is negative
+    ebEl.textContent = blackAhead ? `+${absStr}` : whiteAhead ? `−${absStr}` : '=';
+    ebEl.className   = `p-eval ${cls}`;
+  }
 }
 
 // ── Analysis pane ─────────────────────────────────────────────────────────
@@ -1149,9 +1181,10 @@ function onGameStart(d) {
   gameState.white    = { name: d.white, elo: d.white_elo };
   gameState.black    = { name: d.black, elo: d.black_elo };
   gameState.fen      = d.fen || gameState.fen;
-  gameState.lastUci  = null;
-  gameState.thinking = null;
+  gameState.lastUci    = null;
+  gameState.thinking   = null;
   gameState.candidates = [];
+  gameState.lastEvalCp = null;
   _allLessons = {};
   evalHistory = [];
   document.getElementById('evalPane').style.display = 'none';
@@ -1174,6 +1207,7 @@ function onMove(d) {
   gameState.lastUci    = d.uci;
   gameState.thinking   = null;
   gameState.candidates = [];
+  if (d.score_cp_white != null) gameState.lastEvalCp = d.score_cp_white;
   updatePlayers(); updateAnalysis(); renderBoard();
   addMoveCard(d);
   pushEval(d.move_number, d.score_cp_white);
