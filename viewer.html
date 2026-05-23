@@ -664,9 +664,12 @@
     </div>
   </div>
 
-  <div class="conn-status">
-    <div class="dot waiting" id="dot"></div>
-    <span id="connLabel">connecting</span>
+  <div style="display:flex;align-items:center;gap:14px">
+    <a href="/stats" style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-mid);text-decoration:none;transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text-mid)'">Stats ↗</a>
+    <div class="conn-status">
+      <div class="dot waiting" id="dot"></div>
+      <span id="connLabel">connecting</span>
+    </div>
   </div>
 </header>
 

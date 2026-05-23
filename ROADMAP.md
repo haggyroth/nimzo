@@ -56,7 +56,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [ ] **"Best game" stat** per player: highest average move quality across all games, surfaced as a score in the leaderboard
 - [x] **Opening detection in lessons**: pass ECO code (python-chess can derive from PGN) to the lesson prompt so the coach can reference the specific opening structure — "in the Sicilian Najdorf, your knight retreat on move 14 ignored the standard d5 break"
 - [ ] **Model personality profile**: per-model summary derived from move data — castling timing, material trade preferences, closed vs open position tendencies; displayed on model card and stats page
-- [ ] **Stats page** (`/stats`): head-to-head records, win rate by color, average move quality per model, ELO chart over time, blunder rate, candidate deviation rate
+- [x] **Stats page** (`/stats`): head-to-head records, win rate by color, average move quality per model, ELO chart over time, blunder rate, candidate deviation rate
 
 ---
 

@@ -3,6 +3,8 @@ SQLite persistence for Nimzo.
 Players are keyed by model_id so ELO and lessons persist across name changes.
 """
 
+from __future__ import annotations
+
 import sqlite3
 from datetime import datetime
 from contextlib import contextmanager
@@ -334,5 +336,79 @@ def get_elo_history(model_id: str) -> list[dict]:
             ORDER BY g.played_at ASC
             """,
             (model_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ── Stats page queries ────────────────────────────────────────────────────
+
+def get_player_move_stats() -> list[dict]:
+    """Per-player move quality counts, avg candidate rank, blunder/mistake rates."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                p.name,
+                p.model_id,
+                COUNT(m.id)                                         AS total_moves,
+                SUM(CASE WHEN m.quality='best'       THEN 1 ELSE 0 END) AS best,
+                SUM(CASE WHEN m.quality='excellent'  THEN 1 ELSE 0 END) AS excellent,
+                SUM(CASE WHEN m.quality='good'       THEN 1 ELSE 0 END) AS good,
+                SUM(CASE WHEN m.quality='inaccuracy' THEN 1 ELSE 0 END) AS inaccuracy,
+                SUM(CASE WHEN m.quality='mistake'    THEN 1 ELSE 0 END) AS mistake,
+                SUM(CASE WHEN m.quality='blunder'    THEN 1 ELSE 0 END) AS blunder,
+                ROUND(AVG(m.candidate_rank), 2)                     AS avg_candidate_rank
+            FROM moves m
+            JOIN players p ON m.player_id = p.id
+            GROUP BY p.id
+            ORDER BY p.elo DESC
+            """,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_color_stats() -> list[dict]:
+    """Per-player win/draw/loss split broken out by colour played."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                p.name,
+                p.model_id,
+                SUM(CASE WHEN g.white_player_id = p.id AND g.result='1-0'     THEN 1 ELSE 0 END) AS white_wins,
+                SUM(CASE WHEN g.white_player_id = p.id AND g.result='1/2-1/2' THEN 1 ELSE 0 END) AS white_draws,
+                SUM(CASE WHEN g.white_player_id = p.id AND g.result='0-1'     THEN 1 ELSE 0 END) AS white_losses,
+                SUM(CASE WHEN g.black_player_id = p.id AND g.result='0-1'     THEN 1 ELSE 0 END) AS black_wins,
+                SUM(CASE WHEN g.black_player_id = p.id AND g.result='1/2-1/2' THEN 1 ELSE 0 END) AS black_draws,
+                SUM(CASE WHEN g.black_player_id = p.id AND g.result='1-0'     THEN 1 ELSE 0 END) AS black_losses
+            FROM players p
+            LEFT JOIN games g ON (g.white_player_id = p.id OR g.black_player_id = p.id)
+            GROUP BY p.id
+            ORDER BY p.elo DESC
+            """,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_head_to_head() -> list[dict]:
+    """All unique pairings with W/D/L from each player's perspective."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                wp.name  AS white_name,
+                bp.name  AS black_name,
+                wp.model_id AS white_model_id,
+                bp.model_id AS black_model_id,
+                SUM(CASE WHEN g.result='1-0'     THEN 1 ELSE 0 END) AS white_wins,
+                SUM(CASE WHEN g.result='1/2-1/2' THEN 1 ELSE 0 END) AS draws,
+                SUM(CASE WHEN g.result='0-1'     THEN 1 ELSE 0 END) AS black_wins,
+                COUNT(*)                                              AS total
+            FROM games g
+            JOIN players wp ON g.white_player_id = wp.id
+            JOIN players bp ON g.black_player_id = bp.id
+            GROUP BY g.white_player_id, g.black_player_id
+            ORDER BY total DESC
+            """,
         ).fetchall()
         return [dict(r) for r in rows]

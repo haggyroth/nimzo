@@ -137,6 +137,26 @@ async def api_elo_history(model_id: str):
     return database.get_elo_history(model_id)
 
 
+@app.get("/api/stats/moves")
+async def api_stats_moves():
+    return database.get_player_move_stats()
+
+
+@app.get("/api/stats/colors")
+async def api_stats_colors():
+    return database.get_color_stats()
+
+
+@app.get("/api/stats/h2h")
+async def api_stats_h2h():
+    return database.get_head_to_head()
+
+
+@app.get("/stats", response_class=HTMLResponse)
+async def stats_page():
+    return (Path(__file__).parent / "stats.html").read_text()
+
+
 _QUALITY_GLYPH = {
     "best":       "!!",
     "excellent":  "!",
