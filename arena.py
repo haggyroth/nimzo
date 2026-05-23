@@ -146,6 +146,11 @@ _QUALITY_GLYPH = {
     "blunder":    "??",
 }
 
+@app.get("/api/games/{game_id}/moves")
+async def api_game_moves(game_id: int):
+    return database.get_game_moves(game_id)
+
+
 @app.get("/api/games/{game_id}/pgn")
 async def api_game_pgn(game_id: int):
     from fastapi.responses import PlainTextResponse
