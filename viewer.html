@@ -174,6 +174,14 @@
     }
     .p-right { display: flex; align-items: center; gap: 12px; }
     .p-elo   { font-size: 10px; color: var(--gold); letter-spacing: 1px; }
+    .p-eval  {
+      font-size: 10px; font-weight: 500; letter-spacing: .5px;
+      min-width: 46px; text-align: right;
+      transition: color .3s;
+    }
+    .p-eval.adv-white { color: #e8d5b0; }   /* warm light — White ahead  */
+    .p-eval.adv-black { color: #8b9db8; }   /* cool dim  — Black ahead   */
+    .p-eval.adv-even  { color: var(--text-mid); }
     .p-think { font-size: 9px; color: var(--gold-bright); display: none; }
     .p-think.on { display: flex; align-items: center; gap: 3px; animation: blink .7s infinite; }
 
@@ -208,6 +216,24 @@
     }
     .piece.w { color: #f8f8f8; filter: drop-shadow(0 1px 3px rgba(0,0,0,.9)); }
     .piece.b { color: #161616; filter: drop-shadow(0 1px 2px rgba(255,255,255,.12)); }
+
+    .flip-btn {
+      position: absolute;
+      bottom: 6px; right: 6px;
+      width: 22px; height: 22px;
+      background: rgba(12,16,24,.78);
+      border: 1px solid var(--border-hi);
+      border-radius: 4px;
+      color: var(--text-mid);
+      font-size: 13px; line-height: 1;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity .15s, color .15s;
+      z-index: 10;
+    }
+    .board-wrap:hover .flip-btn { opacity: 1; }
+    .flip-btn:hover { color: var(--gold-bright); border-color: var(--gold); }
 
     .board-wrap.thinking::after {
       content: ''; position: absolute; inset: 0;
@@ -482,10 +508,12 @@
     }
     .lb-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
     .lb-table tr:last-child td { border-bottom: none; }
-    .lb-rank { color: var(--text-dim); font-size: 9px; }
-    .lb-name { color: var(--text); font-weight: 500; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .lb-elo  { color: var(--gold); }
-    .lb-wdl  { color: var(--text-mid); font-size: 9px; }
+    .lb-rank  { color: var(--text-dim); font-size: 9px; }
+    .lb-name  { color: var(--text); font-weight: 500; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lb-elo   { color: var(--gold); }
+    .lb-wdl   { color: var(--text-mid); font-size: 9px; }
+    .lb-spark { width: 60px; padding: 4px 6px 4px 2px; }
+    .lb-spark svg { display: block; overflow: visible; }
     .lb-empty { padding: 14px 12px; font-size: 10px; color: var(--text-dim); text-align: center; }
 
     /* lessons */
@@ -508,11 +536,91 @@
     .lessons-empty { padding: 12px; font-size: 10px; color: var(--text-dim); text-align: center; }
 
     /* game history list */
-    .game-row { display: flex; align-items: center; gap: 6px; padding: 5px 8px; font-size: 9px; border-bottom: 1px solid var(--border); }
+    .game-row {
+      display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+      font-size: 9px; border-bottom: 1px solid var(--border);
+      cursor: pointer; transition: background .12s;
+    }
     .game-row:last-child { border-bottom: none; }
+    .game-row:hover { background: var(--bg-card); }
     .game-result { font-weight: 500; color: var(--gold); min-width: 28px; }
     .game-names  { flex: 1; color: var(--text-mid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .game-moves  { color: var(--text-dim); }
+
+    /* ── Replay modal ───────────────────────────────────────────────── */
+    #replayModal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(7,9,12,.92); backdrop-filter: blur(12px);
+      z-index: 300; align-items: center; justify-content: center; gap: 24px;
+    }
+    #replayModal.show { display: flex; animation: fadeIn .2s ease; }
+
+    .rp-board-col { display: flex; flex-direction: column; align-items: center; gap: 0; }
+    .rp-header {
+      width: var(--rp-size, 420px);
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 0 2px 6px;
+    }
+    .rp-title   { font-family: 'Cinzel', serif; font-size: 13px; color: var(--gold); letter-spacing: .5px; }
+    .rp-close   { font-size: 11px; color: var(--text-mid); cursor: pointer; letter-spacing: 1px; text-transform: uppercase; }
+    .rp-close:hover { color: var(--gold); }
+
+    .rp-board-wrap {
+      --rp-size: 420px;
+      width: var(--rp-size); height: var(--rp-size);
+      position: relative;
+    }
+    .rp-board {
+      display: grid;
+      grid-template-columns: repeat(8,1fr);
+      grid-template-rows: repeat(8,1fr);
+      width: 100%; height: 100%;
+      border: 1px solid var(--border-hi);
+      box-shadow: 0 20px 60px rgba(0,0,0,.85);
+    }
+
+    .rp-strip {
+      width: var(--rp-size, 420px);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 10px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      font-size: 10px;
+    }
+    .rp-strip-name { font-family: 'Cinzel', serif; font-size: 11px; font-weight: 600; }
+    .rp-strip-elo  { color: var(--gold); font-size: 9px; letter-spacing: 1px; }
+    .rp-swatch     { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    .rp-controls {
+      width: var(--rp-size, 420px);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 8px 0 2px;
+    }
+    .rp-btn {
+      background: transparent; border: 1px solid var(--border-hi);
+      color: var(--text-mid); font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; padding: 5px 14px; cursor: pointer;
+      transition: border-color .12s, color .12s;
+    }
+    .rp-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+    .rp-btn:disabled { opacity: .25; cursor: default; }
+    .rp-counter { font-size: 9px; color: var(--text-mid); min-width: 60px; text-align: center; }
+
+    .rp-move-list {
+      width: 180px; max-height: 440px; overflow-y: auto;
+      background: var(--bg-panel); border: 1px solid var(--border);
+      padding: 4px 0;
+    }
+    .rp-move-list::-webkit-scrollbar { width: 2px; }
+    .rp-move-list::-webkit-scrollbar-thumb { background: var(--border-hi); }
+    .rp-move-item {
+      display: flex; gap: 6px; padding: 3px 10px;
+      font-size: 9px; cursor: pointer; transition: background .1s;
+    }
+    .rp-move-item:hover { background: var(--bg-card); }
+    .rp-move-item.active { background: rgba(200,146,30,.15); color: var(--gold-bright); }
+    .rp-move-num  { color: var(--text-dim); min-width: 20px; }
+    .rp-move-san  { color: var(--text); }
+    .rp-move-qual { font-size: 8px; min-width: 16px; text-align: right; }
 
     /* ── Game-over overlay ───────────────────────────────────────── */
     #overlay {
@@ -525,13 +633,15 @@
     @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 
     .ov-result { font-family: 'Cinzel', serif; font-size: clamp(32px,6vw,60px); font-weight: 700; color: var(--gold-bright); letter-spacing: 4px; text-shadow: 0 0 50px rgba(232,184,74,.35); }
-    .ov-sub { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); }
+    .ov-sub     { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); }
+    .ov-opening { font-size: 11px; color: var(--text-mid); letter-spacing: .5px; margin-top: -2px; }
     .ov-elos { display: flex; gap: 44px; margin: 10px 0; }
     .ov-elo-block { text-align: center; }
     .ov-elo-name { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 1px; color: var(--text-dim); margin-bottom: 4px; }
     .ov-elo-val  { font-size: 22px; color: var(--gold-bright); }
+    .ov-actions { display: flex; gap: 10px; margin-top: 6px; }
     .ov-btn {
-      margin-top: 6px; padding: 8px 26px;
+      padding: 8px 26px;
       background: transparent; border: 1px solid var(--border-hi);
       color: var(--text-mid); font-family: 'JetBrains Mono', monospace;
       font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
@@ -554,9 +664,12 @@
     </div>
   </div>
 
-  <div class="conn-status">
-    <div class="dot waiting" id="dot"></div>
-    <span id="connLabel">connecting</span>
+  <div style="display:flex;align-items:center;gap:14px">
+    <a href="/stats" style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-mid);text-decoration:none;transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text-mid)'">Stats ↗</a>
+    <div class="conn-status">
+      <div class="dot waiting" id="dot"></div>
+      <span id="connLabel">connecting</span>
+    </div>
   </div>
 </header>
 
@@ -570,12 +683,14 @@
       </div>
       <div class="p-right">
         <div class="p-think" id="thinkBlack">● thinking</div>
-        <div class="p-elo"  id="eloBlack">—</div>
+        <div class="p-eval"  id="evalBlack"></div>
+        <div class="p-elo"   id="eloBlack">—</div>
       </div>
     </div>
 
     <div class="board-wrap" id="boardWrap">
       <div id="board"></div>
+      <button id="flipBtn" class="flip-btn" onclick="toggleFlip()" title="Flip to Black's perspective">⇅</button>
     </div>
 
     <div class="player-strip" id="stripWhite">
@@ -585,7 +700,8 @@
       </div>
       <div class="p-right">
         <div class="p-think" id="thinkWhite">● thinking</div>
-        <div class="p-elo"  id="eloWhite">—</div>
+        <div class="p-eval"  id="evalWhite"></div>
+        <div class="p-elo"   id="eloWhite">—</div>
       </div>
     </div>
   </div>
@@ -742,13 +858,59 @@
 </main>
 
 <!-- Game-over overlay -->
+<div id="replayModal">
+  <div class="rp-board-col">
+    <!-- Black strip -->
+    <div class="rp-strip" id="rpStripBlack">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="rp-swatch" style="background:#1a1a1a;border:1px solid #444"></div>
+        <span class="rp-strip-name" id="rpNameBlack">—</span>
+      </div>
+      <span class="rp-strip-elo" id="rpEloBlack">—</span>
+    </div>
+    <!-- Board -->
+    <div class="rp-board-wrap">
+      <div class="rp-board" id="rpBoard"></div>
+    </div>
+    <!-- White strip -->
+    <div class="rp-strip" id="rpStripWhite">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="rp-swatch" style="background:#f0f0f0;border:1px solid #bbb"></div>
+        <span class="rp-strip-name" id="rpNameWhite">—</span>
+      </div>
+      <span class="rp-strip-elo" id="rpEloWhite">—</span>
+    </div>
+    <!-- Controls -->
+    <div class="rp-controls">
+      <button class="rp-btn" id="rpFirst"  onclick="rpGo(0)">⟨⟨</button>
+      <button class="rp-btn" id="rpPrev"   onclick="rpGo(replay.cursor-1)">⟨</button>
+      <span  class="rp-counter" id="rpCounter"></span>
+      <button class="rp-btn" id="rpNext"   onclick="rpGo(replay.cursor+1)">⟩</button>
+      <button class="rp-btn" id="rpLast"   onclick="rpGo(replay.moves.length)">⟩⟩</button>
+    </div>
+    <!-- Header + close (below controls to not crowd board) -->
+    <div class="rp-header" style="padding-top:6px">
+      <span class="rp-title" id="rpTitle"></span>
+      <span class="rp-close" onclick="closeReplay()">✕ close</span>
+    </div>
+  </div>
+  <!-- Move list -->
+  <div class="rp-move-list" id="rpMoveList"></div>
+</div>
+
 <div id="overlay">
-  <div class="ov-result" id="ovResult"></div>
-  <div class="ov-sub"    id="ovSub"></div>
-  <div class="ov-elos"   id="ovElos"></div>
-  <button class="ov-btn" onclick="document.getElementById('overlay').classList.remove('show')">
-    Continue Watching
-  </button>
+  <div class="ov-result"  id="ovResult"></div>
+  <div class="ov-sub"     id="ovSub"></div>
+  <div class="ov-opening" id="ovOpening"></div>
+  <div class="ov-elos"    id="ovElos"></div>
+  <div class="ov-actions">
+    <button class="ov-btn" id="ovDownloadBtn" onclick="downloadPgn()" style="display:none">
+      ↓ PGN
+    </button>
+    <button class="ov-btn" onclick="document.getElementById('overlay').classList.remove('show')">
+      Continue Watching
+    </button>
+  </div>
 </div>
 
 <script>
@@ -767,6 +929,9 @@ let gameState = {
   black:      { name: '—', elo: null },
   thinking:   null,
   candidates: [],
+  lastEvalCp:  null,
+  boardFlipped: localStorage.getItem('boardFlipped') === 'true',
+  lastGameId:   null,
 };
 
 let tournamentStatus = 'idle';
@@ -808,16 +973,21 @@ function uciToSquares(uci) {
 
 // ── Board render ──────────────────────────────────────────────────────────
 function renderBoard() {
-  const el     = document.getElementById('board');
-  const matrix = parseFen(gameState.fen);
+  const el      = document.getElementById('board');
+  const matrix  = parseFen(gameState.fen);
+  const flipped = gameState.boardFlipped;
   const [from, to] = uciToSquares(gameState.lastUci);
   const key = (r,c) => r*8+c;
   const fromKey = from ? key(from.row,from.col) : -1;
   const toKey   = to   ? key(to.row,  to.col)   : -1;
 
+  // When flipped: rows run 7→0 (rank 1 at top), cols run 7→0 (h-file at left)
+  const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+  const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+
   el.innerHTML = '';
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
+  rows.forEach((r, ri) => {
+    cols.forEach((c, ci) => {
       const sq    = document.createElement('div');
       const light = (r+c)%2===0;
       sq.className = 'sq ' + (light ? 'light' : 'dark');
@@ -825,13 +995,15 @@ function renderBoard() {
       if (k===fromKey) sq.classList.add('hi-from');
       if (k===toKey)   sq.classList.add('hi-to');
 
-      if (c===0) {
+      // Rank label on the leftmost visible column
+      if (ci===0) {
         const lbl = document.createElement('span');
         lbl.className='sq-label rank'; lbl.textContent=8-r;
         lbl.style.color = light?'#8b6148':'#e8d5b0';
         sq.appendChild(lbl);
       }
-      if (r===7) {
+      // File label on the bottom visible row
+      if (ri===7) {
         const lbl = document.createElement('span');
         lbl.className='sq-label file'; lbl.textContent=FILES[c];
         lbl.style.color = light?'#8b6148':'#e8d5b0';
@@ -846,8 +1018,18 @@ function renderBoard() {
         sq.appendChild(span);
       }
       el.appendChild(sq);
-    }
-  }
+    });
+  });
+
+  // Keep flip button icon in sync
+  const btn = document.getElementById('flipBtn');
+  if (btn) btn.title = flipped ? "Flip to White’s perspective" : "Flip to Black’s perspective";
+}
+
+function toggleFlip() {
+  gameState.boardFlipped = !gameState.boardFlipped;
+  localStorage.setItem('boardFlipped', gameState.boardFlipped);
+  renderBoard();
 }
 
 // ── Player strips ─────────────────────────────────────────────────────────
@@ -859,6 +1041,28 @@ function updatePlayers() {
   document.getElementById('thinkWhite').classList.toggle('on', gameState.thinking==='white');
   document.getElementById('thinkBlack').classList.toggle('on', gameState.thinking==='black');
   document.getElementById('boardWrap').classList.toggle('thinking', gameState.thinking!==null);
+
+  // Live eval readout — show current centipawn advantage in each player strip
+  const cp  = gameState.lastEvalCp;
+  const ewEl = document.getElementById('evalWhite');
+  const ebEl = document.getElementById('evalBlack');
+  if (cp == null) {
+    ewEl.textContent = ''; ebEl.textContent = '';
+    ewEl.className = 'p-eval'; ebEl.className = 'p-eval';
+  } else {
+    const clampedCp = Math.max(-2000, Math.min(2000, cp));
+    const pawns     = clampedCp / 100;
+    const absStr    = Math.abs(pawns).toFixed(1);
+    const whiteAhead = clampedCp > 15;
+    const blackAhead = clampedCp < -15;
+    const cls = whiteAhead ? 'adv-white' : blackAhead ? 'adv-black' : 'adv-even';
+    // White strip: show + when White is ahead, − when behind
+    ewEl.textContent = whiteAhead ? `+${absStr}` : blackAhead ? `−${absStr}` : '=';
+    ewEl.className   = `p-eval ${cls}`;
+    // Black strip: mirror — Black is ahead when cp is negative
+    ebEl.textContent = blackAhead ? `+${absStr}` : whiteAhead ? `−${absStr}` : '=';
+    ebEl.className   = `p-eval ${cls}`;
+  }
 }
 
 // ── Analysis pane ─────────────────────────────────────────────────────────
@@ -947,21 +1151,49 @@ function renderLessons() {
   body.innerHTML = html;
 }
 
+// ── ELO sparkline ─────────────────────────────────────────────────────────
+function buildSparkline(history) {
+  // history: [{elo_after: number}, ...]
+  if (!history || history.length < 2) return '';
+  const W = 58, H = 20, pad = 1;
+  const vals = history.map(h => h.elo_after);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const range = hi - lo || 1;
+  const px = (i) => pad + (i / (vals.length - 1)) * (W - pad*2);
+  const py = (v) => H - pad - ((v - lo) / range) * (H - pad*2);
+  const pts = vals.map((v,i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+  // Closed fill path: line points + bottom-right + bottom-left
+  const fill = `${pts} ${(W-pad).toFixed(1)},${H} ${pad},${H}`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+    <polygon points="${fill}" fill="rgba(200,146,30,.18)" stroke="none"/>
+    <polyline points="${pts}" fill="none" stroke="var(--gold)" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
 // ── Leaderboard ───────────────────────────────────────────────────────────
 async function loadLeaderboard() {
   try {
     const rows = await fetch(`${API}/api/leaderboard`).then(r=>r.json());
     const body = document.getElementById('leaderboardBody');
     if (!rows.length) { body.innerHTML='<div class="lb-empty">No games yet</div>'; return; }
+
+    // Fetch ELO history for all players in parallel
+    const histories = await Promise.all(
+      rows.map(r => fetch(`${API}/api/elo-history/${encodeURIComponent(r.model_id)}`)
+        .then(res => res.json()).catch(() => []))
+    );
+
     let html = `<table class="lb-table"><thead><tr>
-      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th>
+      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th><th></th>
     </tr></thead><tbody>`;
-    rows.forEach((r,i) => {
+    rows.forEach((r, i) => {
+      const spark = buildSparkline(histories[i]);
       html += `<tr>
         <td class="lb-rank">${i+1}</td>
         <td class="lb-name" title="${escHtml(r.model_id)}">${escHtml(r.name)}</td>
         <td class="lb-elo">${r.elo}</td>
         <td class="lb-wdl">${r.wins}/${r.draws}/${r.losses}</td>
+        <td class="lb-spark">${spark}</td>
       </tr>`;
     });
     html += '</tbody></table>';
@@ -977,9 +1209,13 @@ async function loadHistory() {
     if (!games.length) { body.innerHTML='<div class="lb-empty">No games yet</div>'; return; }
     let html = '';
     const resultLabel = { '1-0':'1-0','0-1':'0-1','1/2-1/2':'½-½' };
+    // Store game metadata keyed by id for click handler
+    window._recentGamesMeta = {};
+    games.forEach(g => { window._recentGamesMeta[g.id] = g; });
+
     games.forEach(g => {
       const res = resultLabel[g.result] || g.result;
-      html += `<div class="game-row">
+      html += `<div class="game-row" onclick="openReplay(${g.id}, window._recentGamesMeta[${g.id}])">
         <span class="game-result">${res}</span>
         <span class="game-names">${escHtml(g.white_name)} vs ${escHtml(g.black_name)}</span>
         <span class="game-moves">${g.total_moves}m</span>
@@ -1149,9 +1385,10 @@ function onGameStart(d) {
   gameState.white    = { name: d.white, elo: d.white_elo };
   gameState.black    = { name: d.black, elo: d.black_elo };
   gameState.fen      = d.fen || gameState.fen;
-  gameState.lastUci  = null;
-  gameState.thinking = null;
+  gameState.lastUci    = null;
+  gameState.thinking   = null;
   gameState.candidates = [];
+  gameState.lastEvalCp = null;
   _allLessons = {};
   evalHistory = [];
   document.getElementById('evalPane').style.display = 'none';
@@ -1174,6 +1411,7 @@ function onMove(d) {
   gameState.lastUci    = d.uci;
   gameState.thinking   = null;
   gameState.candidates = [];
+  if (d.score_cp_white != null) gameState.lastEvalCp = d.score_cp_white;
   updatePlayers(); updateAnalysis(); renderBoard();
   addMoveCard(d);
   pushEval(d.move_number, d.score_cp_white);
@@ -1187,8 +1425,12 @@ function onGameOver(d) {
   const label = resultMap[d.result] || d.result;
   const term  = d.termination ? d.termination.charAt(0).toUpperCase()+d.termination.slice(1) : '';
 
-  document.getElementById('ovResult').textContent = label;
-  document.getElementById('ovSub').textContent    = [term, d.total_moves?`${d.total_moves} moves`:''].filter(Boolean).join(' · ');
+  gameState.lastGameId = d.game_id || null;
+  document.getElementById('ovResult').textContent  = label;
+  document.getElementById('ovSub').textContent     = [term, d.total_moves?`${d.total_moves} moves`:''].filter(Boolean).join(' · ');
+  document.getElementById('ovOpening').textContent = d.opening_name
+    ? `${d.opening_eco} · ${d.opening_name}` : '';
+  document.getElementById('ovDownloadBtn').style.display = d.game_id ? '' : 'none';
 
   const eloHtml = `
     <div class="ov-elo-block"><div class="ov-elo-name">${escHtml(gameState.white.name)}</div>
@@ -1260,6 +1502,155 @@ function connect() {
 function schedReconn() { reconnTimer = setTimeout(connect, 2500); }
 
 // ── Collapsible panels ────────────────────────────────────────────────────
+function downloadPgn() {
+  const id = gameState.lastGameId;
+  if (!id) return;
+  const a = document.createElement('a');
+  a.href = `${API}/api/games/${id}/pgn`;
+  a.download = '';   // server sets filename via Content-Disposition
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ── Game replay ───────────────────────────────────────────────────────────
+const QUALITY_GLYPH = { best:'!!', excellent:'!', inaccuracy:'?!', mistake:'?', blunder:'??' };
+const QUALITY_COLOR = { best:'#ffd700', excellent:'#56c45a', good:'', inaccuracy:'#f0d030', mistake:'#f09020', blunder:'#e83030' };
+
+const replay = { moves: [], cursor: 0, meta: null };
+
+async function openReplay(gameId, meta) {
+  try {
+    const moves = await fetch(`${API}/api/games/${gameId}/moves`).then(r => r.json());
+    replay.moves  = moves;
+    replay.cursor = 0;
+    replay.meta   = meta;
+
+    // Populate player strips
+    document.getElementById('rpNameWhite').textContent = meta.white_name;
+    document.getElementById('rpNameBlack').textContent = meta.black_name;
+    document.getElementById('rpEloWhite').textContent  = `ELO ${Math.round(meta.white_elo_before)} → ${Math.round(meta.white_elo_after)}`;
+    document.getElementById('rpEloBlack').textContent  = `ELO ${Math.round(meta.black_elo_before)} → ${Math.round(meta.black_elo_after)}`;
+    document.getElementById('rpTitle').textContent     = `${meta.white_name} vs ${meta.black_name}  ·  ${meta.result}`;
+
+    // Build move list
+    const list = document.getElementById('rpMoveList');
+    let listHtml = `<div class="rp-move-item" data-idx="0" onclick="rpGo(0)" style="color:var(--text-dim);font-style:italic">
+      <span class="rp-move-num"></span><span class="rp-move-san">start</span>
+    </div>`;
+    moves.forEach((m, i) => {
+      const isWhite = m.move_number % 2 === 1;
+      const numLabel = isWhite ? `${Math.ceil(m.move_number / 2)}.` : '';
+      const glyph = QUALITY_GLYPH[m.quality] || '';
+      const color = QUALITY_COLOR[m.quality] || 'var(--text)';
+      listHtml += `<div class="rp-move-item" data-idx="${i+1}" onclick="rpGo(${i+1})">
+        <span class="rp-move-num">${numLabel}</span>
+        <span class="rp-move-san" style="color:${color}">${m.move_san}${glyph}</span>
+        <span class="rp-move-qual" style="color:${color}">${glyph}</span>
+      </div>`;
+    });
+    list.innerHTML = listHtml;
+
+    document.getElementById('replayModal').classList.add('show');
+    rpRender();
+  } catch(e) { console.error('Replay load failed', e); }
+}
+
+function closeReplay() {
+  document.getElementById('replayModal').classList.remove('show');
+}
+
+function rpGo(idx) {
+  replay.cursor = Math.max(0, Math.min(idx, replay.moves.length));
+  rpRender();
+}
+
+function rpRender() {
+  const { moves, cursor } = replay;
+  const STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+  // FEN: position 0 = start, position N = after move N
+  const fen    = cursor === 0 ? STARTING_FEN : moves[cursor - 1].fen_after;
+  const lastUci = cursor === 0 ? null : moves[cursor - 1].move_uci;
+
+  rpDrawBoard(fen, lastUci);
+
+  // Counter
+  const total = moves.length;
+  const label = cursor === 0
+    ? `start`
+    : `${Math.ceil(moves[cursor-1].move_number / 2)}${moves[cursor-1].move_number % 2 === 1 ? '.' : '...'} ${moves[cursor-1].move_san}`;
+  document.getElementById('rpCounter').textContent = `${cursor}/${total}  ${label}`;
+
+  // Button states
+  document.getElementById('rpFirst').disabled = cursor === 0;
+  document.getElementById('rpPrev').disabled  = cursor === 0;
+  document.getElementById('rpNext').disabled  = cursor === total;
+  document.getElementById('rpLast').disabled  = cursor === total;
+
+  // Highlight active move in list
+  document.querySelectorAll('#rpMoveList .rp-move-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.idx) === cursor);
+  });
+  // Scroll active item into view
+  const active = document.querySelector('#rpMoveList .rp-move-item.active');
+  if (active) active.scrollIntoView({ block: 'nearest' });
+}
+
+function rpDrawBoard(fen, lastUci) {
+  const el     = document.getElementById('rpBoard');
+  const matrix = parseFen(fen);
+  const flipped = gameState.boardFlipped;
+  const [from, to] = uciToSquares(lastUci || '');
+  const key = (r,c) => r*8+c;
+  const fromKey = from ? key(from.row,from.col) : -1;
+  const toKey   = to   ? key(to.row,  to.col)   : -1;
+  const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+  const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+
+  el.innerHTML = '';
+  rows.forEach((r, ri) => {
+    cols.forEach((c, ci) => {
+      const sq    = document.createElement('div');
+      const light = (r+c)%2===0;
+      sq.className = 'sq ' + (light ? 'light' : 'dark');
+      const k = key(r,c);
+      if (k===fromKey) sq.classList.add('hi-from');
+      if (k===toKey)   sq.classList.add('hi-to');
+      if (ci===0) {
+        const lbl = document.createElement('span');
+        lbl.className='sq-label rank'; lbl.textContent=8-r;
+        lbl.style.color = light?'#8b6148':'#e8d5b0';
+        sq.appendChild(lbl);
+      }
+      if (ri===7) {
+        const lbl = document.createElement('span');
+        lbl.className='sq-label file'; lbl.textContent=FILES[c];
+        lbl.style.color = light?'#8b6148':'#e8d5b0';
+        sq.appendChild(lbl);
+      }
+      const piece = matrix[r][c];
+      if (piece) {
+        const span = document.createElement('span');
+        span.className = 'piece ' + (piece===piece.toUpperCase()?'w':'b');
+        span.textContent = PIECES[piece]||piece;
+        sq.appendChild(span);
+      }
+      el.appendChild(sq);
+    });
+  });
+}
+
+// Keyboard navigation for replay
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('replayModal').classList.contains('show')) return;
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowDown')  rpGo(replay.cursor - 1);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp')    rpGo(replay.cursor + 1);
+  if (e.key === 'Home')  rpGo(0);
+  if (e.key === 'End')   rpGo(replay.moves.length);
+  if (e.key === 'Escape') closeReplay();
+});
+
 function toggleSection(id) {
   document.getElementById(id).classList.toggle('collapsed');
 }
@@ -1314,6 +1705,19 @@ connect();
 loadLeaderboard();
 loadHistory();
 setInterval(loadLeaderboard, 30000);
+
+// Auto-fetch models for all lmstudio slots on page load
+['white', 'black', 'tutor'].forEach(side => {
+  const backend = document.getElementById(side + 'Backend');
+  if (backend && backend.value === 'lmstudio') fetchModels(side);
+});
+
+// Re-fetch when the URL input loses focus (user typed a different endpoint)
+['white', 'black', 'tutor'].forEach(side => {
+  const urlId = side === 'tutor' ? 'tutorUrl' : side + 'Url';
+  const el = document.getElementById(urlId);
+  if (el) el.addEventListener('change', () => fetchModels(side));
+});
 </script>
 </body>
 </html>

@@ -49,14 +49,14 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 ## Phase 4 — Viewer Polish & Quick Wins
 *Next*
 
-- [ ] **Live eval readout** in player strip during game (+1.2 / -0.8 centipawn number alongside ELO)
-- [ ] **Annotated PGN export**: one-click download from the game-over overlay; reasoning as `{ }` comments, quality as `?/??/!/!!` glyphs — immediately openable in Lichess or any chess GUI
-- [ ] **Game replay**: click any game in Recent Games to step through it move-by-move on the board; prev/next controls; reuses existing board renderer with FEN sequence from DB
-- [ ] **ELO trajectory sparkline** per player row in the leaderboard panel (`get_elo_history()` already in db.py)
+- [x] **Live eval readout** in player strip during game (+1.2 / -0.8 centipawn number alongside ELO)
+- [x] **Annotated PGN export**: one-click download from the game-over overlay; reasoning as `{ }` comments, quality as `?/??/!/!!` glyphs — immediately openable in Lichess or any chess GUI
+- [x] **Game replay**: click any game in Recent Games to step through it move-by-move on the board; prev/next controls; reuses existing board renderer with FEN sequence from DB
+- [x] **ELO trajectory sparkline** per player row in the leaderboard panel (`get_elo_history()` already in db.py)
 - [ ] **"Best game" stat** per player: highest average move quality across all games, surfaced as a score in the leaderboard
-- [ ] **Opening detection in lessons**: pass ECO code (python-chess can derive from PGN) to the lesson prompt so the coach can reference the specific opening structure — "in the Sicilian Najdorf, your knight retreat on move 14 ignored the standard d5 break"
+- [x] **Opening detection in lessons**: pass ECO code (python-chess can derive from PGN) to the lesson prompt so the coach can reference the specific opening structure — "in the Sicilian Najdorf, your knight retreat on move 14 ignored the standard d5 break"
 - [ ] **Model personality profile**: per-model summary derived from move data — castling timing, material trade preferences, closed vs open position tendencies; displayed on model card and stats page
-- [ ] **Stats page** (`/stats`): head-to-head records, win rate by color, average move quality per model, ELO chart over time, blunder rate, candidate deviation rate
+- [x] **Stats page** (`/stats`): head-to-head records, win rate by color, average move quality per model, ELO chart over time, blunder rate, candidate deviation rate
 
 ---
 
@@ -116,7 +116,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [ ] **Board themes**: preset color schemes (classic, green felt, blue ocean, high contrast) using CSS custom properties; `--sq-light` and `--sq-dark` already in use
 - [ ] **Custom colors**: color picker for board squares, highlights, and UI accent color
 - [ ] **Piece sets**: current Unicode pieces render inconsistently across OS/fonts; add SVG piece set options (e.g. Merida, Alpha, Neo)
-- [ ] **Board orientation toggle**: flip board to show from Black's perspective; persists per session
+- [x] **Board orientation toggle**: flip board to show from Black's perspective; persists per session
 - [ ] **Font & typography controls**: font family selector (monospace vs sans-serif), font size slider; CSS custom properties make this straightforward; persisted in `localStorage`
 - [ ] **UI framework consideration**: current hand-crafted CSS is lean and custom; Tailwind or Bootstrap are options if maintenance becomes painful — worth evaluating when the component count grows rather than rewriting speculatively
 - [ ] **Settings persistence**: store theme/orientation/font preferences in `localStorage`

@@ -1,19 +1,17 @@
 """
-Nimzo — Orchestrator + HTTP/WebSocket server
+Nimzo — AI chess tournament server
 
-Serves the viewer at http://localhost:8765/ and exposes a REST API for
-tournament control. WebSocket events stream to the viewer at /ws.
-
-Usage (CLI mode — starts tournament immediately):
-    python arena.py \
-      --white-name Qwen --white-model qwen3-coder-30b --white-url http://localhost:1234/v1 \
-      --black-name Llama --black-model llama-3.1-70b  --black-url http://localhost:1235/v1 \
-      --tutor-model qwen3-coder-30b --tutor-url http://localhost:1234/v1 \
-      --games 20
-
-Usage (server mode — configure via browser UI):
+GUI mode (default — recommended):
     python arena.py
-    open http://localhost:8765
+    # Browser opens automatically at http://localhost:8765
+    # Select models, configure options, and start from the UI
+
+CLI mode (auto-starts tournament without opening the browser):
+    python arena.py --white-model qwen3-30b --black-model llama-70b --games 5
+    python arena.py --white-model qwen3-30b --black-model llama-70b --no-browser
+
+Port conflicts are handled automatically — stale processes on the port
+are cleared before binding.
 """
 
 from __future__ import annotations
@@ -40,7 +38,7 @@ from engine import StockfishEngine
 from models.base import ChessPlayer, PlayerConfig
 from models.anthropic_player import AnthropicPlayer
 from models.lmstudio_player import LMStudioPlayer
-from analysis import TutorConfig, calculate_elos, generate_lessons, build_quality_summary
+from analysis import TutorConfig, calculate_elos, generate_lessons, build_quality_summary, detect_opening
 import db as database
 
 
@@ -132,6 +130,109 @@ async def api_leaderboard():
     return database.get_leaderboard()
 
 
+@app.get("/api/elo-history/{model_id:path}")
+async def api_elo_history(model_id: str):
+    return database.get_elo_history(model_id)
+
+
+@app.get("/api/stats/moves")
+async def api_stats_moves():
+    return database.get_player_move_stats()
+
+
+@app.get("/api/stats/colors")
+async def api_stats_colors():
+    return database.get_color_stats()
+
+
+@app.get("/api/stats/h2h")
+async def api_stats_h2h():
+    return database.get_head_to_head()
+
+
+@app.get("/stats", response_class=HTMLResponse)
+async def stats_page():
+    return (Path(__file__).parent / "stats.html").read_text()
+
+
+_QUALITY_GLYPH = {
+    "best":       "!!",
+    "excellent":  "!",
+    "inaccuracy": "?!",
+    "mistake":    "?",
+    "blunder":    "??",
+}
+
+@app.get("/api/games/{game_id}/moves")
+async def api_game_moves(game_id: int):
+    return database.get_game_moves(game_id)
+
+
+@app.get("/api/games/{game_id}/pgn")
+async def api_game_pgn(game_id: int):
+    from fastapi.responses import PlainTextResponse
+    game_row = database.get_game(game_id)
+    if not game_row:
+        return PlainTextResponse("Game not found", status_code=404)
+    moves = database.get_game_moves(game_id)
+
+    lines = [
+        f'[Event "Nimzo Arena"]',
+        f'[Site "localhost"]',
+        f'[Date "{game_row["played_at"][:10]}"]',
+        f'[White "{game_row["white_name"]}"]',
+        f'[Black "{game_row["black_name"]}"]',
+        f'[Result "{game_row["result"]}"]',
+        f'[WhiteElo "{round(game_row["white_elo_before"])}"]',
+        f'[BlackElo "{round(game_row["black_elo_before"])}"]',
+        "",
+    ]
+
+    tokens: list[str] = []
+    for m in moves:
+        num     = m["move_number"]
+        san     = m["move_san"]
+        glyph   = _QUALITY_GLYPH.get(m["quality"] or "", "")
+        reason  = (m["reasoning"] or "").strip().replace("{", "(").replace("}", ")")
+        rank    = m["candidate_rank"]
+
+        # Move number prefix for white moves (odd) and black's first token
+        if num % 2 == 1:
+            tokens.append(f"{(num + 1) // 2}.")
+
+        tokens.append(san + glyph)
+
+        comment_parts = []
+        if reason and reason != "(no reasoning)" and reason != "(parse failed — defaulted to top candidate)":
+            comment_parts.append(reason)
+        if m["quality"] and m["quality"] != "good":
+            comment_parts.append(m["quality"].capitalize())
+        if rank:
+            comment_parts.append(f"candidate #{rank}")
+        if comment_parts:
+            tokens.append("{ " + " | ".join(comment_parts) + " }")
+
+    tokens.append(game_row["result"])
+
+    # Wrap at ~80 chars
+    pgn_body = ""
+    line = ""
+    for tok in tokens:
+        if line and len(line) + 1 + len(tok) > 78:
+            pgn_body += line + "\n"
+            line = tok
+        else:
+            line = (line + " " + tok).lstrip()
+    if line:
+        pgn_body += line + "\n"
+
+    filename = f"nimzo_{game_row['white_name']}_vs_{game_row['black_name']}_{game_id}.pgn".replace(" ", "_")
+    return PlainTextResponse(
+        "\n".join(lines) + pgn_body,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.get("/api/games")
 async def api_games(limit: int = 20):
     return database.get_recent_games(limit)
@@ -189,7 +290,16 @@ async def api_start(config: TournamentStartConfig):
     })
     await broadcast({"type": "tournament_status", **_state})
 
-    _tournament_task = asyncio.create_task(run_tournament(white, black, config.games, tutor))
+    async def _run_and_catch():
+        try:
+            await run_tournament(white, black, config.games, tutor)
+        except Exception as exc:
+            # Absorb any stray exceptions (e.g. engine death on Ctrl+C)
+            # so the task doesn't surface as "exception was never retrieved".
+            _state["status"] = "idle"
+            print(f"\n  Tournament ended: {type(exc).__name__}")
+
+    _tournament_task = asyncio.create_task(_run_and_catch())
     return {"ok": True}
 
 
@@ -262,9 +372,14 @@ async def play_game(
         current_player = white if board.turn == chess.WHITE else black
 
         # Run blocking Stockfish call in thread pool so event loop stays free
-        candidates = await loop.run_in_executor(
-            None, stockfish.get_candidates, board, current_player.config.candidate_count
-        )
+        try:
+            candidates = await loop.run_in_executor(
+                None, stockfish.get_candidates, board, current_player.config.candidate_count
+            )
+        except Exception as exc:
+            # Stockfish died (e.g. Ctrl+C sent SIGINT to the subprocess).
+            # Treat as a clean stop rather than crashing with a traceback.
+            raise TournamentAborted() from None
         if not candidates:
             break
 
@@ -370,6 +485,9 @@ async def play_game(
     game.headers["Result"] = result
     pgn_string = str(game)
 
+    # Opening detection
+    opening = detect_opening(pgn_string)   # (eco_code, name) or None
+
     # ELO — use game count for dynamic K
     w_count = database.get_player_game_count(white.config.model_id)
     b_count = database.get_player_game_count(black.config.model_id)
@@ -411,12 +529,15 @@ async def play_game(
 
     await broadcast({
         "type":            "game_over",
+        "game_id":         game_id,
         "result":          result,
         "termination":     termination,
         "total_moves":     move_number,
         "white_elo_after": round(w_elo_after),
         "black_elo_after": round(b_elo_after),
         "pgn":             pgn_string,
+        "opening_eco":     opening[0] if opening else None,
+        "opening_name":    opening[1] if opening else None,
     })
 
     # ── Lessons for both players ───────────────────────────────────────
@@ -433,6 +554,7 @@ async def play_game(
             termination=termination,
             quality_summary=quality_summary,
             tutor=tutor,
+            opening=opening,
         )
 
         if lessons["improve"] or lessons["strength"]:
@@ -550,37 +672,77 @@ async def _auto_start(cfg: TournamentStartConfig):
 
 # ── Entry point ───────────────────────────────────────────────────────────
 
+def _free_port(port: int) -> bool:
+    """Kill whatever is holding the port. Returns True if anything was killed."""
+    import signal
+    import subprocess
+    result = subprocess.run(
+        ["lsof", "-ti", f":{port}"],
+        capture_output=True, text=True
+    )
+    pids = result.stdout.strip().split()
+    if not pids:
+        return False
+    for pid in pids:
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    return True
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Nimzo chess tournament server")
+    parser = argparse.ArgumentParser(
+        description="Nimzo — AI chess tournament server",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "GUI mode (recommended):\n"
+            "  python arena.py\n"
+            "  → opens http://localhost:8765 — configure everything in the browser\n\n"
+            "CLI mode (auto-starts tournament):\n"
+            "  python arena.py --white-model qwen3-30b --black-model llama-70b\n"
+        ),
+    )
+    # Model IDs intentionally NOT read from env vars — they must be passed
+    # explicitly to trigger CLI mode.  Connection URLs and other non-model
+    # settings are still env-configurable for convenience.
     parser.add_argument("--white-backend", default=os.environ.get("WHITE_BACKEND", "lmstudio"))
-    parser.add_argument("--white-name",    default=os.environ.get("WHITE_NAME",    "White"))
-    parser.add_argument("--white-model",   default=os.environ.get("WHITE_MODEL",   ""))
-    parser.add_argument("--white-url",     default=os.environ.get("WHITE_URL",     "http://localhost:1234/v1"))
+    parser.add_argument("--white-name",    default="")
+    parser.add_argument("--white-model",   default="")   # explicit only — no env fallback
+    parser.add_argument("--white-url",     default=os.environ.get("WHITE_URL", os.environ.get("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")))
     parser.add_argument("--black-backend", default=os.environ.get("BLACK_BACKEND", "lmstudio"))
-    parser.add_argument("--black-name",    default=os.environ.get("BLACK_NAME",    "Black"))
-    parser.add_argument("--black-model",   default=os.environ.get("BLACK_MODEL",   ""))
-    parser.add_argument("--black-url",     default=os.environ.get("BLACK_URL",     "http://localhost:1235/v1"))
+    parser.add_argument("--black-name",    default="")
+    parser.add_argument("--black-model",   default="")   # explicit only — no env fallback
+    parser.add_argument("--black-url",     default=os.environ.get("BLACK_URL",     "http://localhost:1234/v1"))
     parser.add_argument("--tutor-backend", default=os.environ.get("TUTOR_BACKEND", "lmstudio"))
     parser.add_argument("--tutor-model",   default=os.environ.get("TUTOR_MODEL",   ""))
     parser.add_argument("--tutor-url",     default=os.environ.get("TUTOR_URL",     "http://localhost:1234/v1"))
-    parser.add_argument("--games",         type=int, default=int(os.environ.get("GAMES", 10)))
+    parser.add_argument("--games",         type=int, default=int(os.environ.get("GAMES", 1)))
     parser.add_argument("--thinking",      action="store_true", default=False,
                         help="Enable extended thinking for both players (LM Studio)")
     parser.add_argument("--port",          type=int, default=int(os.environ.get("PORT", 8765)))
+    parser.add_argument("--no-browser",    action="store_true", default=False,
+                        help="Don't auto-open the browser on startup")
     args = parser.parse_args()
 
     port = args.port
-    print(f"🌐  Nimzo server → http://localhost:{port}")
 
-    if args.white_model and args.black_model:
+    # Free the port if something is already holding it
+    if _free_port(port):
+        print(f"⚠  Port {port} was in use — cleared stale process.")
+        import time; time.sleep(0.4)   # brief pause for OS to release the socket
+
+    cli_mode = bool(args.white_model and args.black_model)
+
+    if cli_mode:
         _cli_config = TournamentStartConfig(
             white_backend=args.white_backend,
-            white_name=args.white_name,
+            white_name=args.white_name or args.white_model.split("/")[-1].split("@")[0].split(":")[0],
             white_model=args.white_model,
             white_url=args.white_url,
             white_thinking=args.thinking,
             black_backend=args.black_backend,
-            black_name=args.black_name,
+            black_name=args.black_name or args.black_model.split("/")[-1].split("@")[0].split(":")[0],
             black_model=args.black_model,
             black_url=args.black_url,
             black_thinking=args.thinking,
@@ -589,10 +751,22 @@ if __name__ == "__main__":
             tutor_url=args.tutor_url,
             games=args.games,
         )
-        print(f"    {args.white_name} vs {args.black_name}  ({args.games} games)")
+        w = _cli_config.white_name
+        b = _cli_config.black_name
+        print(f"🌐  Nimzo  →  http://localhost:{port}")
+        print(f"♟   {w} vs {b}  ·  {args.games} game(s)")
         if args.tutor_model:
-            print(f"    Tutor: {args.tutor_model} @ {args.tutor_url}")
+            print(f"🎓  Tutor: {args.tutor_model}")
     else:
-        print("    No players configured — open the viewer to set up a tournament.")
+        print(f"🌐  Nimzo  →  http://localhost:{port}")
+        print("    Open the browser to configure and start a tournament.")
+
+    # Auto-open browser unless suppressed or in CLI mode with --no-browser
+    if not args.no_browser:
+        import threading, webbrowser
+        def _open_browser():
+            import time; time.sleep(1.2)   # wait for uvicorn to be ready
+            webbrowser.open(f"http://localhost:{port}")
+        threading.Thread(target=_open_browser, daemon=True).start()
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")

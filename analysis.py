@@ -4,8 +4,13 @@ Generates lessons for both players via a configurable tutor model.
 Tutor can be any LM Studio / Ollama (OpenAI-compatible) endpoint or Anthropic cloud.
 """
 
+from __future__ import annotations
+
+import json
 from collections import Counter
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 
@@ -55,6 +60,50 @@ def calculate_elos(
     return new_white, new_black
 
 
+# ── Opening detection ────────────────────────────────────────────────────
+
+_OPENINGS_PATH = Path(__file__).parent / "openings.json"
+
+
+@lru_cache(maxsize=1)
+def _load_openings() -> dict:
+    """Load ECO lookup table once; returns {} if file missing."""
+    if not _OPENINGS_PATH.exists():
+        return {}
+    with open(_OPENINGS_PATH) as f:
+        return json.load(f)
+
+
+def detect_opening(pgn_string: str) -> tuple[str, str] | None:
+    """
+    Replay the game and return the deepest ECO match as (code, name).
+    Returns None if no opening is recognised or openings.json is absent.
+    """
+    import chess
+    import chess.pgn
+    import io
+
+    openings = _load_openings()
+    if not openings:
+        return None
+
+    try:
+        game = chess.pgn.read_game(io.StringIO(pgn_string))
+        if game is None:
+            return None
+        board = game.board()
+        last_match: tuple[str, str] | None = None
+        for move in game.mainline_moves():
+            board.push(move)
+            epd = board.epd()
+            entry = openings.get(epd)
+            if entry:
+                last_match = (entry["eco"], entry["name"])
+        return last_match
+    except Exception:
+        return None
+
+
 # ── Tutor configuration ──────────────────────────────────────────────────
 
 @dataclass
@@ -74,7 +123,7 @@ _TUTOR_SYSTEM = (
 
 _LESSON_TEMPLATE = """Game result: {result} ({termination})
 Player: {player_name} ({player_color}) — {outcome}
-
+{opening_line}
 PGN:
 {pgn}
 
@@ -181,6 +230,7 @@ def generate_lessons(
     termination: str,
     quality_summary: str,
     tutor: Optional[TutorConfig] = None,
+    opening: Optional[tuple[str, str]] = None,   # (eco_code, name) or None
 ) -> dict[str, list[str]]:
     """
     Generate lessons for one player from a completed game.
@@ -196,12 +246,18 @@ def generate_lessons(
     else:
         outcome = "drew"
 
+    opening_line = (
+        f"Opening: {opening[1]} ({opening[0]})\n"
+        if opening else ""
+    )
+
     prompt = _LESSON_TEMPLATE.format(
         result=result,
         termination=termination,
         player_name=player_name,
         player_color=player_color,
         outcome=outcome,
+        opening_line=opening_line,
         pgn=pgn,
         quality_summary=quality_summary,
     )

@@ -41,7 +41,10 @@ class StockfishEngine:
 
     def __exit__(self, *args):
         if self._engine:
-            self._engine.quit()
+            try:
+                self._engine.quit()
+            except Exception:
+                pass   # engine may already be dead (e.g. Ctrl+C mid-game)
 
     def get_candidates(
         self,

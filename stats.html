@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nimzo · Stats</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:           #07090c;
+      --bg-panel:     #0c1018;
+      --bg-card:      #111820;
+      --bg-input:     #0a1120;
+      --border:       #1a2535;
+      --border-hi:    #2a3d55;
+      --text:         #c8d8e8;
+      --text-dim:     #3d5570;
+      --text-mid:     #6a8aaa;
+      --gold:         #c8921e;
+      --gold-bright:  #e8b84a;
+      --q-best:       #ffd700;
+      --q-excellent:  #56c45a;
+      --q-good:       #90c83a;
+      --q-inaccuracy: #f0d030;
+      --q-mistake:    #f09020;
+      --q-blunder:    #e83030;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 46px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-panel);
+    }
+    .logo { font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700; color: var(--gold); letter-spacing: 3px; }
+    .logo span { color: var(--text-dim); font-size: 10px; letter-spacing: 2px; margin-left: 10px; font-family: 'JetBrains Mono', monospace; }
+    .nav-link {
+      font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--text-mid); text-decoration: none;
+      border: 1px solid var(--border-hi); padding: 5px 14px;
+      transition: color .15s, border-color .15s;
+    }
+    .nav-link:hover { color: var(--gold); border-color: var(--gold); }
+
+    /* ── Layout ── */
+    .page { max-width: 1200px; margin: 0 auto; padding: 28px 24px 60px; display: flex; flex-direction: column; gap: 28px; }
+
+    .section-title {
+      font-family: 'Cinzel', serif; font-size: 11px; font-weight: 600;
+      letter-spacing: 3px; text-transform: uppercase; color: var(--gold);
+      padding-bottom: 10px; border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      padding: 20px 24px;
+    }
+
+    /* ── ELO chart ── */
+    .elo-charts { display: flex; flex-wrap: wrap; gap: 16px; }
+    .elo-chart-block { flex: 1; min-width: 200px; }
+    .elo-chart-name { font-size: 10px; color: var(--text); margin-bottom: 6px; font-weight: 500; }
+    .elo-chart-range { font-size: 8px; color: var(--text-dim); margin-bottom: 4px; }
+    .elo-chart-svg { display: block; width: 100%; height: 60px; }
+
+    /* ── Quality breakdown ── */
+    .quality-grid { display: flex; flex-direction: column; gap: 14px; }
+    .quality-row { display: flex; flex-direction: column; gap: 6px; }
+    .quality-row-name { font-size: 10px; color: var(--text); font-weight: 500; }
+    .quality-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .quality-bars { flex: 1; display: flex; height: 14px; gap: 1px; overflow: hidden; border-radius: 2px; }
+    .quality-seg { height: 100%; transition: width .4s ease; position: relative; }
+    .quality-seg[title]:hover::after {
+      content: attr(title); position: absolute; bottom: 18px; left: 50%;
+      transform: translateX(-50%); background: var(--bg-card);
+      border: 1px solid var(--border-hi); padding: 2px 6px;
+      font-size: 8px; white-space: nowrap; z-index: 10; pointer-events: none;
+    }
+    .quality-legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+    .quality-legend-item { display: flex; align-items: center; gap: 4px; font-size: 8px; color: var(--text-dim); }
+    .quality-legend-swatch { width: 8px; height: 8px; border-radius: 1px; }
+    .quality-meta { font-size: 9px; color: var(--text-dim); text-align: right; min-width: 100px; }
+
+    /* ── Color stats ── */
+    .color-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .color-table th { padding: 6px 10px; text-align: left; color: var(--text-dim); font-size: 8px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid var(--border); font-weight: 400; }
+    .color-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+    .color-table tr:last-child td { border-bottom: none; }
+    .color-table tr:hover td { background: var(--bg-card); }
+    .ct-name   { color: var(--text); font-weight: 500; }
+    .ct-white  { color: #e8d5b0; }
+    .ct-black  { color: #8b9db8; }
+    .ct-draws  { color: var(--text-dim); }
+    .ct-rate   { color: var(--gold); }
+
+    .color-header { display: flex; gap: 4px; align-items: center; }
+    .swatch-w { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #f0f0f0; border: 1px solid #bbb; margin-right: 3px; }
+    .swatch-b { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #1a1a1a; border: 1px solid #444; margin-right: 3px; }
+
+    /* ── Head-to-head ── */
+    .h2h-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .h2h-table th { padding: 6px 10px; text-align: left; color: var(--text-dim); font-size: 8px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid var(--border); font-weight: 400; }
+    .h2h-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+    .h2h-table tr:last-child td { border-bottom: none; }
+    .h2h-table tr:hover td { background: var(--bg-card); }
+    .h2h-score { font-size: 11px; font-weight: 500; color: var(--text); }
+    .h2h-games { color: var(--text-dim); font-size: 9px; }
+
+    /* ── Empty state ── */
+    .empty { padding: 28px; text-align: center; color: var(--text-dim); font-size: 10px; }
+
+    /* ── Two-col layout for lower sections ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Loading spinner ── */
+    .loading { padding: 20px; text-align: center; color: var(--text-dim); font-size: 9px; letter-spacing: 2px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">NIMZO <span>STATS</span></div>
+  <a href="/" class="nav-link">← Live Board</a>
+</header>
+
+<div class="page">
+
+  <!-- ── ELO History ── -->
+  <div class="card" id="eloSection">
+    <div class="section-title">ELO Trajectory</div>
+    <div class="loading" id="eloLoading">loading…</div>
+    <div class="elo-charts" id="eloCharts" style="display:none"></div>
+  </div>
+
+  <!-- ── Move Quality ── -->
+  <div class="card" id="qualitySection">
+    <div class="section-title">Move Quality Breakdown</div>
+    <div class="loading" id="qualityLoading">loading…</div>
+    <div class="quality-grid" id="qualityGrid" style="display:none"></div>
+    <div class="quality-legend" id="qualityLegend" style="display:none">
+      <div class="quality-legend-item"><div class="quality-legend-swatch" style="background:var(--q-best)"></div>Best (!!)</div>
+      <div class="quality-legend-item"><div class="quality-legend-swatch" style="background:var(--q-excellent)"></div>Excellent (!)</div>
+      <div class="quality-legend-item"><div class="quality-legend-swatch" style="background:var(--q-good)"></div>Good</div>
+      <div class="quality-legend-item"><div class="quality-legend-swatch" style="background:var(--q-inaccuracy)"></div>Inaccuracy (?!)</div>
+      <div class="quality-legend-item"><div class="quality-legend-swatch" style="background:var(--q-mistake)"></div>Mistake (?)</div>
+      <div class="quality-legend-item"><div class="quality-legend-swatch" style="background:var(--q-blunder)"></div>Blunder (??)</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <!-- ── Color Stats ── -->
+    <div class="card" id="colorSection">
+      <div class="section-title">Win Rate by Colour</div>
+      <div class="loading" id="colorLoading">loading…</div>
+      <table class="color-table" id="colorTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th><span class="swatch-w"></span>White W/D/L</th>
+            <th><span class="swatch-b"></span>Black W/D/L</th>
+            <th>White %</th>
+            <th>Black %</th>
+          </tr>
+        </thead>
+        <tbody id="colorBody"></tbody>
+      </table>
+    </div>
+
+    <!-- ── Head to Head ── -->
+    <div class="card" id="h2hSection">
+      <div class="section-title">Head to Head</div>
+      <div class="loading" id="h2hLoading">loading…</div>
+      <table class="h2h-table" id="h2hTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Matchup</th>
+            <th>Score</th>
+            <th>Games</th>
+          </tr>
+        </thead>
+        <tbody id="h2hBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = '';
+
+// ── ELO chart ─────────────────────────────────────────────────────────────
+function buildEloSvg(history, W, H) {
+  if (!history || history.length < 2) return '<span style="color:var(--text-dim);font-size:9px">not enough data</span>';
+  const pad = 2;
+  const vals = history.map(h => h.elo_after);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const range = hi - lo || 1;
+  const px = i => pad + (i / (vals.length - 1)) * (W - pad * 2);
+  const py = v => H - pad - ((v - lo) / range) * (H - pad * 2);
+  const pts = vals.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+  const fill = `${pts} ${(W - pad).toFixed(1)},${H} ${pad},${H}`;
+  const lastElo = Math.round(vals[vals.length - 1]);
+  const firstElo = Math.round(vals[0]);
+  const delta = lastElo - firstElo;
+  const deltaStr = delta >= 0 ? `+${delta}` : `${delta}`;
+  const deltaCol = delta > 0 ? 'var(--q-good)' : delta < 0 ? 'var(--q-blunder)' : 'var(--text-dim)';
+  return `
+    <div class="elo-chart-range">${firstElo} → <strong style="color:var(--gold)">${lastElo}</strong> <span style="color:${deltaCol}">(${deltaStr})</span></div>
+    <svg class="elo-chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <polygon points="${fill}" fill="rgba(200,146,30,.15)" stroke="none"/>
+      <polyline points="${pts}" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${px(vals.length-1).toFixed(1)}" cy="${py(vals[vals.length-1]).toFixed(1)}" r="2.5" fill="var(--gold-bright)"/>
+    </svg>`;
+}
+
+async function loadEloCharts() {
+  const lb = await fetch(`${API}/api/leaderboard`).then(r => r.json()).catch(() => []);
+  if (!lb.length) {
+    document.getElementById('eloLoading').textContent = 'No data yet.';
+    return;
+  }
+  const histories = await Promise.all(
+    lb.map(r => fetch(`${API}/api/elo-history/${encodeURIComponent(r.model_id)}`).then(r => r.json()).catch(() => []))
+  );
+  const wrap = document.getElementById('eloCharts');
+  lb.forEach((r, i) => {
+    const block = document.createElement('div');
+    block.className = 'elo-chart-block';
+    block.innerHTML = `<div class="elo-chart-name">${escHtml(r.name)}</div>${buildEloSvg(histories[i], 260, 60)}`;
+    wrap.appendChild(block);
+  });
+  document.getElementById('eloLoading').style.display = 'none';
+  wrap.style.display = 'flex';
+}
+
+// ── Move quality ──────────────────────────────────────────────────────────
+const Q_COLS = {
+  best: 'var(--q-best)', excellent: 'var(--q-excellent)', good: 'var(--q-good)',
+  inaccuracy: 'var(--q-inaccuracy)', mistake: 'var(--q-mistake)', blunder: 'var(--q-blunder)',
+};
+const Q_ORDER = ['best', 'excellent', 'good', 'inaccuracy', 'mistake', 'blunder'];
+
+async function loadQuality() {
+  const rows = await fetch(`${API}/api/stats/moves`).then(r => r.json()).catch(() => []);
+  if (!rows.length) { document.getElementById('qualityLoading').textContent = 'No data yet.'; return; }
+
+  const grid = document.getElementById('qualityGrid');
+  rows.forEach(r => {
+    const total = r.total_moves || 1;
+    const blunderPct = ((r.blunder / total) * 100).toFixed(1);
+    const bestPct    = ((r.best    / total) * 100).toFixed(1);
+    const avgRank    = r.avg_candidate_rank ? r.avg_candidate_rank.toFixed(2) : '—';
+
+    const segs = Q_ORDER.map(q => {
+      const pct = ((r[q] || 0) / total * 100).toFixed(1);
+      return pct > 0
+        ? `<div class="quality-seg" style="width:${pct}%;background:${Q_COLS[q]}" title="${q}: ${r[q] || 0} (${pct}%)"></div>`
+        : '';
+    }).join('');
+
+    const block = document.createElement('div');
+    block.className = 'quality-row';
+    block.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div class="quality-row-name">${escHtml(r.name)}</div>
+        <div class="quality-meta">${total} moves · blunder ${blunderPct}% · best ${bestPct}% · avg rank ${avgRank}</div>
+      </div>
+      <div class="quality-bar-wrap">
+        <div class="quality-bars">${segs}</div>
+      </div>`;
+    grid.appendChild(block);
+  });
+
+  document.getElementById('qualityLoading').style.display = 'none';
+  grid.style.display = 'flex';
+  document.getElementById('qualityLegend').style.display = 'flex';
+}
+
+// ── Color stats ───────────────────────────────────────────────────────────
+function winPct(wins, draws, losses) {
+  const total = wins + draws + losses;
+  if (!total) return '—';
+  return ((wins + draws * 0.5) / total * 100).toFixed(0) + '%';
+}
+
+async function loadColorStats() {
+  const rows = await fetch(`${API}/api/stats/colors`).then(r => r.json()).catch(() => []);
+  if (!rows.length) { document.getElementById('colorLoading').textContent = 'No data yet.'; return; }
+
+  const tbody = document.getElementById('colorBody');
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="ct-name">${escHtml(r.name)}</td>
+      <td class="ct-white">${r.white_wins}/${r.white_draws}/${r.white_losses}</td>
+      <td class="ct-black">${r.black_wins}/${r.black_draws}/${r.black_losses}</td>
+      <td class="ct-rate">${winPct(r.white_wins, r.white_draws, r.white_losses)}</td>
+      <td class="ct-rate">${winPct(r.black_wins, r.black_draws, r.black_losses)}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('colorLoading').style.display = 'none';
+  document.getElementById('colorTable').style.display = 'table';
+}
+
+// ── Head to head ──────────────────────────────────────────────────────────
+async function loadH2H() {
+  const rows = await fetch(`${API}/api/stats/h2h`).then(r => r.json()).catch(() => []);
+  if (!rows.length) { document.getElementById('h2hLoading').textContent = 'No data yet.'; return; }
+
+  // Collapse symmetric pairs: (A vs B) and (B vs A) → one row
+  const seen = new Map();
+  rows.forEach(r => {
+    const key  = [r.white_name, r.black_name].sort().join('|');
+    const flip = r.white_name > r.black_name;
+    if (!seen.has(key)) {
+      seen.set(key, { a: flip ? r.black_name : r.white_name,
+                      b: flip ? r.white_name : r.black_name,
+                      aW: 0, draws: 0, bW: 0 });
+    }
+    const e = seen.get(key);
+    if (flip) { e.bW += r.white_wins; e.draws += r.draws; e.aW += r.black_wins; }
+    else       { e.aW += r.white_wins; e.draws += r.draws; e.bW += r.black_wins; }
+  });
+
+  const tbody = document.getElementById('h2hBody');
+  seen.forEach(e => {
+    const total = e.aW + e.draws + e.bW;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escHtml(e.a)} <span style="color:var(--text-dim)">vs</span> ${escHtml(e.b)}</td>
+      <td class="h2h-score">${e.aW} – ${e.draws} – ${e.bW}</td>
+      <td class="h2h-games">${total}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('h2hLoading').style.display = 'none';
+  document.getElementById('h2hTable').style.display = 'table';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+Promise.all([loadEloCharts(), loadQuality(), loadColorStats(), loadH2H()]);
+</script>
+</body>
+</html>

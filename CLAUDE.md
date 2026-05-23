@@ -29,20 +29,35 @@ Move quality labels: `best` `excellent` `good` `inaccuracy` `mistake` `blunder`
 
 ## Running a Tournament
 
-Requires two LM Studio instances on separate ports (1234 and 1235):
+### GUI mode (default)
 
 ```bash
-# Start second LM Studio instance
-~/.lmstudio/bin/lms server start --port 1235
-
 pip install -r requirements.txt
-export STOCKFISH_PATH=/usr/games/stockfish   # or wherever stockfish is installed
+export STOCKFISH_PATH=/opt/homebrew/bin/stockfish   # or wherever stockfish is installed
 
-python arena.py \
-  --white-name "Qwen-30B" --white-model qwen3-coder-30b --white-url http://localhost:1234/v1 \
-  --black-name "Llama-70B" --black-model llama-3.1-70b --black-url http://localhost:1235/v1 \
-  --games 20
+python arena.py
+# Browser opens automatically at http://localhost:8765
+# Select models from the dropdowns and click Start
 ```
+
+Both players default to `http://localhost:1234/v1` — LM Studio runs a single
+server on port 1234 and can serve any loaded model by ID. No second instance
+needed; just load whichever models you want in LM Studio and pick them in the UI.
+
+### CLI mode (auto-starts without browser)
+
+```bash
+python arena.py \
+  --white-name "Qwen" --white-model qwen3-coder-30b \
+  --black-name "Gemma" --black-model google/gemma-4-e4b \
+  --games 5
+```
+
+Model IDs must be passed explicitly — `WHITE_MODEL`/`BLACK_MODEL` env vars do
+**not** trigger CLI mode (prevents `.env` files from auto-starting tournaments).
+
+If you need two separate LM Studio instances (e.g. to load two large models
+simultaneously), start a second one on port 1235 and pass `--black-url http://localhost:1235/v1`.
 
 Colors alternate each game automatically.
 
