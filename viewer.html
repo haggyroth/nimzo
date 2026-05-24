@@ -649,6 +649,111 @@
     .rp-btn:disabled { opacity: .25; cursor: default; }
     .rp-counter { font-size: 9px; color: var(--text-mid); min-width: 60px; text-align: center; }
 
+    /* ── Model card modal ───────────────────────────────────────────── */
+    #modelModal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(7,9,12,.92); backdrop-filter: blur(12px);
+      z-index: 320; align-items: center; justify-content: center;
+    }
+    #modelModal.show { display: flex; animation: fadeIn .2s ease; }
+    .mc-card {
+      width: 520px; max-width: 92vw; max-height: 86vh; overflow-y: auto;
+      background: var(--bg-panel); border: 1px solid var(--border-hi);
+      box-shadow: 0 30px 80px rgba(0,0,0,.85);
+      padding: 22px 26px 24px;
+      position: relative;
+    }
+    .mc-card::-webkit-scrollbar { width: 4px; }
+    .mc-card::-webkit-scrollbar-thumb { background: var(--border-hi); }
+    .mc-close {
+      position: absolute; top: 14px; right: 16px;
+      font-size: 10px; color: var(--text-mid); cursor: pointer;
+      letter-spacing: 1.5px; text-transform: uppercase;
+    }
+    .mc-close:hover { color: var(--gold); }
+
+    .mc-name {
+      font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700;
+      color: var(--text); letter-spacing: .8px; margin-bottom: 2px;
+    }
+    .mc-modelid {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; color: var(--text-dim); letter-spacing: .5px;
+      word-break: break-all;
+    }
+    .mc-row {
+      display: flex; gap: 22px; margin-top: 16px;
+      padding: 12px 0; border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .mc-stat-label { font-size: 8px; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px; }
+    .mc-stat-value { font-family: 'Cinzel', serif; font-size: 18px; color: var(--gold); font-weight: 600; }
+    .mc-stat-sub   { font-size: 9px; color: var(--text-mid); margin-top: 1px; }
+
+    .mc-section-head {
+      font-size: 9px; letter-spacing: 1.8px; text-transform: uppercase;
+      color: var(--gold-bright); margin: 18px 0 10px;
+      font-weight: 600;
+    }
+
+    .mc-trait {
+      display: flex; gap: 10px; align-items: baseline;
+      padding: 7px 0; border-bottom: 1px dashed var(--border);
+    }
+    .mc-trait:last-child { border-bottom: none; }
+    .mc-trait-label {
+      font-family: 'Cinzel', serif; font-size: 12px;
+      color: var(--text); font-weight: 600;
+      min-width: 130px;
+    }
+    .mc-trait-detail { font-size: 10px; color: var(--text-mid); flex: 1; }
+    .mc-no-traits { font-size: 10px; color: var(--text-dim); font-style: italic; }
+
+    .mc-qbar {
+      display: flex; height: 6px; width: 100%;
+      background: var(--bg-input); border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .mc-qbar > span { display: block; height: 100%; }
+    .mc-qbar .q-best       { background: #56c45a; }
+    .mc-qbar .q-excellent  { background: #93c97e; }
+    .mc-qbar .q-good       { background: #c8b87a; }
+    .mc-qbar .q-inaccuracy { background: #d09a4a; }
+    .mc-qbar .q-mistake    { background: #c46d3a; }
+    .mc-qbar .q-blunder    { background: #b04a3a; }
+    .mc-qbar-legend {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      font-size: 9px; color: var(--text-mid); margin-top: 6px;
+    }
+    .mc-qbar-legend span::before {
+      content: ''; display: inline-block; width: 7px; height: 7px;
+      margin-right: 4px; vertical-align: middle;
+    }
+    .mc-qbar-legend .lb-best       ::before { background: #56c45a; }
+    .mc-qbar-legend .lb-excellent  ::before { background: #93c97e; }
+    .mc-qbar-legend .lb-good       ::before { background: #c8b87a; }
+    .mc-qbar-legend .lb-inaccuracy ::before { background: #d09a4a; }
+    .mc-qbar-legend .lb-mistake    ::before { background: #c46d3a; }
+    .mc-qbar-legend .lb-blunder    ::before { background: #b04a3a; }
+
+    .mc-lesson {
+      padding: 6px 0; border-bottom: 1px dashed var(--border);
+      font-size: 10px; color: var(--text-mid); line-height: 1.45;
+    }
+    .mc-lesson:last-child { border-bottom: none; }
+    .mc-lesson .tag {
+      display: inline-block; font-size: 8px; letter-spacing: 1.2px;
+      text-transform: uppercase; padding: 1px 5px; margin-right: 7px;
+      border: 1px solid currentColor; border-radius: 2px;
+      vertical-align: 1px;
+    }
+    .mc-lesson .tag.improve  { color: #d09a4a; }
+    .mc-lesson .tag.strength { color: #93c97e; }
+
+    /* Make leaderboard names clickable */
+    .lb-name { cursor: pointer; }
+    .lb-name:hover { color: var(--gold); }
+
     .rp-move-list {
       width: 180px; max-height: 440px; overflow-y: auto;
       background: var(--bg-panel); border: 1px solid var(--border);
@@ -944,6 +1049,14 @@
   </div>
   <!-- Move list -->
   <div class="rp-move-list" id="rpMoveList"></div>
+</div>
+
+<!-- ── Model card modal ───────────────────────────────────────────────── -->
+<div id="modelModal" onclick="if(event.target.id==='modelModal') closeModelCard()">
+  <div class="mc-card" id="mcCard">
+    <div class="mc-close" onclick="closeModelCard()">Close ✕</div>
+    <div id="mcBody"></div>
+  </div>
 </div>
 
 <div id="overlay">
@@ -1298,7 +1411,7 @@ async function loadLeaderboard() {
         : `<td class="lb-best dim">—</td>`;
       html += `<tr>
         <td class="lb-rank">${i+1}</td>
-        <td class="lb-name" title="${escHtml(r.model_id)}">${escHtml(r.name)}</td>
+        <td class="lb-name" title="${escHtml(r.model_id)} — click for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${escHtml(r.name)}</td>
         <td class="lb-elo">${r.elo}</td>
         <td class="lb-wdl">${r.wins}/${r.draws}/${r.losses}</td>
         ${bestCell}
@@ -1673,6 +1786,109 @@ function closeReplay() {
   document.getElementById('replayModal').classList.remove('show');
 }
 
+// ── Model card modal ──────────────────────────────────────────────────────
+async function openModelCard(modelId) {
+  try {
+    const p = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/profile`)
+      .then(r => r.json());
+    renderModelCard(p);
+    document.getElementById('modelModal').classList.add('show');
+  } catch (e) {
+    console.error('Model card load failed:', e);
+  }
+}
+
+function closeModelCard() {
+  document.getElementById('modelModal').classList.remove('show');
+}
+
+function renderModelCard(p) {
+  const m = p.moves || {};
+  const c = p.color || {};
+  const g = p.games || {};
+  const total = m.total_moves || 0;
+  const wGames = (c.white_wins||0) + (c.white_draws||0) + (c.white_losses||0);
+  const bGames = (c.black_wins||0) + (c.black_draws||0) + (c.black_losses||0);
+  const wins   = (c.white_wins||0) + (c.black_wins||0);
+  const draws  = (c.white_draws||0) + (c.black_draws||0);
+  const losses = (c.white_losses||0) + (c.black_losses||0);
+
+  // Quality bar segments — width proportional to count
+  const qkeys = ['q_best','q_excellent','q_good','q_inaccuracy','q_mistake','q_blunder'];
+  const qcls  = { q_best:'q-best', q_excellent:'q-excellent', q_good:'q-good',
+                  q_inaccuracy:'q-inaccuracy', q_mistake:'q-mistake', q_blunder:'q-blunder' };
+  const qSum = qkeys.reduce((s,k) => s + (m[k]||0), 0);
+  const qBar = total && qSum
+    ? qkeys.map(k => {
+        const n = m[k] || 0;
+        if (!n) return '';
+        const pct = (n / qSum * 100).toFixed(2);
+        return `<span class="${qcls[k]}" style="width:${pct}%" title="${k.slice(2)}: ${n}"></span>`;
+      }).join('')
+    : '<span style="width:100%;background:var(--border)"></span>';
+
+  const traits = (p.traits && p.traits.length)
+    ? p.traits.map(t =>
+        `<div class="mc-trait">
+           <span class="mc-trait-label">${escHtml(t.label)}</span>
+           <span class="mc-trait-detail">${escHtml(t.detail)}</span>
+         </div>`).join('')
+    : `<div class="mc-no-traits">No personality signal yet — play more games.</div>`;
+
+  const lessons = (p.recent_lessons || []).map(l => {
+    const tag = l.lesson_type === 'strength' ? 'strength' : 'improve';
+    return `<div class="mc-lesson">
+              <span class="tag ${tag}">${tag}</span>${escHtml(l.lesson)}
+            </div>`;
+  }).join('') || `<div class="mc-no-traits">No lessons yet.</div>`;
+
+  const fmtScore = (w, d, t) => t ? `${(((w + 0.5*d)/t)*100).toFixed(0)}%` : '—';
+
+  document.getElementById('mcBody').innerHTML = `
+    <div class="mc-name">${escHtml(p.name || '—')}</div>
+    <div class="mc-modelid">${escHtml(p.model_id || '')} · ${escHtml(p.backend || '')}</div>
+
+    <div class="mc-row">
+      <div>
+        <div class="mc-stat-label">ELO</div>
+        <div class="mc-stat-value">${p.elo ?? '—'}</div>
+      </div>
+      <div>
+        <div class="mc-stat-label">Record</div>
+        <div class="mc-stat-value">${wins}/${draws}/${losses}</div>
+        <div class="mc-stat-sub">${g.total_games || 0} games</div>
+      </div>
+      <div>
+        <div class="mc-stat-label">As White</div>
+        <div class="mc-stat-value">${fmtScore(c.white_wins||0, c.white_draws||0, wGames)}</div>
+        <div class="mc-stat-sub">${wGames} games</div>
+      </div>
+      <div>
+        <div class="mc-stat-label">As Black</div>
+        <div class="mc-stat-value">${fmtScore(c.black_wins||0, c.black_draws||0, bGames)}</div>
+        <div class="mc-stat-sub">${bGames} games</div>
+      </div>
+    </div>
+
+    <div class="mc-section-head">Move quality (${total} moves)</div>
+    <div class="mc-qbar">${qBar}</div>
+    <div class="mc-qbar-legend">
+      <span class="lb-best">best ${m.q_best || 0}</span>
+      <span class="lb-excellent">excellent ${m.q_excellent || 0}</span>
+      <span class="lb-good">good ${m.q_good || 0}</span>
+      <span class="lb-inaccuracy">inaccuracy ${m.q_inaccuracy || 0}</span>
+      <span class="lb-mistake">mistake ${m.q_mistake || 0}</span>
+      <span class="lb-blunder">blunder ${m.q_blunder || 0}</span>
+    </div>
+
+    <div class="mc-section-head">Personality</div>
+    ${traits}
+
+    <div class="mc-section-head">Recent lessons</div>
+    ${lessons}
+  `;
+}
+
 function rpGo(idx) {
   replay.cursor = Math.max(0, Math.min(idx, replay.moves.length));
   rpRender();
@@ -1759,12 +1975,17 @@ function rpDrawBoard(fen, lastUci) {
 
 // Keyboard navigation for replay
 document.addEventListener('keydown', e => {
+  // Escape closes whichever modal is open
+  if (e.key === 'Escape') {
+    if (document.getElementById('modelModal').classList.contains('show')) closeModelCard();
+    if (document.getElementById('replayModal').classList.contains('show')) closeReplay();
+    return;
+  }
   if (!document.getElementById('replayModal').classList.contains('show')) return;
   if (e.key === 'ArrowLeft'  || e.key === 'ArrowDown')  rpGo(replay.cursor - 1);
   if (e.key === 'ArrowRight' || e.key === 'ArrowUp')    rpGo(replay.cursor + 1);
   if (e.key === 'Home')  rpGo(0);
   if (e.key === 'End')   rpGo(replay.moves.length);
-  if (e.key === 'Escape') closeReplay();
 });
 
 function toggleSection(id) {

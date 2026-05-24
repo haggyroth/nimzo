@@ -38,7 +38,14 @@ from engine import StockfishEngine
 from models.base import ChessPlayer, PlayerConfig
 from models.anthropic_player import AnthropicPlayer
 from models.lmstudio_player import LMStudioPlayer
-from analysis import TutorConfig, calculate_elos, generate_lessons, build_quality_summary, detect_opening
+from analysis import (
+    TutorConfig,
+    calculate_elos,
+    generate_lessons,
+    build_quality_summary,
+    detect_opening,
+    derive_personality_traits,
+)
 import db as database
 
 
@@ -162,6 +169,16 @@ _QUALITY_GLYPH = {
     "mistake":    "?",
     "blunder":    "??",
 }
+
+@app.get("/api/models/{model_id:path}/profile")
+async def api_model_profile(model_id: str):
+    profile = database.get_model_profile(model_id)
+    if not profile:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Model not found")
+    profile["traits"] = derive_personality_traits(profile)
+    return profile
+
 
 @app.get("/api/games/{game_id}")
 async def api_game(game_id: int):

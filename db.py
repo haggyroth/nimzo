@@ -450,3 +450,121 @@ def get_head_to_head() -> list[dict]:
             """,
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ── Model profile (personality + headline stats) ──────────────────────────
+
+def get_model_profile(model_id: str) -> dict | None:
+    """
+    Aggregate personality-relevant stats for a single model.
+    Pulled entirely from existing tables — no schema change.
+    """
+    with get_conn() as conn:
+        player = conn.execute(
+            """
+            SELECT id, name, model_id, backend, ROUND(elo) AS elo
+            FROM players WHERE model_id = ?
+            """,
+            (model_id,),
+        ).fetchone()
+        if not player:
+            return None
+        pid = player["id"]
+
+        # Aggregate move-level signals
+        moves = conn.execute(
+            """
+            SELECT
+              COUNT(*)                                                   AS total_moves,
+              SUM(CASE WHEN move_san LIKE '%x%' THEN 1 ELSE 0 END)       AS captures,
+              SUM(CASE WHEN move_san LIKE '%+%'
+                       OR  move_san LIKE '%#%' THEN 1 ELSE 0 END)        AS checks,
+              SUM(CASE WHEN move_san = 'O-O'   THEN 1 ELSE 0 END)        AS castles_k,
+              SUM(CASE WHEN move_san = 'O-O-O' THEN 1 ELSE 0 END)        AS castles_q,
+              ROUND(AVG(candidate_rank), 2)                              AS avg_rank,
+              SUM(CASE WHEN candidate_rank = 1 THEN 1 ELSE 0 END)        AS picked_top,
+              SUM(CASE WHEN quality = 'best'       THEN 1 ELSE 0 END)    AS q_best,
+              SUM(CASE WHEN quality = 'excellent'  THEN 1 ELSE 0 END)    AS q_excellent,
+              SUM(CASE WHEN quality = 'good'       THEN 1 ELSE 0 END)    AS q_good,
+              SUM(CASE WHEN quality = 'inaccuracy' THEN 1 ELSE 0 END)    AS q_inaccuracy,
+              SUM(CASE WHEN quality = 'mistake'    THEN 1 ELSE 0 END)    AS q_mistake,
+              SUM(CASE WHEN quality = 'blunder'    THEN 1 ELSE 0 END)    AS q_blunder
+            FROM moves
+            WHERE player_id = ?
+            """,
+            (pid,),
+        ).fetchone()
+
+        # Castling: how soon and which side, per game
+        castle_rows = conn.execute(
+            """
+            SELECT game_id, move_san, MIN(move_number) AS first_move
+            FROM moves
+            WHERE player_id = ? AND (move_san = 'O-O' OR move_san = 'O-O-O')
+            GROUP BY game_id
+            """,
+            (pid,),
+        ).fetchall()
+        castle_moves = [r["first_move"] for r in castle_rows]
+        avg_castle_move = (
+            round(sum(castle_moves) / len(castle_moves), 1) if castle_moves else None
+        )
+
+        # Per-colour record
+        color = conn.execute(
+            """
+            SELECT
+              SUM(CASE WHEN g.white_player_id = ? AND g.result='1-0'     THEN 1 ELSE 0 END) AS white_wins,
+              SUM(CASE WHEN g.white_player_id = ? AND g.result='1/2-1/2' THEN 1 ELSE 0 END) AS white_draws,
+              SUM(CASE WHEN g.white_player_id = ? AND g.result='0-1'     THEN 1 ELSE 0 END) AS white_losses,
+              SUM(CASE WHEN g.black_player_id = ? AND g.result='0-1'     THEN 1 ELSE 0 END) AS black_wins,
+              SUM(CASE WHEN g.black_player_id = ? AND g.result='1/2-1/2' THEN 1 ELSE 0 END) AS black_draws,
+              SUM(CASE WHEN g.black_player_id = ? AND g.result='1-0'     THEN 1 ELSE 0 END) AS black_losses
+            FROM games g
+            WHERE g.white_player_id = ? OR g.black_player_id = ?
+            """,
+            (pid, pid, pid, pid, pid, pid, pid, pid),
+        ).fetchone()
+
+        # Game-length summary
+        game_summary = conn.execute(
+            """
+            SELECT
+              COUNT(*)                AS total_games,
+              ROUND(AVG(total_moves)) AS avg_game_moves,
+              MIN(total_moves)        AS shortest_game,
+              MAX(total_moves)        AS longest_game,
+              SUM(CASE WHEN termination = 'checkmate' THEN 1 ELSE 0 END) AS checkmate_games
+            FROM games
+            WHERE white_player_id = ? OR black_player_id = ?
+            """,
+            (pid, pid),
+        ).fetchone()
+
+        recent_lessons = conn.execute(
+            """
+            SELECT lesson, COALESCE(lesson_type, 'improve') AS lesson_type, created_at
+            FROM lessons
+            WHERE player_id = ?
+            ORDER BY created_at DESC
+            LIMIT 6
+            """,
+            (pid,),
+        ).fetchall()
+
+        return {
+            "name":             player["name"],
+            "model_id":         player["model_id"],
+            "backend":          player["backend"],
+            "elo":              player["elo"],
+            "moves":            dict(moves) if moves else {},
+            "castling": {
+                "games_castled":   len(castle_moves),
+                "avg_castle_move": avg_castle_move,
+                "kingside":  sum(1 for r in castle_rows if r["move_san"] == "O-O"),
+                "queenside": sum(1 for r in castle_rows if r["move_san"] == "O-O-O"),
+            },
+            "color":          dict(color)        if color        else {},
+            "games":          dict(game_summary) if game_summary else {},
+            "recent_lessons": [dict(r) for r in recent_lessons],
+        }

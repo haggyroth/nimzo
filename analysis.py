@@ -276,6 +276,116 @@ def generate_lessons(
         return {"improve": [], "strength": []}
 
 
+def derive_personality_traits(profile: dict) -> list[dict]:
+    """
+    Turn a model profile dict (from db.get_model_profile) into a short list of
+    descriptive traits, each {label, detail}. Pure heuristic — no LLM call.
+    """
+    if not profile:
+        return []
+    moves    = profile.get("moves")    or {}
+    castling = profile.get("castling") or {}
+    color    = profile.get("color")    or {}
+    games    = profile.get("games")    or {}
+
+    total_moves = moves.get("total_moves") or 0
+    if total_moves < 10:
+        return [{"label": "New face", "detail": "Not enough games yet to read a style."}]
+
+    traits: list[dict] = []
+
+    # Stockfish alignment — how often does this model pick candidate #1?
+    top_rate = (moves.get("picked_top") or 0) / total_moves
+    avg_rank = moves.get("avg_rank")
+    if top_rate >= 0.80:
+        traits.append({
+            "label":  "Stockfish loyalist",
+            "detail": f"picks the top candidate {top_rate * 100:.0f}% of moves",
+        })
+    elif top_rate <= 0.45:
+        traits.append({
+            "label":  "Free spirit",
+            "detail": f"deviates from Stockfish's pick {(1 - top_rate) * 100:.0f}% of moves"
+                      + (f" (avg rank {avg_rank})" if avg_rank else ""),
+        })
+
+    # Tactical aggression — capture rate
+    cap_rate = (moves.get("captures") or 0) / total_moves
+    if cap_rate >= 0.22:
+        traits.append({
+            "label":  "Trade-happy",
+            "detail": f"captures on {cap_rate * 100:.0f}% of moves",
+        })
+    elif cap_rate <= 0.10 and total_moves >= 50:
+        traits.append({
+            "label":  "Positional",
+            "detail": f"captures on only {cap_rate * 100:.0f}% of moves",
+        })
+
+    # Check rate — attacking style
+    chk_rate = (moves.get("checks") or 0) / total_moves
+    if chk_rate >= 0.12:
+        traits.append({
+            "label":  "Attacker",
+            "detail": f"delivers check on {chk_rate * 100:.0f}% of moves",
+        })
+
+    # Castling profile
+    games_castled = castling.get("games_castled") or 0
+    total_games   = games.get("total_games") or 0
+    if total_games and games_castled / total_games < 0.4:
+        traits.append({
+            "label":  "King in the open",
+            "detail": f"castles in only {games_castled}/{total_games} games",
+        })
+    elif castling.get("queenside", 0) >= castling.get("kingside", 0) and games_castled >= 2:
+        traits.append({
+            "label":  "Queenside",
+            "detail": f"prefers O-O-O ({castling['queenside']} of {games_castled})",
+        })
+    else:
+        avg_cm = castling.get("avg_castle_move")
+        if avg_cm and avg_cm <= 10 and games_castled >= 2:
+            traits.append({
+                "label":  "Fast castler",
+                "detail": f"castles by move {avg_cm} on average",
+            })
+
+    # Colour bias
+    w_games  = (color.get("white_wins") or 0) + (color.get("white_draws") or 0) + (color.get("white_losses") or 0)
+    b_games  = (color.get("black_wins") or 0) + (color.get("black_draws") or 0) + (color.get("black_losses") or 0)
+    if w_games >= 3 and b_games >= 3:
+        w_score = (color.get("white_wins") or 0) + 0.5 * (color.get("white_draws") or 0)
+        b_score = (color.get("black_wins") or 0) + 0.5 * (color.get("black_draws") or 0)
+        w_rate = w_score / w_games
+        b_rate = b_score / b_games
+        if w_rate - b_rate >= 0.2:
+            traits.append({
+                "label":  "White-favoured",
+                "detail": f"{w_rate * 100:.0f}% as White vs {b_rate * 100:.0f}% as Black",
+            })
+        elif b_rate - w_rate >= 0.2:
+            traits.append({
+                "label":  "Black-favoured",
+                "detail": f"{b_rate * 100:.0f}% as Black vs {w_rate * 100:.0f}% as White",
+            })
+
+    # Blunder rate
+    bl_rate = (moves.get("q_blunder") or 0) / total_moves
+    if bl_rate >= 0.05:
+        traits.append({
+            "label":  "Streaky",
+            "detail": f"blunders on {bl_rate * 100:.1f}% of moves",
+        })
+    elif bl_rate == 0 and total_moves >= 50:
+        traits.append({
+            "label":  "Blunder-free",
+            "detail": f"no blunders across {total_moves} moves",
+        })
+
+    return traits[:5]   # cap at 5 traits for the card
+
+
 def build_quality_summary(move_qualities: list[tuple[str, str]]) -> str:
     """Readable quality breakdown for one player's moves."""
     counts = Counter(q for _, q in move_qualities)
