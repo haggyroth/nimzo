@@ -320,10 +320,20 @@ async def api_start(config: TournamentStartConfig):
         try:
             await run_tournament(white, black, config.games, tutor)
         except Exception as exc:
-            # Absorb any stray exceptions (e.g. engine death on Ctrl+C)
-            # so the task doesn't surface as "exception was never retrieved".
-            _state["status"] = "idle"
+            # Absorb any stray exceptions (e.g. engine death on Ctrl+C,
+            # a model timeout, etc) so the task doesn't surface as
+            # "exception was never retrieved". Reset the state machine
+            # and broadcast so the UI exits the running/stopping state.
             print(f"\n  Tournament ended: {type(exc).__name__}")
+        finally:
+            global _stop_requested
+            _stop_requested = False
+            _pause_event.set()
+            _state["status"] = "idle"
+            try:
+                await broadcast({"type": "tournament_status", **_state})
+            except Exception:
+                pass
 
     _tournament_task = asyncio.create_task(_run_and_catch())
     return {"ok": True}
