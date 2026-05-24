@@ -546,6 +546,16 @@
     .lb-name  { color: var(--text); font-weight: 500; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .lb-elo   { color: var(--gold); }
     .lb-wdl   { color: var(--text-mid); font-size: 9px; }
+    .lb-best  {
+      color: var(--gold-bright);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: .3px;
+      text-align: right;
+      cursor: pointer;
+    }
+    .lb-best.dim { color: var(--text-dim); cursor: default; }
+    .lb-best:not(.dim):hover { color: #fff; }
     .lb-spark { width: 60px; padding: 4px 6px 4px 2px; }
     .lb-spark svg { display: block; overflow: visible; }
     .lb-empty { padding: 14px 12px; font-size: 10px; color: var(--text-dim); text-align: center; }
@@ -1277,15 +1287,21 @@ async function loadLeaderboard() {
     );
 
     let html = `<table class="lb-table"><thead><tr>
-      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th><th></th>
+      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th><th title="Best game score (avg move quality, 0–100). Click to replay.">Best</th><th></th>
     </tr></thead><tbody>`;
     rows.forEach((r, i) => {
       const spark = buildSparkline(histories[i]);
+      const bestScore = r.best_game_score;
+      const bestId    = r.best_game_id;
+      const bestCell  = (bestScore != null && bestId != null)
+        ? `<td class="lb-best" title="Replay best game (#${bestId})" onclick="openReplay(${bestId})">${Math.round(bestScore)}</td>`
+        : `<td class="lb-best dim">—</td>`;
       html += `<tr>
         <td class="lb-rank">${i+1}</td>
         <td class="lb-name" title="${escHtml(r.model_id)}">${escHtml(r.name)}</td>
         <td class="lb-elo">${r.elo}</td>
         <td class="lb-wdl">${r.wins}/${r.draws}/${r.losses}</td>
+        ${bestCell}
         <td class="lb-spark">${spark}</td>
       </tr>`;
     });
@@ -1614,6 +1630,10 @@ const replay = { moves: [], cursor: 0, meta: null };
 
 async function openReplay(gameId, meta) {
   try {
+    // If caller didn't pass meta (e.g. opened from leaderboard), fetch it.
+    if (!meta) {
+      meta = await fetch(`${API}/api/games/${gameId}`).then(r => r.json());
+    }
     const moves = await fetch(`${API}/api/games/${gameId}/moves`).then(r => r.json());
     replay.moves  = moves;
     replay.cursor = 0;

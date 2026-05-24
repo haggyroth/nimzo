@@ -298,9 +298,44 @@ def get_player_lessons(model_id: str, limit: int = 10) -> list[str]:
 # ── Leaderboard ───────────────────────────────────────────────────────────
 
 def get_leaderboard() -> list[dict]:
+    """
+    Leaderboard rows include each player's 'best game' score —
+    the highest per-game average move quality (mapped to 0..100)
+    across all games with ≥5 quality-scored moves.
+    """
     with get_conn() as conn:
         rows = conn.execute(
             """
+            WITH player_game_scores AS (
+                SELECT
+                    m.player_id,
+                    m.game_id,
+                    AVG(CASE m.quality
+                          WHEN 'best'       THEN 100.0
+                          WHEN 'excellent'  THEN 85.0
+                          WHEN 'good'       THEN 70.0
+                          WHEN 'inaccuracy' THEN 50.0
+                          WHEN 'mistake'    THEN 25.0
+                          WHEN 'blunder'    THEN 0.0
+                          ELSE NULL
+                        END) AS avg_q
+                FROM moves m
+                WHERE m.quality IS NOT NULL
+                GROUP BY m.player_id, m.game_id
+                HAVING COUNT(m.id) >= 5
+            ),
+            best_game AS (
+                SELECT
+                    pgs.player_id,
+                    ROUND(MAX(pgs.avg_q), 1) AS best_score,
+                    (SELECT pgs2.game_id
+                       FROM player_game_scores pgs2
+                       WHERE pgs2.player_id = pgs.player_id
+                       ORDER BY pgs2.avg_q DESC, pgs2.game_id DESC
+                       LIMIT 1) AS best_game_id
+                FROM player_game_scores pgs
+                GROUP BY pgs.player_id
+            )
             SELECT
                 p.name, p.model_id, p.backend, ROUND(p.elo) AS elo,
                 COUNT(CASE WHEN g.white_player_id = p.id AND g.result = '1-0' THEN 1
@@ -310,10 +345,13 @@ def get_leaderboard() -> list[dict]:
                 COUNT(CASE WHEN g.white_player_id = p.id AND g.result = '0-1' THEN 1
                            WHEN g.black_player_id = p.id AND g.result = '1-0' THEN 1
                       END) AS losses,
-                COUNT(g.id) AS total_games
+                COUNT(g.id)     AS total_games,
+                bg.best_score   AS best_game_score,
+                bg.best_game_id AS best_game_id
             FROM players p
             LEFT JOIN games g
               ON g.white_player_id = p.id OR g.black_player_id = p.id
+            LEFT JOIN best_game bg ON bg.player_id = p.id
             GROUP BY p.id
             ORDER BY p.elo DESC
             """,

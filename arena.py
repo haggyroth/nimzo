@@ -163,6 +163,15 @@ _QUALITY_GLYPH = {
     "blunder":    "??",
 }
 
+@app.get("/api/games/{game_id}")
+async def api_game(game_id: int):
+    row = database.get_game(game_id)
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Game not found")
+    return row
+
+
 @app.get("/api/games/{game_id}/moves")
 async def api_game_moves(game_id: int):
     return database.get_game_moves(game_id)
