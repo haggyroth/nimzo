@@ -185,6 +185,40 @@
     .p-think { font-size: 9px; color: var(--gold-bright); display: none; }
     .p-think.on { display: flex; align-items: center; gap: 3px; animation: blink .7s infinite; }
 
+    .p-graveyard {
+      display: flex; align-items: center;
+      flex: 1; min-width: 0;
+      margin: 0 10px;
+      font-size: 14px; line-height: 1;
+      letter-spacing: -3px;
+      color: #a8a4a0;
+      overflow: hidden; white-space: nowrap;
+    }
+    .p-graveyard .gv-piece { display: inline-block; }
+    .p-graveyard .gv-adv {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; font-weight: 500;
+      letter-spacing: .5px;
+      color: var(--gold-bright);
+      margin-left: 8px;
+    }
+    /* Replay modal variant — smaller */
+    .rp-graveyard {
+      display: flex; align-items: center;
+      flex: 1; min-width: 0;
+      margin: 0 8px;
+      font-size: 12px; line-height: 1;
+      letter-spacing: -3px;
+      color: #a8a4a0;
+      overflow: hidden; white-space: nowrap;
+    }
+    .rp-graveyard .gv-adv {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px; letter-spacing: .4px;
+      color: var(--gold-bright);
+      margin-left: 6px;
+    }
+
     .board-wrap {
       position: relative;
       width:  var(--board-px, 460px);
@@ -681,6 +715,7 @@
         <div class="p-swatch" style="background:#1a1a1a;border:1px solid #444"></div>
         <div class="p-name" id="nameBlack">—</div>
       </div>
+      <div class="p-graveyard" id="graveyardBlack"></div>
       <div class="p-right">
         <div class="p-think" id="thinkBlack">● thinking</div>
         <div class="p-eval"  id="evalBlack"></div>
@@ -698,6 +733,7 @@
         <div class="p-swatch" style="background:#f0f0f0;border:1px solid #bbb"></div>
         <div class="p-name" id="nameWhite">—</div>
       </div>
+      <div class="p-graveyard" id="graveyardWhite"></div>
       <div class="p-right">
         <div class="p-think" id="thinkWhite">● thinking</div>
         <div class="p-eval"  id="evalWhite"></div>
@@ -866,6 +902,7 @@
         <div class="rp-swatch" style="background:#1a1a1a;border:1px solid #444"></div>
         <span class="rp-strip-name" id="rpNameBlack">—</span>
       </div>
+      <div class="rp-graveyard" id="rpGraveyardBlack"></div>
       <span class="rp-strip-elo" id="rpEloBlack">—</span>
     </div>
     <!-- Board -->
@@ -878,6 +915,7 @@
         <div class="rp-swatch" style="background:#f0f0f0;border:1px solid #bbb"></div>
         <span class="rp-strip-name" id="rpNameWhite">—</span>
       </div>
+      <div class="rp-graveyard" id="rpGraveyardWhite"></div>
       <span class="rp-strip-elo" id="rpEloWhite">—</span>
     </div>
     <!-- Controls -->
@@ -962,6 +1000,58 @@ function parseFen(fen) {
   });
 }
 
+// ── Captured pieces / material imbalance ──────────────────────────────────
+const STARTING_COUNTS = { p: 8, n: 2, b: 2, r: 2, q: 1 };   // king never captured
+const PIECE_VALUES    = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+const GV_ORDER        = ['q', 'r', 'b', 'n', 'p'];          // heaviest first
+
+function computeCaptures(fen) {
+  const counts = { P:0,N:0,B:0,R:0,Q:0, p:0,n:0,b:0,r:0,q:0 };
+  for (const ch of fen.split(' ')[0]) {
+    if (counts.hasOwnProperty(ch)) counts[ch]++;
+  }
+  const whiteLost = {}, blackLost = {};
+  let whiteValue = 0, blackValue = 0;
+  for (const t of GV_ORDER) {
+    const T = t.toUpperCase();
+    whiteLost[t] = Math.max(0, STARTING_COUNTS[t] - counts[T]);
+    blackLost[t] = Math.max(0, STARTING_COUNTS[t] - counts[t]);
+    whiteValue  += counts[T] * PIECE_VALUES[t];
+    blackValue  += counts[t] * PIECE_VALUES[t];
+  }
+  return { whiteLost, blackLost, imbalance: whiteValue - blackValue };
+}
+
+function renderGraveyardInto(el, lostMap, capturedAreWhite, advantage) {
+  if (!el) return;
+  const parts = [];
+  for (const t of GV_ORDER) {
+    const n = lostMap[t] || 0;
+    if (!n) continue;
+    const glyph = capturedAreWhite ? PIECES[t.toUpperCase()] : PIECES[t];
+    for (let i = 0; i < n; i++) parts.push(`<span class="gv-piece">${glyph}</span>`);
+  }
+  if (advantage > 0) parts.push(`<span class="gv-adv">+${advantage}</span>`);
+  el.innerHTML = parts.join('');
+}
+
+function renderGraveyards(fen, ids) {
+  if (!fen) return;
+  const { whiteLost, blackLost, imbalance } = computeCaptures(fen);
+  // Black's strip shows the white pieces Black has captured
+  renderGraveyardInto(
+    document.getElementById(ids.black),
+    whiteLost, true,
+    imbalance < 0 ? -imbalance : 0,
+  );
+  // White's strip shows the black pieces White has captured
+  renderGraveyardInto(
+    document.getElementById(ids.white),
+    blackLost, false,
+    imbalance > 0 ? imbalance : 0,
+  );
+}
+
 function uciToSquares(uci) {
   if (!uci || uci.length < 4) return [null, null];
   const fi = c => c.charCodeAt(0) - 97;
@@ -1024,6 +1114,9 @@ function renderBoard() {
   // Keep flip button icon in sync
   const btn = document.getElementById('flipBtn');
   if (btn) btn.title = flipped ? "Flip to White’s perspective" : "Flip to Black’s perspective";
+
+  // Refresh captured-pieces graveyards
+  renderGraveyards(gameState.fen, { white: 'graveyardWhite', black: 'graveyardBlack' });
 }
 
 function toggleFlip() {
@@ -1639,6 +1732,9 @@ function rpDrawBoard(fen, lastUci) {
       el.appendChild(sq);
     });
   });
+
+  // Refresh captured-pieces graveyards for replay
+  renderGraveyards(fen, { white: 'rpGraveyardWhite', black: 'rpGraveyardBlack' });
 }
 
 // Keyboard navigation for replay
