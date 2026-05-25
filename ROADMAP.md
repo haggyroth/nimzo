@@ -126,14 +126,14 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 ---
 
 ## Phase 9 — Testing & Infrastructure
-*Future*
+*v9 release*
 
-- [ ] **Unit test suite** (`pytest`): cover ELO calculation, dynamic K-factor, lesson parser (`_parse_lessons`), response parsing in both player backends, `build_quality_summary`, DB operations (upsert, record, query)
+- [x] **Unit test suite** (`pytest`): 142 tests across ELO, dynamic K-factor, `_parse_lessons`, response parsing in both player backends, `build_quality_summary`, achievements, model profiles, metadata parsing, and DB operations
 - [ ] **JS unit tests**: `extractModelName`, `parseFen`, `uciToSquares`, `renderEvalGraph` — candidate for Vitest or a simple node test script
-- [ ] **Mock clients**: fake LM Studio / Anthropic responses for player backend tests; avoid real API calls in CI
-- [ ] **Test fixture library**: sample PGNs (short games, draws, resignations), board positions (tactical puzzles, endgames), candidate lists
-- [ ] **GitHub Actions CI**: run pytest on every PR; block merge on failure
-- [ ] **Coverage reporting**: track which paths are exercised; target critical parsing and ELO logic first
+- [x] **Mock clients**: `unittest.mock` + `pytest-mock` for LM Studio and Anthropic player tests; zero real API calls in CI
+- [x] **Test fixture library**: `tests/fixtures/pgns.py` (Scholar's mate, Fool's mate, stalemate, midgame resign, opening starts) and `tests/fixtures/positions.py` (FEN strings, candidate builders)
+- [x] **GitHub Actions CI**: `.github/workflows/ci.yml` — runs pytest + coverage on every push/PR to main; blocks merge on failure
+- [x] **Coverage reporting**: `pytest-cov` + `.coveragerc`; `--cov-report=term-missing` in CI; coverage XML artifact uploaded per run
 
 ---
 
