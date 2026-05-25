@@ -135,6 +135,11 @@ def _migrate(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE moves ADD COLUMN thinking_content TEXT")
     except sqlite3.OperationalError:
         pass  # already exists
+    # Add bad_move_rate_before for lesson effectiveness tracking (Phase 7 loose end)
+    try:
+        conn.execute("ALTER TABLE lessons ADD COLUMN bad_move_rate_before REAL")
+    except sqlite3.OperationalError:
+        pass  # already exists
     # Create tournament tables for existing DBs (CREATE TABLE IF NOT EXISTS is idempotent
     # in the schema, but the schema only runs once so we ensure them here too)
     conn.executescript("""
@@ -411,14 +416,15 @@ def record_lesson(
     game_id: int,
     lesson: str,
     lesson_type: str = "improve",   # "improve" | "strength"
+    bad_move_rate_before: float | None = None,
 ):
     with get_conn() as conn:
         player_id = conn.execute(
             "SELECT id FROM players WHERE model_id = ?", (player_model_id,)
         ).fetchone()["id"]
         conn.execute(
-            "INSERT INTO lessons (player_id, game_id, lesson, lesson_type) VALUES (?, ?, ?, ?)",
-            (player_id, game_id, lesson, lesson_type),
+            "INSERT INTO lessons (player_id, game_id, lesson, lesson_type, bad_move_rate_before) VALUES (?, ?, ?, ?, ?)",
+            (player_id, game_id, lesson, lesson_type, bad_move_rate_before),
         )
 
 
@@ -440,6 +446,88 @@ def get_player_lessons(model_id: str, limit: int = 10) -> list[str]:
             (model_id, limit),
         ).fetchall()
         return [f"[{r['lesson_type']}] {r['lesson']}" for r in rows]
+
+
+def get_lesson_effectiveness(model_id: str, lookback_games: int = 3) -> list[dict]:
+    """
+    For each lesson this player has received that has a bad_move_rate_before,
+    compute the average bad_move_rate in the next `lookback_games` games played
+    AFTER that lesson was given and return a delta.
+
+    Returns a list of dicts:
+      lesson, lesson_type, bad_move_rate_before, bad_move_rate_after,
+      delta (after - before; negative = improved), game_id
+    Only rows where both before and after rates are available are returned.
+    """
+    with get_conn() as conn:
+        player = conn.execute(
+            "SELECT id FROM players WHERE model_id = ?", (model_id,)
+        ).fetchone()
+        if not player:
+            return []
+        pid = player["id"]
+
+        # Per-game bad_move_rate for this player (blunders + mistakes / total moves)
+        game_rates = conn.execute(
+            """
+            SELECT
+                m.game_id,
+                g.started_at,
+                CAST(
+                    SUM(CASE WHEN m.quality IN ('blunder','mistake') THEN 1 ELSE 0 END)
+                    AS REAL
+                ) / NULLIF(COUNT(*), 0) AS bad_rate
+            FROM moves m
+            JOIN games g ON m.game_id = g.id
+            WHERE m.player_model_id = ?
+            GROUP BY m.game_id
+            ORDER BY g.started_at ASC
+            """,
+            (model_id,),
+        ).fetchall()
+
+        if not game_rates:
+            return []
+
+        # Build ordered list of (game_id, started_at, bad_rate)
+        ordered = [(r["game_id"], r["started_at"], r["bad_rate"]) for r in game_rates]
+
+        lessons = conn.execute(
+            """
+            SELECT l.id, l.lesson, l.lesson_type, l.game_id, l.bad_move_rate_before,
+                   g.started_at AS lesson_at
+            FROM lessons l
+            JOIN games g ON l.game_id = g.id
+            WHERE l.player_id = ?
+              AND l.bad_move_rate_before IS NOT NULL
+            ORDER BY l.created_at DESC
+            LIMIT 20
+            """,
+            (pid,),
+        ).fetchall()
+
+        results = []
+        for les in lessons:
+            lesson_at = les["lesson_at"]
+            # Subsequent game rates (games played AFTER this lesson's game)
+            subsequent = [
+                rate for (_, at, rate) in ordered
+                if at > lesson_at and rate is not None
+            ][:lookback_games]
+            if not subsequent:
+                continue
+            after = sum(subsequent) / len(subsequent)
+            before = les["bad_move_rate_before"]
+            results.append({
+                "lesson":               les["lesson"],
+                "lesson_type":          les["lesson_type"],
+                "bad_move_rate_before": before,
+                "bad_move_rate_after":  round(after, 4),
+                "delta":                round(after - before, 4),
+                "games_measured":       len(subsequent),
+                "game_id":              les["game_id"],
+            })
+        return results
 
 
 # ── Leaderboard ───────────────────────────────────────────────────────────

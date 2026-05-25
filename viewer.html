@@ -850,6 +850,12 @@
     }
     .mc-lesson .tag.improve  { color: #d09a4a; }
     .mc-lesson .tag.strength { color: #93c97e; }
+    .mc-lesson .eff {
+      float: right; font-size: 9px; font-weight: 600; letter-spacing: 0.5px;
+    }
+    .mc-lesson .eff.better { color: var(--q-excellent); }
+    .mc-lesson .eff.worse  { color: var(--q-blunder); }
+    .mc-lesson .eff.same   { color: var(--text-dim); }
 
     /* Make leaderboard names clickable */
     .lb-name { cursor: pointer; }
@@ -1088,7 +1094,8 @@
     .stn-name  { color: var(--text); font-weight: 500; max-width: 80px;
                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .stn-pts   { color: var(--gold); font-weight: 600; }
-    .stn-wdl   { color: var(--text-mid); font-size: 9px; }
+    .stn-wdl    { color: var(--text-mid); font-size: 9px; }
+    .stn-series { color: var(--text-dim); font-size: 8px; cursor: help; }
     .stn-leader td { background: rgba(200,146,30,.05); }
 
     /* ── Tournament winner overlay ──────────────────────────────── */
@@ -2505,17 +2512,35 @@ function renderStandings(standings) {
   const body = document.getElementById('standingsBody');
   if (!standings || !standings.length) { sec.style.display = 'none'; return; }
   sec.style.display = '';
+
+  // Build a model_id → name lookup for series tooltips
+  const nameMap = {};
+  standings.forEach(s => { nameMap[s.model_id] = s.name; });
+
   let html = `<div class="standings-wrap">
     <table class="stn-table">
       <thead><tr>
         <th>#</th><th>Player</th><th>Pts</th><th>W-D-L</th>
       </tr></thead><tbody>`;
   standings.forEach((s, i) => {
+    // Build series tooltip: "vs Llama: 2-0, vs Gemma: 1-1"
+    let seriesTip = '';
+    if (s.series && Object.keys(s.series).length) {
+      seriesTip = Object.entries(s.series).map(([oppId, wins]) => {
+        const myW  = wins[s.model_id]   || 0;
+        const oppW = wins[oppId] || 0;
+        return `vs ${nameMap[oppId] || oppId}: ${myW}-${oppW}`;
+      }).join(', ');
+    }
+    const seriesCell = seriesTip
+      ? `<td class="stn-series" title="${escHtml(seriesTip)}">series ⓘ</td>`
+      : '';
     html += `<tr class="${i===0?'stn-leader':''}">
       <td class="stn-rank">${i+1}</td>
       <td class="stn-name">${escHtml(s.name)}</td>
       <td class="stn-pts">${s.points}</td>
       <td class="stn-wdl">${s.wins}-${s.draws}-${s.losses}</td>
+      ${seriesCell}
     </tr>`;
   });
   html += '</tbody></table></div>';
@@ -2707,8 +2732,11 @@ function renderPortraitBlock(p) {
 
 async function openModelCard(modelId) {
   try {
-    const p = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/profile`)
-      .then(r => r.json());
+    const [p, effectiveness] = await Promise.all([
+      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/profile`).then(r => r.json()),
+      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/lesson-effectiveness`).then(r => r.json()).catch(() => []),
+    ]);
+    p._effectiveness = effectiveness;
     renderModelCard(p);
     document.getElementById('modelModal').classList.add('show');
     // If no portrait yet, generate one and update the card when done
@@ -2782,10 +2810,28 @@ function renderModelCard(p) {
          </div>`).join('')
     : `<div class="mc-no-traits">No personality signal yet — play more games.</div>`;
 
+  // Build effectiveness lookup: lesson text → {delta, games_measured}
+  const effMap = {};
+  for (const e of (p._effectiveness || [])) {
+    effMap[e.lesson] = e;
+  }
+
   const lessons = (p.recent_lessons || []).map(l => {
     const tag = l.lesson_type === 'strength' ? 'strength' : 'improve';
+    const eff = effMap[l.lesson];
+    let effChip = '';
+    if (eff) {
+      const pct = Math.round(Math.abs(eff.delta) * 100);
+      if (eff.delta < -0.02) {
+        effChip = `<span class="eff better" title="Bad-move rate dropped ${pct}pp over ${eff.games_measured} game(s)">↑ ${pct}pp</span>`;
+      } else if (eff.delta > 0.02) {
+        effChip = `<span class="eff worse" title="Bad-move rate rose ${pct}pp over ${eff.games_measured} game(s)">↓ ${pct}pp</span>`;
+      } else {
+        effChip = `<span class="eff same" title="No significant change over ${eff.games_measured} game(s)">→ same</span>`;
+      }
+    }
     return `<div class="mc-lesson">
-              <span class="tag ${tag}">${tag}</span>${escHtml(l.lesson)}
+              ${effChip}<span class="tag ${tag}">${tag}</span>${escHtml(l.lesson)}
             </div>`;
   }).join('') || `<div class="mc-no-traits">No lessons yet.</div>`;
 

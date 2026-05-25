@@ -587,6 +587,17 @@ def derive_personality_traits(profile: dict) -> list[dict]:
     return traits[:5]   # cap at 5 traits for the card
 
 
+def bad_move_rate(move_qualities: list[tuple[str, str]]) -> float | None:
+    """
+    Fraction of moves that are blunders or mistakes.
+    Returns None if no moves.  Used to track lesson effectiveness over time.
+    """
+    if not move_qualities:
+        return None
+    bad = sum(1 for _, q in move_qualities if q in ("blunder", "mistake"))
+    return round(bad / len(move_qualities), 4)
+
+
 def build_quality_summary(move_qualities: list[tuple[str, str]]) -> str:
     """Readable quality breakdown for one player's moves."""
     counts = Counter(q for _, q in move_qualities)

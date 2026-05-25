@@ -45,6 +45,7 @@ from analysis import (
     generate_lessons,
     compress_lessons,
     build_quality_summary,
+    bad_move_rate,
     detect_opening,
     detect_opening_depth,
     derive_personality_traits,
@@ -276,6 +277,11 @@ async def api_model_profile(model_id: str):
     portrait_path = database.get_portrait_path(model_id)
     profile["portrait_url"] = f"/{portrait_path}" if portrait_path else None
     return profile
+
+
+@app.get("/api/models/{model_id:path}/lesson-effectiveness")
+async def api_lesson_effectiveness(model_id: str):
+    return database.get_lesson_effectiveness(model_id)
 
 
 @app.post("/api/models/{model_id:path}/portrait")
@@ -550,13 +556,22 @@ async def api_start(config: TournamentStartConfig):
 
     # ── Multi-player tournament mode ──────────────────────────────────
     if len(config.players) >= 2:
+        # Seed by current ELO (highest first).  For gauntlet the first player
+        # is champion, so the top-rated model defends.  For round-robin this
+        # is mostly cosmetic but gives a natural display order.
+        seeded = sorted(
+            config.players,
+            key=lambda ps: database.get_player_elo(ps.model_id),
+            reverse=True,
+        )
+
         players = [
             build_player(ps.backend, ps.name or ps.model_id.split("/")[-1].split("@")[0], ps.model_id, ps.url, ps.thinking)
-            for ps in config.players
+            for ps in seeded
         ]
-        pairings = generate_pairings(config.players, config.format, config.games_per_pair)
+        pairings = generate_pairings(seeded, config.format, config.games_per_pair)
         total_games = len(pairings)
-        standings = compute_standings(config.players, [])
+        standings = compute_standings(seeded, [])
 
         _state.update({
             "status":        "running",
@@ -572,12 +587,12 @@ async def api_start(config: TournamentStartConfig):
         })
         await broadcast({"type": "tournament_status", **_state})
 
-        player_map = {ps.model_id: pl for ps, pl in zip(config.players, players)}
+        player_map = {ps.model_id: pl for ps, pl in zip(seeded, players)}
 
         async def _run_bracket_and_catch():
             try:
                 await run_bracket_tournament(
-                    player_specs=config.players,
+                    player_specs=seeded,
                     player_map=player_map,
                     pairings=pairings,
                     fmt=config.format,
@@ -940,14 +955,15 @@ async def play_game(
         )
 
         if lessons["improve"] or lessons["strength"]:
+            bmr = bad_move_rate(qualities)
             for lesson in lessons["improve"]:
                 tagged = f"[improve] {lesson}"
                 player.add_lesson(tagged)
-                database.record_lesson(player.config.model_id, game_id, lesson, "improve")
+                database.record_lesson(player.config.model_id, game_id, lesson, "improve", bmr)
             for lesson in lessons["strength"]:
                 tagged = f"[strength] {lesson}"
                 player.add_lesson(tagged)
-                database.record_lesson(player.config.model_id, game_id, lesson, "strength")
+                database.record_lesson(player.config.model_id, game_id, lesson, "strength", bmr)
 
             await broadcast({
                 "type":     "lessons",
@@ -987,6 +1003,11 @@ async def play_game(
 
 # ── Multi-player bracket runner ───────────────────────────────────────────
 
+def _pair_key(a: str, b: str) -> tuple[str, str]:
+    """Canonical (sorted) pair key regardless of colour assignment."""
+    return (min(a, b), max(a, b))
+
+
 async def run_bracket_tournament(
     player_specs: list[PlayerSpec],
     player_map: dict[str, ChessPlayer],
@@ -1004,12 +1025,31 @@ async def run_bracket_tournament(
     )
     _state["tournament_id"] = tournament_id
 
+    # Best-of-series tracking: per canonical pair, count wins for each side
+    # and the total games scheduled between them.
+    # Structure: {pair_key: {"wins": {model_id: int}, "scheduled": int}}
+    pair_schedule: dict[tuple, dict] = {}
+    for ws, bs in pairings:
+        key = _pair_key(ws.model_id, bs.model_id)
+        if key not in pair_schedule:
+            pair_schedule[key] = {"wins": {ws.model_id: 0, bs.model_id: 0}, "scheduled": 0}
+        pair_schedule[key]["scheduled"] += 1
+
+    skipped: set[tuple] = set()   # pairs whose series is already decided
+
+    actual_idx = 0   # games actually played (for progress display)
     with StockfishEngine() as stockfish:
         for idx, (white_spec, black_spec) in enumerate(pairings, start=1):
             await _pause_event.wait()
             if _stop_requested:
                 break
 
+            # Skip if series already clinched for this pair
+            key = _pair_key(white_spec.model_id, black_spec.model_id)
+            if key in skipped:
+                continue
+
+            actual_idx += 1
             white = player_map[white_spec.model_id]
             black = player_map[black_spec.model_id]
 
@@ -1018,7 +1058,7 @@ async def run_bracket_tournament(
             black.elo = database.get_player_elo(black.config.model_id)
 
             _state.update({
-                "game_number": idx,
+                "game_number": actual_idx,
                 "white":       white.config.name,
                 "black":       black.config.name,
                 "white_elo":   round(white.elo),
@@ -1026,33 +1066,64 @@ async def run_bracket_tournament(
             })
             await broadcast({"type": "tournament_status", **_state})
 
-            print(f"\n♟  Game {idx}/{total}: {white.config.name} (W) vs {black.config.name} (B)")
+            print(f"\n♟  Game {actual_idx}/{total}: {white.config.name} (W) vs {black.config.name} (B)")
             try:
-                summary = await play_game(white, black, stockfish, idx, tutor)
+                summary = await play_game(white, black, stockfish, actual_idx, tutor)
             except TournamentAborted:
                 print("\n  Tournament stopped by user.")
                 database.abort_tournament(tournament_id)
                 break
 
+            result = summary["result"]
             game_results.append({
                 "white_model_id": white.config.model_id,
                 "black_model_id": black.config.model_id,
-                "result": summary["result"],
+                "result": result,
             })
-            database.record_tournament_game(tournament_id, summary["game_id"], idx,
+            database.record_tournament_game(tournament_id, summary["game_id"], actual_idx,
                                             white.config.model_id, black.config.model_id)
 
+            # Update series win counts
+            ps = pair_schedule[key]
+            if result == "1-0":
+                ps["wins"][white_spec.model_id] = ps["wins"].get(white_spec.model_id, 0) + 1
+            elif result == "0-1":
+                ps["wins"][black_spec.model_id] = ps["wins"].get(black_spec.model_id, 0) + 1
+
+            # Check if series is decided: one player has more wins than the
+            # other can reach even winning all remaining games.
+            games_played_in_pair = sum(
+                1 for gr in game_results
+                if _pair_key(gr["white_model_id"], gr["black_model_id"]) == key
+            )
+            remaining = ps["scheduled"] - games_played_in_pair
+            wins_list = list(ps["wins"].values())
+            leader = max(wins_list)
+            trailer = min(wins_list)
+            if remaining > 0 and leader > trailer + remaining:
+                winner_id = max(ps["wins"], key=ps["wins"].get)
+                winner_name = player_map[winner_id].config.name
+                print(f"   Series decided: {winner_name} wins — skipping {remaining} remaining game(s)")
+                skipped.add(key)
+
             standings = compute_standings(player_specs, game_results)
+            # Attach series records to each standing row
+            for row in standings:
+                row["series"] = {
+                    opp_id: ps["wins"]
+                    for (a, b), ps in pair_schedule.items()
+                    for opp_id in ([b] if a == row["model_id"] else ([a] if b == row["model_id"] else []))
+                }
             _state["standings"] = standings
             await broadcast({
                 "type":       "standings_update",
                 "standings":  standings,
-                "game_index": idx,
+                "game_index": actual_idx,
                 "total":      total,
             })
 
             print(
-                f"   Result: {summary['result']} in {summary['moves']} moves "
+                f"   Result: {result} in {summary['moves']} moves "
                 f"({summary['termination']})"
             )
             await asyncio.sleep(2)
@@ -1060,6 +1131,12 @@ async def run_bracket_tournament(
     # ── Final standings + title ───────────────────────────────────────
     if game_results:
         final = compute_standings(player_specs, game_results)
+        for row in final:
+            row["series"] = {
+                opp_id: ps["wins"]
+                for (a, b), ps in pair_schedule.items()
+                for opp_id in ([b] if a == row["model_id"] else ([a] if b == row["model_id"] else []))
+            }
         winner_id = final[0]["model_id"] if final else None
         title = pick_title(winner_id, fmt) if winner_id else None
         database.finish_tournament(tournament_id, winner_id, title)
