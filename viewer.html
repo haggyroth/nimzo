@@ -1,4 +1,10 @@
 <!DOCTYPE html>
+<!--
+  Chess board rendering: cm-chessboard by Stefan Haack
+  https://github.com/shaack/cm-chessboard — MIT License
+  Standard piece set: Wikimedia Chess pieces — CC BY-SA 3.0
+  https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -6,6 +12,9 @@
   <title>Nimzo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/cm-chessboard.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/extensions/markers/markers.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/extensions/arrows/arrows.css">
   <style>
     :root {
       --bg:           #07090c;
@@ -236,37 +245,15 @@
     }
 
     #board {
-      display: grid;
-      grid-template-columns: repeat(8,1fr);
-      grid-template-rows: repeat(8,1fr);
       width: 100%; height: 100%;
-      border: 1px solid var(--border-hi);
       box-shadow: 0 20px 60px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.02);
     }
 
-    .sq { position: relative; display: flex; align-items: center; justify-content: center; }
-    .sq.light { background: var(--sq-light); }
-    .sq.dark  { background: var(--sq-dark);  }
-    .sq.hi-from { background: var(--sq-from) !important; }
-    .sq.hi-to   { background: var(--sq-to)   !important; }
-
-    /* ── Human-play: legal move dots & selected piece ──────────────── */
-    .sq.sq-legal::after {
-      content: '';
-      position: absolute;
-      width: 28%; height: 28%;
-      border-radius: 50%;
-      background: rgba(0,0,0,.22);
-      pointer-events: none;
-    }
-    .sq.sq-legal.has-piece::after {
-      /* ring instead of dot for squares that have a piece */
-      width: 86%; height: 86%;
-      background: transparent;
-      border: 4px solid rgba(0,0,0,.22);
-    }
-    .sq.sq-selected { background: rgba(20, 180, 80, .50) !important; }
-    .sq.sq-legal    { cursor: pointer; }
+    /* ── cm-chessboard square color overrides ──────────────────────── */
+    .cm-chessboard .board .square.white { fill: var(--sq-light) !important; }
+    .cm-chessboard .board .square.black { fill: var(--sq-dark)  !important; }
+    /* Last-move highlight marker */
+    .cm-chessboard .marker-square { fill: rgba(255,200,30,.55) !important; }
 
     /* ── Human turn banner ─────────────────────────────────────────── */
     #humanTurnBanner {
@@ -286,46 +273,6 @@
       white-space: nowrap;
     }
     #humanTurnBanner.show { display: block; }
-
-    .sq-label {
-      position: absolute; font-size: 8px; font-weight: 500;
-      color: var(--sq-label-color, #888);
-      opacity: .5; line-height: 1; pointer-events: none;
-    }
-    .sq-label.rank { top: 2px; left: 3px; }
-    .sq-label.file { bottom: 2px; right: 2px; }
-    .sq.light .sq-label { color: var(--sq-dark); }
-    .sq.dark  .sq-label { color: var(--sq-light); }
-
-    .piece {
-      font-family: var(--piece-font);
-      font-size: calc(var(--board-px, 460px) / 8 * .76);
-      line-height: 1; user-select: none; pointer-events: none;
-    }
-    .piece.w { color: #f8f8f8; filter: drop-shadow(0 1px 3px rgba(0,0,0,.9)); }
-    .piece.b { color: #161616; filter: drop-shadow(0 1px 2px rgba(255,255,255,.12)); }
-
-    /* ── Piece set: letters ─────────────────────────────────────────── */
-    body.pieces-letters .piece {
-      font-family: var(--ui-font) !important;
-      font-weight: 700;
-      font-size: calc(var(--board-px, 460px) / 8 * .52);
-    }
-    body.pieces-letters .piece.w { color: #f0f0f0; filter: none; }
-    body.pieces-letters .piece.b {
-      color: #f0f0f0;
-      -webkit-text-stroke: 1.5px #111;
-      filter: none;
-    }
-
-    /* ── Piece move animation ───────────────────────────────────────── */
-    @keyframes pieceArrive {
-      from { transform: translate(var(--move-dx, 0), var(--move-dy, 0)) scale(1.05); opacity: .7; }
-      to   { transform: translate(0, 0) scale(1); opacity: 1; }
-    }
-    .piece.moving {
-      animation: pieceArrive 0.18s cubic-bezier(.2, .6, .4, 1) forwards;
-    }
 
     .flip-btn {
       position: absolute;
@@ -708,11 +655,7 @@
       position: relative;
     }
     .rp-board {
-      display: grid;
-      grid-template-columns: repeat(8,1fr);
-      grid-template-rows: repeat(8,1fr);
       width: 100%; height: 100%;
-      border: 1px solid var(--border-hi);
       box-shadow: 0 20px 60px rgba(0,0,0,.85);
     }
 
@@ -1618,6 +1561,9 @@
 const API   = '';          // same origin
 const WS_URL = `ws://${location.host}/ws`;
 
+// ── cm-chessboard handle (populated in async boot) ───────────────────────
+const _cmcb = {};
+
 const PIECE_SETS = {
   unicode: { K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙', k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟' },
   letters: { K:'K', Q:'Q', R:'R', B:'B', N:'N', P:'P', k:'k', q:'q', r:'r', b:'b', n:'n', p:'p' },
@@ -1662,9 +1608,6 @@ function applySettings() {
   root.style.setProperty('--gold',        _settings.accent);
   root.style.setProperty('--gold-bright', lightenHex(_settings.accent, 30));
   root.style.setProperty('--ui-font',  FONTS[_settings.font]?.value || FONTS.mono.value);
-
-  // Piece set: body class switch
-  document.body.classList.toggle('pieces-letters', _settings.pieceSet === 'letters');
 
   // Sync UI widgets (may not exist yet at initial call)
   syncSettingsUI();
@@ -1728,7 +1671,8 @@ function setTheme(id) {
   saveSettings();
   applySettings();
   buildThemeSwatches();  // refresh active state
-  renderBoard();
+  // CSS variables are updated by applySettings(); cm-chessboard reads them via the
+  // .cm-chessboard .board .square.white/black overrides — no explicit board redraw needed.
 }
 
 function onCustomColor() {
@@ -1742,15 +1686,15 @@ function onCustomColor() {
   saveSettings();
   applySettings();
   buildThemeSwatches();
-  renderBoard();
   renderEvalGraph();  // re-render eval graph with new accent color
 }
 
 function setPieceSet(id) {
+  // cm-chessboard uses SVG sprites only — piece set buttons are kept in the UI
+  // for layout continuity but switching between "unicode" and "letters" has no effect.
   _settings.pieceSet = id;
   saveSettings();
-  applySettings();
-  renderBoard();
+  syncSettingsUI();
 }
 
 function setFont(id) {
@@ -1764,7 +1708,6 @@ function resetSettings() {
   saveSettings();
   applySettings();
   buildThemeSwatches();
-  renderBoard();
 }
 
 // PIECES is now dynamic — use current piece set
@@ -1793,9 +1736,6 @@ let gameState = {
   humanCandidates:[], // UCI of Stockfish candidates
 };
 
-// ── Human board interaction state ─────────────────────────────────────────
-let humanSelected = null;   // UCI from-square, e.g. 'e2', when a piece is selected
-
 let tournamentStatus = 'idle';
 let isPaused = false;
 
@@ -1808,7 +1748,7 @@ function sizeBoard() {
   document.getElementById('boardWrap').style.height = px + 'px';
   document.querySelectorAll('.player-strip').forEach(s => s.style.width = px + 'px');
   document.documentElement.style.setProperty('--board-px', px + 'px');
-  renderBoard();
+  // cm-chessboard auto-fills its container on resize; no explicit redraw needed.
 }
 window.addEventListener('resize', sizeBoard);
 
@@ -1846,111 +1786,60 @@ function renderGraveyards(fen, ids) {
   );
 }
 
-// uciToSquares() — defined in js/viewer_utils.js
+// uciToSquares() — defined in js/viewer_utils.js (still used for other logic)
 
-// ── Board render ──────────────────────────────────────────────────────────
-function renderBoard(animate) {
-  const el      = document.getElementById(‘board’);
-  const matrix  = parseFen(gameState.fen);
-  const flipped = gameState.boardFlipped;
-  const [from, to] = uciToSquares(gameState.lastUci);
-  const key = (r,c) => r*8+c;
-  const fromKey = from ? key(from.row,from.col) : -1;
-  const toKey   = to   ? key(to.row,  to.col)   : -1;
-  const pieces  = currentPieces();
+// ── cm-chessboard render ──────────────────────────────────────────────────
+async function _cmcbRender(animate) {
+  if (!_cmcb.ready || !_cmcb.board) return;
+  const { MARKER_TYPE, COLOR } = _cmcb;
 
-  // Compute pixel offset for move animation
-  let animDx = 0, animDy = 0;
-  if (animate && from && to) {
-    const sqPx = el.clientWidth / 8;
-    const dCol = flipped ? (from.col - to.col) : (from.col - to.col);
-    const dRow = flipped ? (from.row - to.row) : (from.row - to.row);
-    animDx = dCol * sqPx;
-    animDy = dRow * sqPx;
+  // Set board position
+  await _cmcb.board.setPosition(gameState.fen, animate);
+
+  // Clear previous last-move markers
+  _cmcb.board.removeMarkers(MARKER_TYPE.square);
+
+  // Highlight last-move squares
+  if (gameState.lastUci && gameState.lastUci.length >= 4) {
+    const fromSq = gameState.lastUci.slice(0, 2);
+    const toSq   = gameState.lastUci.slice(2, 4);
+    _cmcb.board.addMarker(MARKER_TYPE.square, fromSq);
+    _cmcb.board.addMarker(MARKER_TYPE.square, toSq);
   }
 
-  // When flipped: rows run 7→0 (rank 1 at top), cols run 7→0 (h-file at left)
-  const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
-  const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+  // Human input handling
+  if (gameState.isHumanTurn) {
+    const humanColorConst = gameState.humanColor === ‘black’ ? COLOR.black : COLOR.white;
+    const allowedUci = gameState.humanAssisted
+      ? gameState.humanCandidates
+      : gameState.humanLegalUci;
 
-  // Precompute human move highlighting sets
-  const isHumanTurn  = gameState.isHumanTurn;
-  const allowedUci   = isHumanTurn
-    ? (gameState.humanAssisted ? gameState.humanCandidates : gameState.humanLegalUci)
-    : [];
-  // Legal destinations from humanSelected piece (filtered to allowedUci)
-  const legalDests   = new Set();
-  if (isHumanTurn && humanSelected) {
-    allowedUci.forEach(uci => {
-      if (uci.startsWith(humanSelected)) legalDests.add(uci.slice(2, 4));
-    });
+    _cmcb.board.enableMoveInput(event => {
+      const { INPUT_EVENT_TYPE } = _cmcb;
+      if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
+        // Allow drag only if this piece has at least one legal/candidate move
+        return allowedUci.some(u => u.startsWith(event.squareFrom));
+      }
+      if (event.type === INPUT_EVENT_TYPE.validateMoveInput) {
+        const uci = event.squareFrom + event.squareTo;
+        // Check promotions (pawn to back rank)
+        const matches = allowedUci.filter(u => u.startsWith(uci));
+        if (matches.length > 0) {
+          const chosen = matches.find(u => u.endsWith(‘q’)) || matches[0];
+          submitHumanMove(chosen);
+          return true;
+        }
+        return false;
+      }
+      return true;
+    }, humanColorConst);
+  } else {
+    _cmcb.board.disableMoveInput();
   }
-  // Set of from-squares that have at least one allowed move
-  const movableSqs   = new Set(allowedUci.map(u => u.slice(0,2)));
-
-  el.innerHTML = ‘’;
-  rows.forEach((r, ri) => {
-    cols.forEach((c, ci) => {
-      const sq    = document.createElement(‘div’);
-      const light = (r+c)%2===0;
-      sq.className = ‘sq ‘ + (light ? ‘light’ : ‘dark’);
-      const k = key(r,c);
-      if (k===fromKey) sq.classList.add(‘hi-from’);
-      if (k===toKey)   sq.classList.add(‘hi-to’);
-
-      // Human-play: square name in algebraic notation
-      const sqName = FILES[c] + (8 - r);
-
-      if (isHumanTurn && humanSelected) {
-        // Selected piece square
-        if (sqName === humanSelected) sq.classList.add(‘sq-selected’);
-        // Legal destination for selected piece
-        if (legalDests.has(sqName)) {
-          sq.classList.add(‘sq-legal’);
-          if (matrix[r][c]) sq.classList.add(‘has-piece’);
-        }
-      }
-
-      // Rank label on the leftmost visible column (color set by CSS)
-      if (ci===0) {
-        const lbl = document.createElement(‘span’);
-        lbl.className=’sq-label rank’; lbl.textContent=8-r;
-        sq.appendChild(lbl);
-      }
-      // File label on the bottom visible row
-      if (ri===7) {
-        const lbl = document.createElement(‘span’);
-        lbl.className=’sq-label file’; lbl.textContent=FILES[c];
-        sq.appendChild(lbl);
-      }
-
-      const piece = matrix[r][c];
-      if (piece) {
-        const span = document.createElement(‘span’);
-        const isWhite = piece === piece.toUpperCase();
-        span.className = ‘piece ‘ + (isWhite ? ‘w’ : ‘b’);
-        span.textContent = pieces[piece] || piece;
-        // Animate the piece that just arrived at the destination square
-        if (animate && k === toKey && (animDx !== 0 || animDy !== 0)) {
-          span.style.setProperty(‘--move-dx’, animDx + ‘px’);
-          span.style.setProperty(‘--move-dy’, animDy + ‘px’);
-          span.classList.add(‘moving’);
-        }
-        sq.appendChild(span);
-      }
-
-      // Add click handler for human turns
-      if (isHumanTurn) {
-        sq.addEventListener(‘click’, () => onHumanSquareClick(sqName, allowedUci, legalDests));
-      }
-
-      el.appendChild(sq);
-    });
-  });
 
   // Keep flip button icon in sync
   const btn = document.getElementById(‘flipBtn’);
-  if (btn) btn.title = flipped ? "Flip to White’s perspective" : "Flip to Black’s perspective";
+  if (btn) btn.title = gameState.boardFlipped ? "Flip to White’s perspective" : "Flip to Black’s perspective";
 
   // Refresh captured-pieces graveyards
   renderGraveyards(gameState.fen, { white: ‘graveyardWhite’, black: ‘graveyardBlack’ });
@@ -1958,52 +1847,20 @@ function renderBoard(animate) {
 
 function toggleFlip() {
   gameState.boardFlipped = !gameState.boardFlipped;
-  localStorage.setItem('boardFlipped', gameState.boardFlipped);
-  renderBoard();
-}
-
-// ── Human board click handler ─────────────────────────────────────────────
-function onHumanSquareClick(sqName, allowedUci, legalDests) {
-  if (!gameState.isHumanTurn) return;
-
-  if (humanSelected) {
-    // Second click: try to make a move
-    const uci = humanSelected + sqName;
-    // Check promotion: pawn reaching back rank (simplified: assume queen)
-    const promotions = allowedUci.filter(u => u.startsWith(uci));
-    if (promotions.length > 0) {
-      // Use queen promotion if available, else first
-      const chosen = promotions.find(u => u.endsWith('q')) || promotions[0];
-      submitHumanMove(chosen);
-      return;
-    }
-    // Not a valid destination — maybe clicking a new piece
-    const movableSqs = new Set(allowedUci.map(u => u.slice(0,2)));
-    if (movableSqs.has(sqName)) {
-      humanSelected = sqName;
-      renderBoard();
-      return;
-    }
-    // Deselect
-    humanSelected = null;
-    renderBoard();
-    return;
+  localStorage.setItem(‘boardFlipped’, gameState.boardFlipped);
+  if (_cmcb.ready && _cmcb.board) {
+    _cmcb.board.setOrientation(gameState.boardFlipped ? _cmcb.COLOR.black : _cmcb.COLOR.white, false);
   }
-
-  // First click: select a piece that has legal moves
-  const movableSqs2 = new Set(allowedUci.map(u => u.slice(0,2)));
-  if (movableSqs2.has(sqName)) {
-    humanSelected = sqName;
-    renderBoard();
+  if (_cmcb.ready && _cmcb.rpBoard) {
+    _cmcb.rpBoard.setOrientation(gameState.boardFlipped ? _cmcb.COLOR.black : _cmcb.COLOR.white, false);
   }
 }
 
 async function submitHumanMove(uci) {
-  humanSelected = null;
   gameState.isHumanTurn = false;
   const banner = document.getElementById('humanTurnBanner');
   if (banner) banner.classList.remove('show');
-  renderBoard();  // clear highlights immediately
+  if (_cmcb.ready && _cmcb.board) _cmcb.board.disableMoveInput();
 
   try {
     const res = await fetch(`${API}/api/human-move`, {
@@ -2017,13 +1874,13 @@ async function submitHumanMove(uci) {
       // Re-enable human turn on error so they can try again
       gameState.isHumanTurn = true;
       if (banner) banner.classList.add('show');
-      renderBoard();
+      _cmcbRender(false);
     }
   } catch(e) {
     console.error('Failed to submit human move:', e);
     gameState.isHumanTurn = true;
     if (banner) banner.classList.add('show');
-    renderBoard();
+    _cmcbRender(false);
   }
 }
 
@@ -2623,7 +2480,6 @@ function onGameStart(d) {
   gameState.isHumanTurn = false;
   gameState.humanLegalUci = [];
   gameState.humanCandidates = [];
-  humanSelected = null;
   // Determine which color (if any) is the human player
   if (d.white_is_human) gameState.humanColor = 'white';
   else if (d.black_is_human) gameState.humanColor = 'black';
@@ -2639,7 +2495,7 @@ function onGameStart(d) {
     const el = document.getElementById(`avatar${c}`);
     el.src = ''; el.style.display = 'none';
   });
-  updatePlayers(); updateAnalysis(); renderBoard();
+  updatePlayers(); updateAnalysis(); _cmcbRender(false);
   // Kick off portrait fetch for both players (non-blocking)
   if (d.white_model_id) fetchPortrait(d.white_model_id, 'White');
   if (d.black_model_id) fetchPortrait(d.black_model_id, 'Black');
@@ -2669,13 +2525,24 @@ function onThinking(d) {
   gameState.isHumanTurn   = !!d.is_human_turn;
   gameState.humanLegalUci = d.legal_uci || [];
   gameState.humanCandidates = (d.candidates || []).map(c => c.uci);
-  humanSelected = null;
 
   // Show/hide "YOUR MOVE" banner
   const banner = document.getElementById('humanTurnBanner');
   if (banner) banner.classList.toggle('show', gameState.isHumanTurn);
 
-  updatePlayers(); updateAnalysis(); renderBoard();
+  // Draw candidate arrows (clear old ones first)
+  if (_cmcb.ready && _cmcb.board) {
+    _cmcb.board.removeArrows();
+    (gameState.candidates || []).forEach((cand, i) => {
+      const uci = cand.uci || cand.move || '';
+      if (uci.length >= 4) {
+        const from = uci.slice(0, 2), to = uci.slice(2, 4);
+        _cmcb.board.addArrow(i === 0 ? _cmcb.ARROW_TYPE.default : _cmcb.ARROW_TYPE.secondary, from, to);
+      }
+    });
+  }
+
+  updatePlayers(); updateAnalysis(); _cmcbRender(false);
 }
 
 function onMove(d) {
@@ -2685,11 +2552,12 @@ function onMove(d) {
   gameState.candidates = [];
   gameState.isHumanTurn = false;
   gameState.humanLegalUci = [];
-  humanSelected = null;
   const banner = document.getElementById('humanTurnBanner');
   if (banner) banner.classList.remove('show');
   if (d.score_cp_white != null) gameState.lastEvalCp = d.score_cp_white;
-  updatePlayers(); updateAnalysis(); renderBoard(true);  // true = animate the arriving piece
+  // Clear candidate arrows on move
+  if (_cmcb.ready && _cmcb.board) _cmcb.board.removeArrows();
+  updatePlayers(); updateAnalysis(); _cmcbRender(true);  // true = animate
   addMoveCard(d);
   pushEval(d.move_number, d.score_cp_white);
 }
@@ -2697,7 +2565,8 @@ function onMove(d) {
 function onGameOver(d) {
   gameState.thinking = null;
   gameState.isHumanTurn = false;
-  humanSelected = null;
+  // Clear candidate arrows on game over
+  if (_cmcb.ready && _cmcb.board) _cmcb.board.removeArrows();
   const banner = document.getElementById('humanTurnBanner');
   if (banner) banner.classList.remove('show');
   updatePlayers();
@@ -2843,7 +2712,6 @@ function onTournamentStatus(d) {
   if (d.status === 'idle' || d.status === 'stopping') {
     gameState.thinking = null;
     gameState.isHumanTurn = false;
-    humanSelected = null;
     const banner = document.getElementById('humanTurnBanner');
     if (banner) banner.classList.remove('show');
   }
@@ -3224,46 +3092,16 @@ function rpRender() {
 }
 
 function rpDrawBoard(fen, lastUci) {
-  const el     = document.getElementById('rpBoard');
-  const matrix = parseFen(fen);
-  const flipped = gameState.boardFlipped;
-  const [from, to] = uciToSquares(lastUci || '');
-  const key = (r,c) => r*8+c;
-  const fromKey = from ? key(from.row,from.col) : -1;
-  const toKey   = to   ? key(to.row,  to.col)   : -1;
-  const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
-  const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
-  const pieces = currentPieces();
+  if (!_cmcb.ready || !_cmcb.rpBoard) return;
+  const { MARKER_TYPE } = _cmcb;
 
-  el.innerHTML = '';
-  rows.forEach((r, ri) => {
-    cols.forEach((c, ci) => {
-      const sq    = document.createElement('div');
-      const light = (r+c)%2===0;
-      sq.className = 'sq ' + (light ? 'light' : 'dark');
-      const k = key(r,c);
-      if (k===fromKey) sq.classList.add('hi-from');
-      if (k===toKey)   sq.classList.add('hi-to');
-      if (ci===0) {
-        const lbl = document.createElement('span');
-        lbl.className='sq-label rank'; lbl.textContent=8-r;
-        sq.appendChild(lbl);
-      }
-      if (ri===7) {
-        const lbl = document.createElement('span');
-        lbl.className='sq-label file'; lbl.textContent=FILES[c];
-        sq.appendChild(lbl);
-      }
-      const piece = matrix[r][c];
-      if (piece) {
-        const span = document.createElement('span');
-        span.className = 'piece ' + (piece===piece.toUpperCase()?'w':'b');
-        span.textContent = pieces[piece] || piece;
-        sq.appendChild(span);
-      }
-      el.appendChild(sq);
-    });
-  });
+  _cmcb.rpBoard.setPosition(fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', false);
+  _cmcb.rpBoard.removeMarkers(MARKER_TYPE.square);
+
+  if (lastUci && lastUci.length >= 4) {
+    _cmcb.rpBoard.addMarker(MARKER_TYPE.square, lastUci.slice(0, 2));
+    _cmcb.rpBoard.addMarker(MARKER_TYPE.square, lastUci.slice(2, 4));
+  }
 
   // Refresh captured-pieces graveyards for replay
   renderGraveyards(fen, { white: 'rpGraveyardWhite', black: 'rpGraveyardBlack' });
@@ -3332,25 +3170,82 @@ function renderEvalGraph() {
 // ── Boot ──────────────────────────────────────────────────────────────────
 applySettings();   // apply persisted settings before first render
 buildThemeSwatches();
-sizeBoard();
-connect();
-loadLeaderboard();
-loadHistory();
-loadTournamentHistory();
-setInterval(loadLeaderboard, 30000);
 
-// Auto-fetch models for all lmstudio slots on page load
-['white', 'black', 'tutor'].forEach(side => {
-  const backend = document.getElementById(side + 'Backend');
-  if (backend && backend.value === 'lmstudio') fetchModels(side);
-});
+(async () => {
+  // ── Load cm-chessboard modules ──────────────────────────────────────────
+  const ASSETS = 'https://cdn.jsdelivr.net/npm/cm-chessboard@8/';
+  const [
+    { Chessboard, COLOR, INPUT_EVENT_TYPE, FEN, BORDER_TYPE, PIECES_FILE_TYPE },
+    { Markers, MARKER_TYPE },
+    { Arrows, ARROW_TYPE },
+  ] = await Promise.all([
+    import('https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/Chessboard.js'),
+    import('https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/extensions/markers/Markers.js'),
+    import('https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/extensions/arrows/Arrows.js'),
+  ]);
 
-// Re-fetch when the URL input loses focus (user typed a different endpoint)
-['white', 'black', 'tutor'].forEach(side => {
-  const urlId = side === 'tutor' ? 'tutorUrl' : side + 'Url';
-  const el = document.getElementById(urlId);
-  if (el) el.addEventListener('change', () => fetchModels(side));
-});
+  // ── Initialize main board ────────────────────────────────────────────────
+  _cmcb.board = new Chessboard(document.getElementById('board'), {
+    position: gameState.fen,
+    orientation: gameState.boardFlipped ? COLOR.black : COLOR.white,
+    assetsUrl: ASSETS,
+    style: {
+      cssClass: 'default',
+      showCoordinates: true,
+      borderType: BORDER_TYPE.none,
+      animationDuration: 180,
+      pieces: { type: PIECES_FILE_TYPE.svgSprite, file: 'assets/pieces/standard.svg' },
+    },
+    extensions: [
+      { class: Markers, props: { autoMarkers: MARKER_TYPE.frame } },
+      { class: Arrows,  props: { sprite: ASSETS + 'src/extensions/arrows/arrows.svg' } },
+    ],
+  });
+
+  // ── Initialize replay board (read-only, no arrows needed) ───────────────
+  _cmcb.rpBoard = new Chessboard(document.getElementById('rpBoard'), {
+    position: FEN.empty,
+    orientation: gameState.boardFlipped ? COLOR.black : COLOR.white,
+    assetsUrl: ASSETS,
+    style: {
+      cssClass: 'default',
+      showCoordinates: true,
+      borderType: BORDER_TYPE.none,
+      animationDuration: 0,
+      pieces: { type: PIECES_FILE_TYPE.svgSprite, file: 'assets/pieces/standard.svg' },
+    },
+    extensions: [{ class: Markers }],
+  });
+
+  // ── Expose module exports on _cmcb for use by other functions ───────────
+  _cmcb.COLOR            = COLOR;
+  _cmcb.INPUT_EVENT_TYPE = INPUT_EVENT_TYPE;
+  _cmcb.FEN              = FEN;
+  _cmcb.MARKER_TYPE      = MARKER_TYPE;
+  _cmcb.ARROW_TYPE       = ARROW_TYPE;
+  _cmcb.ready            = true;
+
+  // ── Kick off the rest of the boot sequence ──────────────────────────────
+  sizeBoard();
+  connect();
+  loadLeaderboard();
+  loadHistory();
+  loadTournamentHistory();
+  setInterval(loadLeaderboard, 30000);
+
+  // Auto-fetch models for all lmstudio slots on page load
+  ['white', 'black', 'tutor'].forEach(side => {
+    const backend = document.getElementById(side + 'Backend');
+    if (backend && backend.value === 'lmstudio') fetchModels(side);
+  });
+
+  // Re-fetch when the URL input loses focus (user typed a different endpoint)
+  ['white', 'black', 'tutor'].forEach(side => {
+    const urlId = side === 'tutor' ? 'tutorUrl' : side + 'Url';
+    const el = document.getElementById(urlId);
+    if (el) el.addEventListener('change', () => fetchModels(side));
+  });
+})();
 </script>
 </body>
 </html>
