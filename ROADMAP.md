@@ -96,8 +96,8 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [x] **Bracket state persistence**: `tournaments` + `tournament_games` DB tables; survives restart
 - [x] **Tournament titles**: 15 deterministic titles assigned from `hash(model_id + format)`; stored in DB
 - [x] **Tournament history**: `/api/tournament/history`; shown in viewer sidebar + stats page
-- [ ] **Seeding**: initial bracket seeding by current ELO; manual seed override option
-- [ ] **Best-of series**: track set scores within a matchup for a more dramatic narrative
+- [x] **Seeding**: bracket seeded by current ELO at tournament start; highest-rated model is gauntlet champion
+- [x] **Best-of series**: track per-pair wins; series ends early when mathematically decided; series scores shown in standings tooltip
 
 ---
 
@@ -106,7 +106,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 - [x] **Lesson compression / strategic profile**: every 5 games once 10+ lessons are stored, tutor distils all raw lessons into a strategic profile (2–4 persistent weaknesses, 1–3 consistent strengths); profile replaces the raw list in the system prompt (+ 3 most recent lessons for recency); displayed in model card under "Strategic profile"
 - [x] **Opening awareness**: ECO code + opening name passed to lesson prompt — "In the Sicilian Najdorf, your knight retreat on move 14 ignored the standard d5 break"
-- [ ] **Lesson effectiveness tracking**: correlate lesson topics with subsequent quality improvements — did the coaching actually work?
+- [x] **Lesson effectiveness tracking**: `bad_move_rate_before` stored per lesson batch; `get_lesson_effectiveness()` computes avg bad-move rate delta vs next 3 games; ↑↓→ chips shown per lesson in model card; `/api/models/{id}/lesson-effectiveness` endpoint
 - [x] **Draw lesson handling**: draws with clean play (no blunders/mistakes) skip lesson generation entirely; draws with errors use a lighter single-bullet prompt
 
 ---
