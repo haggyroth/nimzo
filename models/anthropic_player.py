@@ -1,5 +1,9 @@
 """
 Anthropic Claude player — uses the Messages API.
+
+When extended thinking is enabled the API returns a separate thinking block
+in message.content; we surface that as thinking_content in MoveDecision so
+the viewer can show it in the move card.
 """
 
 import os
@@ -8,6 +12,7 @@ import chess
 import anthropic
 
 from .base import ChessPlayer, PlayerConfig, MoveDecision
+from .model_profiles import get_profile
 
 
 class AnthropicPlayer(ChessPlayer):
@@ -28,7 +33,16 @@ class AnthropicPlayer(ChessPlayer):
         candidates: list[tuple[chess.Move, float]],
         game_history_pgn: str,
     ) -> MoveDecision:
-        prompt = self.build_prompt(board, candidates, game_history_pgn)
+        prompt  = self.build_prompt(board, candidates, game_history_pgn)
+        thinking = self.config.enable_thinking
+        profile  = get_profile(self.config.model_id)
+
+        # Thinking budget: prefer profile setting, fall back to 800
+        budget = (
+            profile.thinking_budget_tokens
+            if (profile and profile.thinking_budget_tokens)
+            else 800
+        )
 
         kwargs: dict = dict(
             model=self.config.model_id,
@@ -36,26 +50,34 @@ class AnthropicPlayer(ChessPlayer):
             system=self.build_system_prompt(),
             messages=[{"role": "user", "content": prompt}],
         )
-        if not self.config.enable_thinking:
+        if not thinking:
             kwargs["temperature"] = self.config.temperature
         else:
-            kwargs["thinking"] = {"type": "enabled", "budget_tokens": 800}
-            kwargs["max_tokens"] = 2048
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
+            kwargs["max_tokens"] = max(budget + 1024, 2048)
 
         message = self.client.messages.create(**kwargs)
 
-        # Extract text content (skip thinking blocks)
-        raw = next(
-            (block.text for block in message.content if hasattr(block, "text")),
-            "",
-        )
-        return self._parse_response(raw, candidates, board)
+        # Separate thinking blocks from text blocks
+        thinking_parts: list[str] = []
+        text_parts: list[str] = []
+        for block in message.content:
+            if hasattr(block, "thinking"):
+                thinking_parts.append(block.thinking)
+            elif hasattr(block, "text"):
+                text_parts.append(block.text)
+
+        raw              = "\n".join(text_parts)
+        thinking_content = "\n\n".join(thinking_parts)
+
+        return self._parse_response(raw, candidates, board, thinking_content)
 
     def _parse_response(
         self,
         raw: str,
         candidates: list[tuple[chess.Move, float]],
         board: chess.Board,
+        thinking_content: str = "",
     ) -> MoveDecision:
         choice_match    = re.search(r"CHOICE:\s*(\d+)", raw, re.IGNORECASE)
         move_match      = re.search(r"MOVE:\s*([a-h][1-8][a-h][1-8][qrbn]?)", raw, re.IGNORECASE)
@@ -69,14 +91,14 @@ class AnthropicPlayer(ChessPlayer):
             move = chess.Move.from_uci(uci)
             if move in board.legal_moves:
                 rank = next((i + 1 for i, (c, _) in enumerate(candidates) if c == move), 0)
-                return MoveDecision(uci, reasoning, rank, raw)
+                return MoveDecision(uci, reasoning, rank, raw, thinking_content)
 
         # 2. CHOICE number
         if choice_match:
             idx = int(choice_match.group(1)) - 1
             if 0 <= idx < len(candidates):
                 move, _ = candidates[idx]
-                return MoveDecision(move.uci(), reasoning, idx + 1, raw)
+                return MoveDecision(move.uci(), reasoning, idx + 1, raw, thinking_content)
 
         # 3. Any UCI string in the response that's a candidate
         for token in re.findall(r"[a-h][1-8][a-h][1-8][qrbn]?", raw, re.IGNORECASE):
@@ -84,10 +106,12 @@ class AnthropicPlayer(ChessPlayer):
                 move = chess.Move.from_uci(token.lower())
                 if move in board.legal_moves:
                     rank = next((i + 1 for i, (c, _) in enumerate(candidates) if c == move), 0)
-                    return MoveDecision(move.uci(), reasoning, rank, raw)
+                    return MoveDecision(move.uci(), reasoning, rank, raw, thinking_content)
             except ValueError:
                 continue
 
         # 4. Fallback
         move, _ = candidates[0]
-        return MoveDecision(move.uci(), "(parse failed — defaulted to top candidate)", 1, raw)
+        return MoveDecision(
+            move.uci(), "(parse failed — defaulted to top candidate)", 1, raw, thinking_content
+        )

@@ -41,17 +41,18 @@ CREATE TABLE IF NOT EXISTS games (
 );
 
 CREATE TABLE IF NOT EXISTS moves (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    game_id        INTEGER REFERENCES games(id),
-    move_number    INTEGER,
-    player_id      INTEGER REFERENCES players(id),
-    move_uci       TEXT,
-    move_san       TEXT,
-    candidate_rank INTEGER,
-    quality        TEXT,
-    score_cp       REAL,
-    reasoning      TEXT,
-    fen_after      TEXT
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id          INTEGER REFERENCES games(id),
+    move_number      INTEGER,
+    player_id        INTEGER REFERENCES players(id),
+    move_uci         TEXT,
+    move_san         TEXT,
+    candidate_rank   INTEGER,
+    quality          TEXT,
+    score_cp         REAL,
+    reasoning        TEXT,
+    fen_after        TEXT,
+    thinking_content TEXT
 );
 
 CREATE TABLE IF NOT EXISTS lessons (
@@ -127,6 +128,11 @@ def _migrate(conn: sqlite3.Connection):
     # Add strategic_profile column if missing (lesson compression)
     try:
         conn.execute("ALTER TABLE players ADD COLUMN strategic_profile TEXT")
+    except sqlite3.OperationalError:
+        pass  # already exists
+    # Add thinking_content column if missing (pre-Phase-10 databases)
+    try:
+        conn.execute("ALTER TABLE moves ADD COLUMN thinking_content TEXT")
     except sqlite3.OperationalError:
         pass  # already exists
     # Create tournament tables for existing DBs (CREATE TABLE IF NOT EXISTS is idempotent
@@ -344,6 +350,7 @@ def record_move(
     score_cp: Optional[float],
     reasoning: str,
     fen_after: str,
+    thinking_content: str = "",
 ):
     with get_conn() as conn:
         player_id = conn.execute(
@@ -353,12 +360,14 @@ def record_move(
             """
             INSERT INTO moves
               (game_id, move_number, player_id, move_uci, move_san,
-               candidate_rank, quality, score_cp, reasoning, fen_after)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               candidate_rank, quality, score_cp, reasoning, fen_after,
+               thinking_content)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 game_id, move_number, player_id, move_uci, move_san,
                 candidate_rank, quality, score_cp, reasoning, fen_after,
+                thinking_content or "",
             ),
         )
 
@@ -385,7 +394,7 @@ def get_game_moves(game_id: int) -> list[dict]:
         rows = conn.execute(
             """
             SELECT m.move_number, m.move_san, m.move_uci, m.quality,
-                   m.candidate_rank, m.reasoning, m.score_cp
+                   m.candidate_rank, m.reasoning, m.score_cp, m.thinking_content
             FROM moves m
             WHERE m.game_id = ?
             ORDER BY m.move_number ASC

@@ -798,6 +798,7 @@ async def play_game(
             "quality":        quality,
             "score_cp":       score_cp_white,
             "reasoning":      decision.reasoning,
+            "thinking_content": decision.thinking_content,
             "fen_after":      board.fen(),
         })
 
@@ -811,6 +812,7 @@ async def play_game(
             "quality":        quality,
             "candidate_rank": decision.candidate_rank,
             "reasoning":      decision.reasoning,
+            "thinking_content": decision.thinking_content,
             "score_cp_white": score_cp_white,
             "fen":            board.fen(),
         })
@@ -869,6 +871,7 @@ async def play_game(
             quality=rec["quality"],
             score_cp=rec["score_cp"],
             reasoning=rec["reasoning"],
+            thinking_content=rec["thinking_content"],
             fen_after=rec["fen_after"],
         )
 
