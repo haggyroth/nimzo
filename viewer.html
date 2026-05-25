@@ -1800,7 +1800,7 @@ async function _cmcbRender(animate) {
       const { INPUT_EVENT_TYPE } = _cmcb;
       if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
         // Allow drag only if this piece has at least one legal/candidate move
-        return allowedUci.some(u => u.startsWith(event.square));
+        return allowedUci.some(u => u.startsWith(event.squareFrom));
       }
       if (event.type === INPUT_EVENT_TYPE.validateMoveInput) {
         const uci = event.squareFrom + event.squareTo;
