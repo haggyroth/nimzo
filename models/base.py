@@ -163,6 +163,13 @@ Do not suggest any move not in the list above."""
             return f"{base}\n\nCoach's notes from your recent games:\n{notes}"
         return base
 
+    def get_legal_uci_moves(self) -> list[str]:
+        """
+        Return all legal UCI moves on the current board.
+        Only meaningful for HumanPlayer; LLM players return an empty list.
+        """
+        return []
+
     def add_lesson(self, lesson: str):
         """lesson should already include [improve] or [strength] prefix."""
         self.config.lesson_memory.append(lesson)
