@@ -22,6 +22,7 @@ class PlayerConfig:
     enable_thinking: bool = False      # Extended thinking (Qwen3, etc.)
     system_prompt: str = ""            # Optional override (rarely needed)
     move_timeout: int = 0              # Seconds per move, 0 = no limit
+    style: str = ""                    # Play style: "aggressive" | "positional" | "defensive" | ""
     lesson_memory: list[str] = field(default_factory=list)
     strategic_profile: Optional[str] = None   # Compressed multi-game coaching profile
 
@@ -97,12 +98,36 @@ REASONING: <2-4 sentences on why this move fits your strategic plan>
 
 Do not suggest any move not in the list above."""
 
+    # Directives injected when a personality style is set
+    _STYLE_DIRECTIVES: dict = {
+        "aggressive": (
+            "Your playing style is aggressive. Favour open games, tactical complications, "
+            "and piece activity. Sacrifice material for initiative when the position allows. "
+            "Keep queens on the board and create imbalances; avoid dry, symmetrical positions."
+        ),
+        "positional": (
+            "Your playing style is positional. Favour closed structures, outpost control, "
+            "and long-term pawn majorities. Trade pieces when it improves your structure. "
+            "Avoid premature attacks and prefer patient manoeuvring."
+        ),
+        "defensive": (
+            "Your playing style is defensive. Consolidate your position before attacking. "
+            "Trade pieces when ahead in material and keep the position solid. "
+            "Only launch a counterattack once your own king is safe and your structure is sound."
+        ),
+    }
+
     def build_system_prompt(self) -> str:
         base = (
             "You are a chess player competing in an AI tournament. "
             "You think strategically, consider your opponent's plans, "
             "and play to win. Be concise but show your reasoning."
         )
+
+        # Personality style directive
+        style_dir = self._STYLE_DIRECTIVES.get(self.config.style or "", "")
+        if style_dir:
+            base = f"{base}\n\n{style_dir}"
 
         if self.config.system_prompt:
             base = f"{base}\n\n{self.config.system_prompt}"

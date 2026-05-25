@@ -745,6 +745,81 @@ def get_player_move_stats() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_player_quality_stats(model_id: str) -> Optional[dict]:
+    """
+    Move-quality breakdown for a single model.
+    Returns rates (0-1), counts, avg candidate rank and avg centipawn loss,
+    or None if the player is unknown or has no moves.
+    """
+    with get_conn() as conn:
+        pid_row = conn.execute(
+            "SELECT id FROM players WHERE model_id = ?", (model_id,)
+        ).fetchone()
+        if not pid_row:
+            return None
+        pid = pid_row["id"]
+        row = conn.execute(
+            """
+            SELECT
+                COUNT(*)                                                        AS total_moves,
+                SUM(CASE WHEN quality='best'       THEN 1 ELSE 0 END)          AS best,
+                SUM(CASE WHEN quality='excellent'  THEN 1 ELSE 0 END)          AS excellent,
+                SUM(CASE WHEN quality='good'       THEN 1 ELSE 0 END)          AS good,
+                SUM(CASE WHEN quality='inaccuracy' THEN 1 ELSE 0 END)          AS inaccuracy,
+                SUM(CASE WHEN quality='mistake'    THEN 1 ELSE 0 END)          AS mistake,
+                SUM(CASE WHEN quality='blunder'    THEN 1 ELSE 0 END)          AS blunder,
+                ROUND(AVG(candidate_rank), 2)                                  AS avg_candidate_rank,
+                ROUND(AVG(CASE WHEN score_cp IS NOT NULL THEN score_cp END), 1) AS avg_score_cp
+            FROM moves
+            WHERE player_id = ?
+            """,
+            (pid,),
+        ).fetchone()
+        if not row or not row["total_moves"]:
+            return None
+        d = dict(row)
+        n = d["total_moves"]
+        for q in ("best", "excellent", "good", "inaccuracy", "mistake", "blunder"):
+            d[f"{q}_rate"] = round((d[q] or 0) / n, 4)
+        d["bad_move_rate"] = round(((d["mistake"] or 0) + (d["blunder"] or 0)) / n, 4)
+        d["model_id"] = model_id
+        return d
+
+
+def get_recent_win_rate(model_id: str, n: int = 10) -> Optional[float]:
+    """
+    Win rate (0-1) for a model over its last *n* games.
+    Draws count as 0.5.  Returns None if fewer than *n* games exist.
+    """
+    with get_conn() as conn:
+        pid_row = conn.execute(
+            "SELECT id FROM players WHERE model_id = ?", (model_id,)
+        ).fetchone()
+        if not pid_row:
+            return None
+        pid = pid_row["id"]
+        rows = conn.execute(
+            """
+            SELECT result, white_player_id
+            FROM games
+            WHERE white_player_id = ? OR black_player_id = ?
+            ORDER BY played_at DESC, id DESC
+            LIMIT ?
+            """,
+            (pid, pid, n),
+        ).fetchall()
+        if len(rows) < n:
+            return None
+        score = 0.0
+        for r in rows:
+            is_white = r["white_player_id"] == pid
+            if r["result"] == "1/2-1/2":
+                score += 0.5
+            elif (r["result"] == "1-0" and is_white) or (r["result"] == "0-1" and not is_white):
+                score += 1.0
+        return round(score / n, 4)
+
+
 def get_color_stats() -> list[dict]:
     """Per-player win/draw/loss split broken out by colour played."""
     with get_conn() as conn:

@@ -1281,6 +1281,12 @@
                 <button class="fetch-btn" onclick="fetchModels('white')" title="Load models">⟳</button>
               </div>
               <select class="ctrl-select" id="whiteModel" onchange="onModelSelect('white')"><option value="">— select model —</option></select>
+              <select class="ctrl-select" id="whiteStyle" title="Playing style injected into the model's system prompt">
+                <option value="">⚖ Balanced (default)</option>
+                <option value="aggressive">⚔ Aggressive</option>
+                <option value="positional">♟ Positional</option>
+                <option value="defensive">🛡 Defensive</option>
+              </select>
               <label class="toggle-row">
                 <input type="checkbox" id="whiteThinking"> Extended thinking
               </label>
@@ -1302,6 +1308,12 @@
                 <button class="fetch-btn" onclick="fetchModels('black')" title="Load models">⟳</button>
               </div>
               <select class="ctrl-select" id="blackModel" onchange="onModelSelect('black')"><option value="">— select model —</option></select>
+              <select class="ctrl-select" id="blackStyle" title="Playing style injected into the model's system prompt">
+                <option value="">⚖ Balanced (default)</option>
+                <option value="aggressive">⚔ Aggressive</option>
+                <option value="positional">♟ Positional</option>
+                <option value="defensive">🛡 Defensive</option>
+              </select>
               <label class="toggle-row">
                 <input type="checkbox" id="blackThinking"> Extended thinking
               </label>
@@ -1340,6 +1352,12 @@
                 Assisted mode (see Stockfish candidates)
               </label>
             </div>
+
+            <hr class="divider">
+            <label class="toggle-row" title="Auto-adjust candidate count based on each model's rolling win rate (kicks in after 10 games)">
+              <input type="checkbox" id="adaptiveDifficulty">
+              Adaptive difficulty
+            </label>
 
             <button class="start-btn" id="startBtn" onclick="startTournament()">▶ Start Match</button>
           </div>
@@ -2262,7 +2280,7 @@ let trnNextId = 0;
 
 function trnAddPlayer() {
   const id = trnNextId++;
-  trnPlayers.push({ id, name: '', backend: 'lmstudio', url: 'http://localhost:1234/v1', model: '', thinking: false });
+  trnPlayers.push({ id, name: '', backend: 'lmstudio', url: 'http://localhost:1234/v1', model: '', thinking: false, style: '' });
   renderTrnPlayerList();
 }
 
@@ -2293,6 +2311,12 @@ function renderTrnPlayerList() {
         <option value="">— select model —</option>
         ${p.model ? `<option value="${escHtml(p.model)}" selected>${escHtml(p.model)}</option>` : ''}
       </select>
+      <select class="ctrl-select" id="trnStyle_${p.id}" onchange="trnSync(${p.id})" title="Playing style">
+        <option value="" ${!p.style?'selected':''}>⚖ Balanced</option>
+        <option value="aggressive" ${p.style==='aggressive'?'selected':''}>⚔ Aggressive</option>
+        <option value="positional" ${p.style==='positional'?'selected':''}>♟ Positional</option>
+        <option value="defensive" ${p.style==='defensive'?'selected':''}>🛡 Defensive</option>
+      </select>
       <label class="toggle-row">
         <input type="checkbox" id="trnThink_${p.id}" ${p.thinking?'checked':''} onchange="trnSync(${p.id})"> Extended thinking
       </label>
@@ -2306,6 +2330,7 @@ function trnSync(id) {
   p.name     = document.getElementById(`trnName_${id}`).value;
   p.url      = document.getElementById(`trnUrl_${id}`).value;
   p.thinking = document.getElementById(`trnThink_${id}`).checked;
+  p.style    = document.getElementById(`trnStyle_${id}`)?.value || '';
 }
 
 function trnSyncBackend(id) {
@@ -2377,16 +2402,19 @@ async function startTournament() {
     white_model:     wModel,
     white_url:       document.getElementById('whiteUrl').value,
     white_thinking:  document.getElementById('whiteThinking').checked,
+    white_style:     document.getElementById('whiteStyle').value,
     black_backend:   bBackend,
     black_name:      document.getElementById('blackName').value || 'Black',
     black_model:     bModel,
     black_url:       document.getElementById('blackUrl').value,
     black_thinking:  document.getElementById('blackThinking').checked,
+    black_style:     document.getElementById('blackStyle').value,
     tutor_backend:   tutorBackend==='none' ? 'lmstudio' : tutorBackend,
     tutor_model:     tutorModel,
     tutor_url:       tutorUrl || 'http://localhost:1234/v1',
     games:           parseInt(document.getElementById('gamesCount').value) || 10,
     human_assisted:  document.getElementById('humanAssisted') ? document.getElementById('humanAssisted').checked : true,
+    adaptive_difficulty: document.getElementById('adaptiveDifficulty') ? document.getElementById('adaptiveDifficulty').checked : false,
   };
 
   const res = await fetch(`${API}/api/tournament/start`, {
@@ -2417,6 +2445,7 @@ async function startBracketTournament() {
       model_id: p.model,
       url:      p.url,
       thinking: p.thinking,
+      style:    p.style || '',
     })),
     format:         document.getElementById('trnFormat').value,
     games_per_pair: parseInt(document.getElementById('trnGamesPair').value) || 2,
