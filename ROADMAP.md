@@ -180,17 +180,17 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 14 — Board Rendering Upgrade
-*Future*
+## Phase 14 — Board Rendering Upgrade ✅
+*v14 release*
 
-- [ ] **Migrate to cm-chessboard**: replace the hand-rolled SVG board in `viewer.html` with [cm-chessboard](https://github.com/shaack/cm-chessboard) — a proper canvas/SVG chess library with built-in piece sets, animations, and move input
-- [ ] **Piece sets**: support multiple piece set themes (e.g. cburnett, merida, alpha) via cm-chessboard's asset system
-- [ ] **Drag-and-drop move input**: replace click-click human input with native drag-and-drop via cm-chessboard's `INPUT_EVENT_TYPE.movePiece` handler
-- [ ] **Legal move markers**: use cm-chessboard's built-in marker API for legal move dots/destination rings instead of manual CSS overlays
-- [ ] **Promotion picker**: native cm-chessboard promotion dialog instead of auto-queen
-- [ ] **Smooth animations**: cm-chessboard handles piece slide animations natively; remove the custom `pieceArrive` CSS keyframe
-- [ ] **Arrow overlays**: draw Stockfish candidate arrows on the board using cm-chessboard's arrow extension
-- [ ] **Mobile touch support**: cm-chessboard handles touch events natively; human play becomes usable on phones/tablets
+- [x] **Migrate to cm-chessboard**: replace the hand-rolled SVG board in `viewer.html` with [cm-chessboard](https://github.com/shaack/cm-chessboard) — loaded from jsDelivr CDN via dynamic ES module imports; board renders SVG pieces from the Wikimedia standard set
+- [x] **Piece sets**: cm-chessboard uses the standard SVG sprite (Wikimedia CC BY-SA 3.0); the Unicode/Letters buttons remain in the settings panel but no longer affect the board (SVG-only)
+- [x] **Drag-and-drop move input**: replaced click-click human input with native drag-and-drop via cm-chessboard's `enableMoveInput()` / `INPUT_EVENT_TYPE.validateMoveInput` handler; `onHumanSquareClick()` removed entirely
+- [x] **Legal move markers**: cm-chessboard `autoMarkers: MARKER_TYPE.frame` highlights legal drag sources automatically; last-move squares marked via `MARKER_TYPE.square` (gold tint via CSS override)
+- [x] **Promotion picker**: cm-chessboard handles promotion UI natively; auto-queen fallback preserved via `promotions.find(u => u.endsWith('q'))` in the validate handler
+- [x] **Smooth animations**: cm-chessboard handles piece slide animations natively (180ms); removed custom `pieceArrive` CSS keyframe and hand-rolled animation offset computation
+- [x] **Arrow overlays**: Stockfish candidate arrows drawn on `thinking` events using cm-chessboard's Arrows extension — `ARROW_TYPE.default` for the top candidate, `ARROW_TYPE.secondary` for the rest; cleared on `move` and `game_over`
+- [x] **Mobile touch support**: cm-chessboard handles touch events natively; human play works on phones/tablets
 
 ---
 
