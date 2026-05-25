@@ -446,6 +446,12 @@
     .move-badge.blunder    { color: var(--q-blunder); }
 
     .move-rank-text { font-size: 8px; color: var(--text-dim); }
+    .move-coherence {
+      font-size: 8px; color: var(--text-mid); margin-left: 5px; font-family: var(--ui-font);
+    }
+    .move-coherence.hi { color: var(--q-excellent); }
+    .move-coherence.lo { color: var(--q-blunder); }
+    .move-timeout { font-size: 7px; color: var(--q-mistake); margin-left: 4px; letter-spacing: .5px; }
     .move-reason {
       font-size: 9px; font-style: italic; color: var(--text-mid); line-height: 1.5; margin-top: 3px;
       display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
@@ -2137,9 +2143,19 @@ function addMoveCard(data) {
   const rankStr = rank===1?'★ top pick':rank?`#${rank} candidate`:'';
   const showReason = data.reasoning &&
         data.reasoning!=='(no reasoning)' &&
-        data.reasoning!=='(parse failed — defaulted to top candidate)';
+        data.reasoning!=='(parse failed — defaulted to top candidate)' &&
+        !data.reasoning.startsWith('(');
 
   const showThink = !!(data.thinking_content && data.thinking_content.trim());
+
+  // Reasoning coherence chip
+  const cs = data.coherence_score;
+  let coherenceHtml = '';
+  if (cs != null) {
+    const cls = cs >= 7 ? 'hi' : cs <= 3 ? 'lo' : '';
+    coherenceHtml = `<span class="move-coherence ${cls}" title="Reasoning coherence score">🎯 ${cs}/10</span>`;
+  }
+  const timeoutHtml = data.timed_out ? `<span class="move-timeout" title="Model timed out">⏱ timeout</span>` : '';
 
   const card = document.createElement('div');
   card.className = `move-card ${q}`;
@@ -2148,6 +2164,7 @@ function addMoveCard(data) {
       <span class="move-num-label">${label}</span>
       <span class="move-san-text">${data.san}</span>
       <span class="move-badge ${q}">${q}</span>
+      ${coherenceHtml}${timeoutHtml}
     </div>
     ${rankStr ? `<div class="move-rank-text">${rankStr}</div>` : ''}
     ${showReason ? `<div class="move-reason">${escHtml(data.reasoning)}</div>` : ''}
