@@ -1440,6 +1440,7 @@
         Recent Games
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadHistory()">↻</span>
+          <span title="Export all games as PGN" style="font-size:10px;color:var(--text-dim);cursor:pointer" onclick="event.stopPropagation();exportAllPgn()">⬇ PGN</span>
           <span class="chevron">▾</span>
         </div>
       </div>
@@ -2878,6 +2879,18 @@ function downloadPgn() {
   const a = document.createElement('a');
   a.href = `${API}/api/games/${id}/pgn`;
   a.download = '';   // server sets filename via Content-Disposition
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function exportAllPgn(modelId) {
+  const url = modelId
+    ? `${API}/api/games/export?model_id=${encodeURIComponent(modelId)}`
+    : `${API}/api/games/export`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

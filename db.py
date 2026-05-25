@@ -331,6 +331,56 @@ def record_game(
         return cur.lastrowid
 
 
+def get_all_games(
+    model_id: Optional[str] = None,
+    limit: int = 5000,
+) -> list[dict]:
+    """
+    Return game rows for bulk export, oldest-first.
+
+    model_id — when set, restrict to games where that model played as
+               either colour.  Matches on players.model_id.
+    limit    — safety cap; defaults to 5 000.
+    """
+    with get_conn() as conn:
+        if model_id:
+            rows = conn.execute(
+                """
+                SELECT
+                    g.id, g.result, g.termination, g.total_moves, g.played_at,
+                    wp.name AS white_name, bp.name AS black_name,
+                    wp.model_id AS white_model_id, bp.model_id AS black_model_id,
+                    g.white_elo_before, g.white_elo_after,
+                    g.black_elo_before, g.black_elo_after
+                FROM games g
+                JOIN players wp ON g.white_player_id = wp.id
+                JOIN players bp ON g.black_player_id = bp.id
+                WHERE wp.model_id = ? OR bp.model_id = ?
+                ORDER BY g.played_at ASC
+                LIMIT ?
+                """,
+                (model_id, model_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT
+                    g.id, g.result, g.termination, g.total_moves, g.played_at,
+                    wp.name AS white_name, bp.name AS black_name,
+                    wp.model_id AS white_model_id, bp.model_id AS black_model_id,
+                    g.white_elo_before, g.white_elo_after,
+                    g.black_elo_before, g.black_elo_after
+                FROM games g
+                JOIN players wp ON g.white_player_id = wp.id
+                JOIN players bp ON g.black_player_id = bp.id
+                ORDER BY g.played_at ASC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def get_recent_games(limit: int = 20) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
