@@ -1821,7 +1821,13 @@ function onTournamentStatus(d) {
   if (d.black)      gameState.black.name = d.black;
   if (d.white_elo)  gameState.white.elo  = d.white_elo;
   if (d.black_elo)  gameState.black.elo  = d.black_elo;
+  // Clear thinking state when the tournament stops — prevents stale
+  // "● thinking" indicator and analysis dot from lingering on screen.
+  if (d.status === 'idle' || d.status === 'stopping') {
+    gameState.thinking = null;
+  }
   updatePlayers();
+  updateAnalysis();
   if (d.status === 'idle') loadLeaderboard();
 }
 
