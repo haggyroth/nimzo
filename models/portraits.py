@@ -2,7 +2,8 @@
 Portrait generation for Nimzo model characters.
 
 Each LLM is personified as a unique illustrated chess grandmaster character,
-derived deterministically from the model ID via Google AI Studio's Imagen API.
+derived deterministically from the model ID via Google AI Studio's Gemini
+image-generation API (free tier compatible).
 
 The portrait is generated once and cached on disk + in the DB.
 Generation is best-effort — if the API key is missing or the call fails the
@@ -224,7 +225,19 @@ def portrait_filename(model_id: str) -> str:
     return f"{digest}.png"
 
 
-# ── Imagen API call ───────────────────────────────────────────────────────
+# ── Gemini image generation API call ─────────────────────────────────────
+#
+# Google AI Studio's free tier supports image generation via the Gemini
+# multimodal models (generate_content with response_modalities=["IMAGE"]).
+# We try models in priority order so a future paid upgrade automatically
+# uses the higher-quality model.
+
+_IMAGE_MODELS = [
+    "gemini-2.5-flash-image",
+    "gemini-3.1-flash-image-preview",
+    "gemini-3-pro-image-preview",
+]
+
 
 def generate_portrait(
     model_id: str,
@@ -232,13 +245,15 @@ def generate_portrait(
     portraits_dir: Path,
 ) -> Optional[str]:
     """
-    Generate a portrait for *model_id* using Google AI Studio Imagen.
+    Generate a portrait for *model_id* using Google AI Studio.
 
-    Returns the file path (relative to server root, e.g. ``portraits/abc123.png``)
-    on success, or ``None`` on any failure.
+    Uses Gemini image-generation models (free tier compatible). Tries each
+    model in ``_IMAGE_MODELS`` in order; returns the first successful result.
 
-    The caller is responsible for running this in an executor when called from
-    an async context — it is intentionally synchronous.
+    Returns the file path relative to the server root (e.g.
+    ``portraits/abc123.png``) on success, or ``None`` on any failure.
+
+    Intentionally synchronous — the caller should run this in an executor.
     """
     try:
         from google import genai  # type: ignore[import]
@@ -251,7 +266,7 @@ def generate_portrait(
     filename = portrait_filename(model_id)
     dest = portraits_dir / filename
 
-    # Skip API call if file already exists
+    # Skip API call if file already exists on disk
     if dest.exists():
         return f"portraits/{filename}"
 
@@ -259,28 +274,38 @@ def generate_portrait(
     print(f"[portraits] Generating portrait for {model_id!r}")
     print(f"[portraits] Prompt: {prompt[:120]}…")
 
-    try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_images(
-            model="imagen-3.0-generate-002",
-            prompt=prompt,
-            config=types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio="1:1",
-                safety_filter_level="block_only_high",
-                person_generation="allow_adult",
-            ),
-        )
-        images = response.generated_images
-        if not images:
-            print(f"[portraits] No images returned for {model_id!r}")
-            return None
+    client = genai.Client(api_key=api_key)
 
-        img_bytes = images[0].image.image_bytes
-        dest.write_bytes(img_bytes)
-        print(f"[portraits] Saved portrait → {dest}")
-        return f"portraits/{filename}"
+    for model_name in _IMAGE_MODELS:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["IMAGE", "TEXT"],
+                ),
+            )
+            # Extract image bytes from the first IMAGE part
+            img_bytes: Optional[bytes] = None
+            for candidate in (response.candidates or []):
+                for part in (candidate.content.parts or []):
+                    if part.inline_data and part.inline_data.data:
+                        img_bytes = part.inline_data.data
+                        break
+                if img_bytes:
+                    break
 
-    except Exception as exc:
-        print(f"[portraits] Generation failed for {model_id!r}: {exc}")
-        return None
+            if not img_bytes:
+                print(f"[portraits] {model_name}: no image in response — skipping")
+                continue
+
+            dest.write_bytes(img_bytes)
+            print(f"[portraits] Saved portrait via {model_name} → {dest} ({len(img_bytes)//1024} KB)")
+            return f"portraits/{filename}"
+
+        except Exception as exc:
+            print(f"[portraits] {model_name} failed for {model_id!r}: {exc}")
+            continue  # try next model
+
+    print(f"[portraits] All models failed for {model_id!r}")
+    return None

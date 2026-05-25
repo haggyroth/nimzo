@@ -124,6 +124,31 @@ def backfill_achievements() -> int:
     return n_total
 
 
+async def _pregenerate_portraits():
+    """
+    Background task: generate portraits for any known player that doesn't
+    have one yet.  Runs once at startup, fully non-blocking.
+    """
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        return
+    players = database.get_all_players()
+    missing = [p for p in players if not p.get("portrait_path")]
+    if not missing:
+        return
+    print(f"[portraits] Pre-generating portraits for {len(missing)} model(s)…")
+    loop = asyncio.get_event_loop()
+    for p in missing:
+        mid = p["model_id"]
+        path = await loop.run_in_executor(
+            None, generate_portrait, mid, api_key, _PORTRAITS_DIR
+        )
+        if path:
+            database.set_portrait_path(mid, path)
+            print(f"[portraits] ✓ {mid}")
+    print("[portraits] Pre-generation complete.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     database.init_db()
@@ -131,6 +156,8 @@ async def lifespan(app: FastAPI):
         n = backfill_achievements()
         if n:
             print(f"🏅 Backfilled {n} achievements from existing games.")
+    # Pre-generate portraits for all known players in the background
+    asyncio.create_task(_pregenerate_portraits())
     if _cli_config is not None:
         asyncio.create_task(_auto_start(_cli_config))
     yield

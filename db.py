@@ -144,6 +144,15 @@ def get_player_game_count(model_id: str) -> int:
         return row["cnt"] if row else 0
 
 
+def get_all_players() -> list[dict]:
+    """Return all players with their model_id and portrait_path."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT model_id, name, portrait_path FROM players ORDER BY elo DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def get_portrait_path(model_id: str) -> Optional[str]:
     """Return the stored portrait_path for a player, or None if not yet generated."""
     with get_conn() as conn:
