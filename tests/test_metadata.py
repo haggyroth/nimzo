@@ -2,7 +2,6 @@
 Tests for model ID parsing (the pure-function part of metadata.py).
 No HuggingFace API calls.
 """
-import pytest
 from models.metadata import parse_model_id
 
 

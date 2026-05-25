@@ -2,7 +2,6 @@
 Tests for _parse_lessons, build_quality_summary, and generate_lessons logic
 (the parts that don't require an LLM call).
 """
-import pytest
 from analysis import _parse_lessons, build_quality_summary, generate_lessons, TutorConfig
 
 
@@ -195,7 +194,7 @@ class TestGenerateLessonsSkipLogic:
         """A draw with blunders/mistakes should still go to the LLM."""
         tutor = TutorConfig(model_id="test-model", base_url="http://localhost:1234/v1")
         mock_call = mocker.patch("analysis._call_lmstudio", return_value="IMPROVE:\n- Watch for blunders\nSTRENGTH:\n- Good opening\n")
-        result = generate_lessons(
+        generate_lessons(
             pgn="1. e4 e5 *",
             player_name="ModelA",
             player_color="White",

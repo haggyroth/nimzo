@@ -49,7 +49,6 @@ from analysis import (
     compress_lessons,
     build_quality_summary,
     bad_move_rate,
-    detect_opening,
     detect_opening_depth,
     derive_personality_traits,
     evaluate_achievements,
@@ -358,8 +357,8 @@ async def api_game_pgn(game_id: int):
     moves = database.get_game_moves(game_id)
 
     lines = [
-        f'[Event "Nimzo Arena"]',
-        f'[Site "localhost"]',
+        '[Event "Nimzo Arena"]',
+        '[Site "localhost"]',
         f'[Date "{game_row["played_at"][:10]}"]',
         f'[White "{game_row["white_name"]}"]',
         f'[Black "{game_row["black_name"]}"]',
@@ -807,7 +806,7 @@ async def play_game(
             candidates = await loop.run_in_executor(
                 None, stockfish.get_candidates, board, current_player.config.candidate_count
             )
-        except Exception as exc:
+        except Exception:
             # Stockfish died (e.g. Ctrl+C sent SIGINT to the subprocess).
             # Treat as a clean stop rather than crashing with a traceback.
             raise TournamentAborted() from None
@@ -1494,7 +1493,8 @@ if __name__ == "__main__":
     # Free the port if something is already holding it
     if _free_port(port):
         print(f"⚠  Port {port} was in use — cleared stale process.")
-        import time; time.sleep(0.4)   # brief pause for OS to release the socket
+        import time
+        time.sleep(0.4)   # brief pause for OS to release the socket
 
     cli_mode = bool(args.white_model and args.black_model) or bool(args.config)
 
@@ -1534,9 +1534,11 @@ if __name__ == "__main__":
 
     # Auto-open browser unless suppressed or in CLI mode with --no-browser
     if not args.no_browser:
-        import threading, webbrowser
+        import threading
+        import webbrowser
         def _open_browser():
-            import time; time.sleep(1.2)   # wait for uvicorn to be ready
+            import time
+            time.sleep(1.2)   # wait for uvicorn to be ready
             webbrowser.open(f"http://localhost:{port}")
         threading.Thread(target=_open_browser, daemon=True).start()
 

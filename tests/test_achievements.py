@@ -1,7 +1,6 @@
 """
 Tests for evaluate_achievements.
 """
-import pytest
 from analysis import evaluate_achievements
 
 

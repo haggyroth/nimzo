@@ -3,10 +3,9 @@ Tests for move response parsing in both player backends.
 Uses mock API clients — no real LLM calls.
 """
 import chess
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from models.base import PlayerConfig, MoveDecision
+from models.base import PlayerConfig
 from models.lmstudio_player import LMStudioPlayer, _extract_thinking
 from models.anthropic_player import AnthropicPlayer
 from tests.fixtures.positions import starting_candidates

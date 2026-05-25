@@ -6,7 +6,6 @@ Players are keyed by model_id so ELO and lessons persist across name changes.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional

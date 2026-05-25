@@ -153,17 +153,17 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 - [x] **Human vs LLM**: click-on-board move input for human turns; `human` backend in `build_player()`; ELO stored by username; legal move highlighting on square click
 - [x] **Assisted vs blind mode**: toggle whether the human sees Stockfish candidates or plays without hints
-- [ ] **Reasoning coherence scoring**: post-move micro-eval — did the model's stated reasoning justify the chosen move? Produces a "reasoning integrity" stat per model; genuinely novel for LLM comparison; requires a small judge model call per move
+- [x] **Reasoning coherence scoring**: post-move micro-eval — did the model's stated reasoning justify the chosen move? Produces a "reasoning integrity" stat per model; genuinely novel for LLM comparison; requires a small judge model call per move
 - [x] **Stockfish difficulty scaling**: reduce candidate count or depth for human play / weaker models so they're not getting top-10 guidance and still blundering
 
 ---
 
 ## Phase 12 — Scale & Export
-*Future*
+*v12 release*
 
-- [ ] **Batch / headless mode**: run games without real-time broadcast for fast benchmarking; results written to DB only
-- [ ] **Tournament config file** (`tournament.toml`): define players, backends, format, and tutor in one file; coexists with `.env` defaults; makes named matchups replayable
-- [ ] **Time control simulation**: per-move timeout; models exceeding budget fall back to top Stockfish candidate and are flagged "timeout" in stats
+- [x] **Batch / headless mode**: run games without real-time broadcast for fast benchmarking; results written to DB only
+- [x] **Tournament config file** (`tournament.toml`): define players, backends, format, and tutor in one file; coexists with `.env` defaults; makes named matchups replayable
+- [x] **Time control simulation**: per-move timeout; models exceeding budget fall back to top Stockfish candidate and are flagged "timeout" in stats
 - [ ] **PGN collection export**: bulk export all games as a single annotated PGN file for external analysis
 
 ---
@@ -177,6 +177,29 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [ ] **Auto-update**: ship an update manifest; Tauri's updater plugin can pull new releases from GitHub releases on startup
 - [ ] **Installer / release packaging**: GitHub Actions workflow to build platform-specific installers (`.dmg`, `.exe`, `.AppImage`) on tag push
 - [ ] **App icon & branding**: design a Nimzo app icon; register as a protocol handler so `nimzo://` links can deep-link into specific tournaments or model cards
+
+---
+
+## Phase 14 — Board Rendering Upgrade
+*Future*
+
+- [ ] **Migrate to cm-chessboard**: replace the hand-rolled SVG board in `viewer.html` with [cm-chessboard](https://github.com/shaack/cm-chessboard) — a proper canvas/SVG chess library with built-in piece sets, animations, and move input
+- [ ] **Piece sets**: support multiple piece set themes (e.g. cburnett, merida, alpha) via cm-chessboard's asset system
+- [ ] **Drag-and-drop move input**: replace click-click human input with native drag-and-drop via cm-chessboard's `INPUT_EVENT_TYPE.movePiece` handler
+- [ ] **Legal move markers**: use cm-chessboard's built-in marker API for legal move dots/destination rings instead of manual CSS overlays
+- [ ] **Promotion picker**: native cm-chessboard promotion dialog instead of auto-queen
+- [ ] **Smooth animations**: cm-chessboard handles piece slide animations natively; remove the custom `pieceArrive` CSS keyframe
+- [ ] **Arrow overlays**: draw Stockfish candidate arrows on the board using cm-chessboard's arrow extension
+- [ ] **Mobile touch support**: cm-chessboard handles touch events natively; human play becomes usable on phones/tablets
+
+---
+
+## Phase 15 — Competitive Depth
+*Future*
+
+- [ ] **Player personality styles**: `style` field in `PlayerConfig` injected into system prompt — e.g. `"aggressive"` → "prefer open games, sacrifice material for initiative, never trade queens early"; `"positional"` → "favour closed structures, outpost control, long-term pawn majorities"; `"defensive"` → "consolidate before attacking, trade pieces when ahead, avoid complications"; styles make multi-game tournaments visually distinct and stress-test how well models follow strategic directives
+- [ ] **Move-quality analytics endpoint**: `GET /api/models/{model_id}/quality` returning blunder rate, avg centipawn loss, avg candidate rank, and inaccuracy rate — the DB already has all this data; the endpoint just needs to aggregate it and the leaderboard panel needs a column
+- [ ] **Adaptive difficulty**: dynamically adjust `candidate_count` (and optionally `candidate_depth`) based on a model's rolling performance — weaker models get more candidates to keep games interesting; stronger models get fewer to stress-test their reasoning; configurable target win-rate band (e.g. 40–60%)
 
 ---
 

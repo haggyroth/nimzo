@@ -2,7 +2,6 @@
 Tests for model profile matching and loading.
 """
 import json
-import pytest
 from pathlib import Path
 from models.model_profiles import get_profile, ModelProfile, reload
 
