@@ -413,6 +413,17 @@
       font-size: 9px; font-style: italic; color: var(--text-mid); line-height: 1.5; margin-top: 3px;
       display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
     }
+    .move-think-toggle {
+      font-size: 8px; color: var(--text-dim); cursor: pointer; margin-top: 3px;
+      user-select: none; display: inline-block;
+    }
+    .move-think-toggle:hover { color: var(--accent); }
+    .move-think-body {
+      display: none; font-size: 8px; color: var(--text-dim); line-height: 1.5; margin-top: 3px;
+      max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+      background: var(--bg-panel); border-left: 1px solid var(--border); padding: 3px 5px;
+    }
+    .move-think-body.open { display: block; }
 
     /* ── Eval graph ──────────────────────────────────────────────── */
     .eval-pane { border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -1936,6 +1947,8 @@ function addMoveCard(data) {
         data.reasoning!=='(no reasoning)' &&
         data.reasoning!=='(parse failed — defaulted to top candidate)';
 
+  const showThink = !!(data.thinking_content && data.thinking_content.trim());
+
   const card = document.createElement('div');
   card.className = `move-card ${q}`;
   card.innerHTML = `
@@ -1945,7 +1958,15 @@ function addMoveCard(data) {
       <span class="move-badge ${q}">${q}</span>
     </div>
     ${rankStr ? `<div class="move-rank-text">${rankStr}</div>` : ''}
-    ${showReason ? `<div class="move-reason">${escHtml(data.reasoning)}</div>` : ''}`;
+    ${showReason ? `<div class="move-reason">${escHtml(data.reasoning)}</div>` : ''}
+    ${showThink ? `<span class="move-think-toggle">🧠 thinking</span><div class="move-think-body">${escHtml(data.thinking_content.trim())}</div>` : ''}`;
+
+  if (showThink) {
+    const toggle = card.querySelector('.move-think-toggle');
+    const body   = card.querySelector('.move-think-body');
+    toggle.addEventListener('click', () => body.classList.toggle('open'));
+  }
+
   pane.prepend(card);
 }
 
