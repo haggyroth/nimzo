@@ -1,5 +1,5 @@
 [run]
-source = analysis, db, models
+source = analysis, db, models, config_loader
 omit =
     models/portraits.py
     tests/*
