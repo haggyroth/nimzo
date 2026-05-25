@@ -300,6 +300,22 @@ async def api_coherence_stats(model_id: str):
     return database.get_coherence_stats(model_id)
 
 
+@app.get("/api/models/{model_id:path}/quality")
+async def api_model_quality(model_id: str):
+    """
+    Move-quality breakdown for a single model.
+
+    Returns quality counts and rates (0-1), avg candidate rank, avg centipawn
+    score, and bad-move rate (mistakes + blunders).  404 if model unknown or
+    has no recorded moves.
+    """
+    stats = database.get_player_quality_stats(model_id)
+    if stats is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Model not found or no moves recorded")
+    return stats
+
+
 @app.post("/api/models/{model_id:path}/portrait")
 async def api_generate_portrait(model_id: str):
     """
@@ -515,6 +531,7 @@ class PlayerSpec(BaseModel):
     url: str = "http://localhost:1234/v1"
     thinking: bool = False
     candidate_count: Optional[int] = None   # override default 5; None = use default
+    style: str = ""                         # "aggressive" | "positional" | "defensive" | ""
 
 
 # ── Active human player registry ─────────────────────────────────────────
@@ -545,10 +562,15 @@ class TournamentStartConfig(BaseModel):
     move_timeout: int = 0
     # Human-play settings
     human_assisted: bool = True    # True = show Stockfish candidates; False = blind
+    # Personality styles for 2-player mode
+    white_style: str = ""          # "aggressive" | "positional" | "defensive" | ""
+    black_style: str = ""
     # Multi-player tournament fields (len >= 2 activates bracket mode)
     players: list[PlayerSpec] = []
     format: str = "round_robin"   # "round_robin" | "gauntlet"
     games_per_pair: int = 2       # games per head-to-head matchup
+    # Adaptive difficulty: auto-adjust candidate_count based on rolling win rate
+    adaptive_difficulty: bool = False
 
 
 # ── Tournament title pool ─────────────────────────────────────────────────
@@ -683,7 +705,8 @@ async def api_start(config: TournamentStartConfig):
 
         players = [
             build_player(ps.backend, ps.name or ps.model_id.split("/")[-1].split("@")[0],
-                         ps.model_id, ps.url, ps.thinking, move_timeout=config.move_timeout)
+                         ps.model_id, ps.url, ps.thinking, move_timeout=config.move_timeout,
+                         style=ps.style)
             for ps in seeded
         ]
         pairings = generate_pairings(seeded, config.format, config.games_per_pair)
@@ -732,8 +755,8 @@ async def api_start(config: TournamentStartConfig):
         return {"ok": True}
 
     # ── Classic 2-player match mode ───────────────────────────────────
-    white = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking, move_timeout=config.move_timeout)
-    black = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking, move_timeout=config.move_timeout)
+    white = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking, move_timeout=config.move_timeout, style=config.white_style)
+    black = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking, move_timeout=config.move_timeout, style=config.black_style)
 
     # Register any human players so /api/human-move can reach them.
     _active_human_players.clear()
@@ -761,7 +784,7 @@ async def api_start(config: TournamentStartConfig):
 
     async def _run_and_catch():
         try:
-            await run_tournament(white, black, config.games, tutor, judge)
+            await run_tournament(white, black, config.games, tutor, judge, adaptive_difficulty=config.adaptive_difficulty)
         except Exception as exc:
             # Absorb any stray exceptions (e.g. engine death on Ctrl+C,
             # a model timeout, etc) so the task doesn't surface as
@@ -825,6 +848,7 @@ async def play_game(
     game_number: int,
     tutor: TutorConfig | None = None,
     judge: "JudgeConfig | None" = None,
+    adaptive_difficulty: bool = False,
 ) -> dict:
     board = chess.Board()
     game  = chess.pgn.Game()
@@ -1166,6 +1190,25 @@ async def play_game(
                 database.set_strategic_profile(player.config.model_id, profile)
                 player.config.strategic_profile = profile
 
+    # ── Adaptive difficulty ───────────────────────────────────────────────
+    # After each game, check rolling win rate and nudge candidate_count so
+    # the game stays interesting: more candidates for struggling players,
+    # fewer for dominant ones.  Only activates after ≥10 games.
+    if adaptive_difficulty:
+        _ADAPT_MIN, _ADAPT_MAX = 3, 10
+        _WIN_LOW,  _WIN_HIGH   = 0.35, 0.65
+        for player in (white, black):
+            rate = database.get_recent_win_rate(player.config.model_id, n=10)
+            if rate is None:
+                continue   # not enough history yet
+            old_count = player.config.candidate_count
+            if rate > _WIN_HIGH and old_count > _ADAPT_MIN:
+                player.config.candidate_count = old_count - 1
+                print(f"  📉 {player.config.name}: win rate {rate:.0%} → candidates {old_count}→{player.config.candidate_count}")
+            elif rate < _WIN_LOW and old_count < _ADAPT_MAX:
+                player.config.candidate_count = old_count + 1
+                print(f"  📈 {player.config.name}: win rate {rate:.0%} → candidates {old_count}→{player.config.candidate_count}")
+
     return {
         "game_id":     game_id,
         "result":      result,
@@ -1340,6 +1383,7 @@ async def run_tournament(
     n_games: int,
     tutor: TutorConfig | None = None,
     judge: "JudgeConfig | None" = None,
+    adaptive_difficulty: bool = False,
 ):
     with StockfishEngine() as stockfish:
         for i in range(1, n_games + 1):
@@ -1354,7 +1398,7 @@ async def run_tournament(
 
             print(f"\n♟  Game {i}/{n_games}: {white.config.name} (W) vs {black.config.name} (B)")
             try:
-                summary = await play_game(white, black, stockfish, i, tutor, judge)
+                summary = await play_game(white, black, stockfish, i, tutor, judge, adaptive_difficulty=adaptive_difficulty)
             except TournamentAborted:
                 print("\n  Tournament stopped by user.")
                 break
@@ -1387,6 +1431,7 @@ def build_player(
     enable_thinking: bool = False,
     candidate_count: int | None = None,
     move_timeout: int = 0,
+    style: str = "",
 ) -> ChessPlayer:
     db_exists = Path("nimzo.db").exists()
     config = PlayerConfig(
@@ -1397,6 +1442,7 @@ def build_player(
         enable_thinking=enable_thinking,
         candidate_count=candidate_count if candidate_count is not None else 5,
         move_timeout=move_timeout,
+        style=style,
         lesson_memory=database.get_player_lessons(model_id) if db_exists else [],
         strategic_profile=database.get_strategic_profile(model_id) if db_exists else None,
     )
