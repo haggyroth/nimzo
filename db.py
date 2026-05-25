@@ -523,30 +523,30 @@ def get_lesson_effectiveness(model_id: str, lookback_games: int = 3) -> list[dic
             """
             SELECT
                 m.game_id,
-                g.started_at,
+                g.played_at,
                 CAST(
                     SUM(CASE WHEN m.quality IN ('blunder','mistake') THEN 1 ELSE 0 END)
                     AS REAL
                 ) / NULLIF(COUNT(*), 0) AS bad_rate
             FROM moves m
             JOIN games g ON m.game_id = g.id
-            WHERE m.player_model_id = ?
+            WHERE m.player_id = ?
             GROUP BY m.game_id
-            ORDER BY g.started_at ASC
+            ORDER BY g.played_at ASC
             """,
-            (model_id,),
+            (pid,),
         ).fetchall()
 
         if not game_rates:
             return []
 
-        # Build ordered list of (game_id, started_at, bad_rate)
-        ordered = [(r["game_id"], r["started_at"], r["bad_rate"]) for r in game_rates]
+        # Build ordered list of (game_id, played_at, bad_rate)
+        ordered = [(r["game_id"], r["played_at"], r["bad_rate"]) for r in game_rates]
 
         lessons = conn.execute(
             """
             SELECT l.id, l.lesson, l.lesson_type, l.game_id, l.bad_move_rate_before,
-                   g.started_at AS lesson_at
+                   g.played_at AS lesson_at
             FROM lessons l
             JOIN games g ON l.game_id = g.id
             WHERE l.player_id = ?
