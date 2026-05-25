@@ -116,12 +116,22 @@ def detect_opening_depth(pgn_string: str) -> tuple[str, str, int] | None:
         return None
 
 
-# ── Tutor configuration ──────────────────────────────────────────────────
+# ── Tutor / Judge configuration ──────────────────────────────────────────
 
 @dataclass
 class TutorConfig:
     backend: str = "lmstudio"              # "lmstudio" | "anthropic"
     model_id: str = ""                     # e.g. "qwen3-30b" or "claude-haiku-4-5-20251001"
+    base_url: str = "http://localhost:1234/v1"
+    api_key: Optional[str] = None
+
+
+# JudgeConfig is structurally identical to TutorConfig; a separate type makes
+# call-sites self-documenting and lets the two be configured independently.
+@dataclass
+class JudgeConfig:
+    backend: str = "lmstudio"
+    model_id: str = ""
     base_url: str = "http://localhost:1234/v1"
     api_key: Optional[str] = None
 
@@ -235,6 +245,124 @@ def _call_anthropic(tutor: TutorConfig, prompt: str) -> str:
         messages=[{"role": "user", "content": prompt}],
     )
     return msg.content[0].text
+
+
+# ── Reasoning coherence scoring ──────────────────────────────────────────
+
+_JUDGE_SYSTEM = (
+    "You are a chess move-reasoning evaluator. "
+    "Judge whether a player's stated reasoning genuinely justifies their chosen move. "
+    "Respond with a single integer from 0 to 10 and nothing else."
+)
+
+_JUDGE_TEMPLATE = """Position (FEN): {fen}
+
+Stockfish candidates (ranked best to worst for the player):
+{candidates}
+
+Chosen move: {san}
+
+Player's reasoning:
+{reasoning}
+
+Score the reasoning from 0–10 based on how well it justifies choosing {san}:
+  10 — reasoning directly and accurately explains why {san} is the best choice
+   7 — reasoning is correct in spirit but missing key tactical detail
+   4 — reasoning is partially relevant but contains clear factual errors
+   1 — reasoning is generic, irrelevant, or contradicts the move chosen
+   0 — reasoning explicitly claims to play a different move
+
+Reply with a single integer (0–10) and nothing else."""
+
+
+def score_reasoning_coherence(
+    reasoning: str,
+    move_san: str,
+    board_fen: str,
+    candidates: list[tuple],        # list of (move, score_cp) chess objects
+    judge: "JudgeConfig",
+) -> Optional[float]:
+    """
+    Ask a judge model whether the player's reasoning justifies their chosen
+    move.  Returns a float 0.0–10.0, or None if the judge is unavailable /
+    the player had no reasoning (human / API-error fallback).
+    """
+    import re
+
+    # Skip scoring for human moves and fallback moves
+    if not reasoning or reasoning.startswith("("):
+        return None
+    if not judge or not judge.model_id:
+        return None
+
+    # Format candidates as text
+    import chess as _chess
+    cand_lines = []
+    for i, (mv, cp) in enumerate(candidates[:5], 1):
+        san = _chess.Board(board_fen).san(mv) if hasattr(mv, "uci") else str(mv)
+        score_str = f"{cp / 100:+.2f}" if cp is not None else "?"
+        cand_lines.append(f"  {i}. {san} (eval: {score_str})")
+    candidates_text = "\n".join(cand_lines) if cand_lines else "  (none)"
+
+    prompt = _JUDGE_TEMPLATE.format(
+        fen=board_fen,
+        candidates=candidates_text,
+        san=move_san,
+        reasoning=reasoning.strip(),
+    )
+
+    try:
+        if judge.backend == "anthropic":
+            raw = _call_tutor_like(judge, prompt, system=_JUDGE_SYSTEM, max_tokens=8)
+        else:
+            raw = _call_tutor_like(judge, prompt, system=_JUDGE_SYSTEM, max_tokens=8)
+        # Strip think blocks, then extract first integer 0–10
+        raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE).strip()
+        m = re.search(r"\b(10|[0-9])\b", raw)
+        if m:
+            return float(m.group(1))
+    except Exception as exc:
+        print(f"  ⚠  Judge call failed ({type(exc).__name__}): {exc}")
+    return None
+
+
+def _call_tutor_like(
+    cfg: "TutorConfig | JudgeConfig",
+    prompt: str,
+    system: str,
+    max_tokens: int = 500,
+) -> str:
+    """Generic caller that works for both TutorConfig and JudgeConfig."""
+    import os
+    if cfg.backend == "anthropic":
+        import anthropic
+        client = anthropic.Anthropic(
+            api_key=cfg.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
+        msg = client.messages.create(
+            model=cfg.model_id or "claude-haiku-4-5-20251001",
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return msg.content[0].text
+    else:
+        from openai import OpenAI
+        client = OpenAI(
+            base_url=cfg.base_url,
+            api_key=cfg.api_key or os.environ.get("LMSTUDIO_API_KEY", "lm-studio"),
+        )
+        resp = client.chat.completions.create(
+            model=cfg.model_id,
+            max_tokens=max_tokens,
+            temperature=0.0,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user",   "content": prompt},
+            ],
+            extra_body={"enable_thinking": False},
+        )
+        return resp.choices[0].message.content or ""
 
 
 # ── Lesson parser ─────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ class PlayerConfig:
     temperature: float = 0.3
     enable_thinking: bool = False      # Extended thinking (Qwen3, etc.)
     system_prompt: str = ""            # Optional override (rarely needed)
+    move_timeout: int = 0              # Seconds per move, 0 = no limit
     lesson_memory: list[str] = field(default_factory=list)
     strategic_profile: Optional[str] = None   # Compressed multi-game coaching profile
 

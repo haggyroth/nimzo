@@ -1,0 +1,56 @@
+# tournament.toml.example — copy to tournament.toml and edit
+#
+# Usage:
+#   python arena.py --config tournament.toml           # GUI + auto-start
+#   python arena.py --config tournament.toml --headless # no UI, fast benchmarking
+
+[match]
+format       = "round_robin"  # "match" | "round_robin" | "gauntlet"
+games        = 3              # games per match, or games_per_pair for tournaments
+move_timeout = 60             # seconds per move (0 = no limit)
+
+[tutor]
+backend = "lmstudio"
+model   = "qwen3-8b"
+url     = "http://localhost:1234/v1"
+
+# Optional: separate judge model for reasoning coherence scoring.
+# Defaults to tutor model when omitted.
+# [judge]
+# backend = "lmstudio"
+# model   = "qwen3-8b"
+# url     = "http://localhost:1234/v1"
+
+# ── 2-player match (use [white] / [black] sections) ─────────────────────────
+[white]
+name    = "Qwen"
+backend = "lmstudio"
+model   = "qwen3-30b-a3b"
+url     = "http://localhost:1234/v1"
+thinking = false
+
+[black]
+name    = "Llama"
+backend = "lmstudio"
+model   = "llama-3.1-70b-instruct"
+url     = "http://localhost:1235/v1"
+thinking = false
+
+# ── OR multi-player bracket (use [[players]] array — activates bracket mode) ─
+# [[players]]
+# name    = "Qwen"
+# backend = "lmstudio"
+# model   = "qwen3-30b-a3b"
+# url     = "http://localhost:1234/v1"
+#
+# [[players]]
+# name    = "Llama"
+# backend = "lmstudio"
+# model   = "llama-3.1-70b-instruct"
+# url     = "http://localhost:1235/v1"
+#
+# [[players]]
+# name    = "Gemma"
+# backend = "lmstudio"
+# model   = "gemma-3-27b-it"
+# url     = "http://localhost:1234/v1"

@@ -140,6 +140,16 @@ def _migrate(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE lessons ADD COLUMN bad_move_rate_before REAL")
     except sqlite3.OperationalError:
         pass  # already exists
+    # Phase 12: reasoning coherence score (judge model per move)
+    try:
+        conn.execute("ALTER TABLE moves ADD COLUMN coherence_score REAL")
+    except sqlite3.OperationalError:
+        pass
+    # Phase 12: time-control timeout flag
+    try:
+        conn.execute("ALTER TABLE moves ADD COLUMN timed_out INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     # Create tournament tables for existing DBs (CREATE TABLE IF NOT EXISTS is idempotent
     # in the schema, but the schema only runs once so we ensure them here too)
     conn.executescript("""
@@ -356,6 +366,8 @@ def record_move(
     reasoning: str,
     fen_after: str,
     thinking_content: str = "",
+    coherence_score: Optional[float] = None,
+    timed_out: bool = False,
 ):
     with get_conn() as conn:
         player_id = conn.execute(
@@ -366,13 +378,14 @@ def record_move(
             INSERT INTO moves
               (game_id, move_number, player_id, move_uci, move_san,
                candidate_rank, quality, score_cp, reasoning, fen_after,
-               thinking_content)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               thinking_content, coherence_score, timed_out)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 game_id, move_number, player_id, move_uci, move_san,
                 candidate_rank, quality, score_cp, reasoning, fen_after,
-                thinking_content or "",
+                thinking_content or "", coherence_score,
+                1 if timed_out else 0,
             ),
         )
 
@@ -399,7 +412,8 @@ def get_game_moves(game_id: int) -> list[dict]:
         rows = conn.execute(
             """
             SELECT m.move_number, m.move_san, m.move_uci, m.quality,
-                   m.candidate_rank, m.reasoning, m.score_cp, m.thinking_content
+                   m.candidate_rank, m.reasoning, m.score_cp, m.thinking_content,
+                   m.coherence_score, m.timed_out
             FROM moves m
             WHERE m.game_id = ?
             ORDER BY m.move_number ASC
@@ -407,6 +421,44 @@ def get_game_moves(game_id: int) -> list[dict]:
             (game_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_coherence_stats(model_id: str) -> dict:
+    """
+    Return average coherence score and timeout rate for a model.
+    Only counts moves where coherence_score IS NOT NULL.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                AVG(m.coherence_score)  AS avg_coherence,
+                COUNT(m.id)             AS scored_moves,
+                SUM(CASE WHEN m.timed_out = 1 THEN 1 ELSE 0 END) AS timeouts,
+                COUNT(m.id)             AS total_moves
+            FROM moves m
+            JOIN players p ON m.player_id = p.id
+            WHERE p.model_id = ?
+              AND m.coherence_score IS NOT NULL
+            """,
+            (model_id,),
+        ).fetchone()
+        total_row = conn.execute(
+            """
+            SELECT COUNT(m.id) AS total,
+                   SUM(CASE WHEN m.timed_out = 1 THEN 1 ELSE 0 END) AS timeouts
+            FROM moves m
+            JOIN players p ON m.player_id = p.id
+            WHERE p.model_id = ?
+            """,
+            (model_id,),
+        ).fetchone()
+        return {
+            "avg_coherence":  round(row["avg_coherence"], 2) if row["avg_coherence"] is not None else None,
+            "scored_moves":   row["scored_moves"] or 0,
+            "total_moves":    total_row["total"] or 0,
+            "timeout_count":  total_row["timeouts"] or 0,
+        }
 
 
 # ── Lessons ──────────────────────────────────────────────────────────────

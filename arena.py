@@ -43,6 +43,7 @@ from models.lmstudio_player import LMStudioPlayer
 from models.human_player import HumanPlayer
 from analysis import (
     TutorConfig,
+    JudgeConfig,
     calculate_elos,
     generate_lessons,
     compress_lessons,
@@ -52,6 +53,7 @@ from analysis import (
     detect_opening_depth,
     derive_personality_traits,
     evaluate_achievements,
+    score_reasoning_coherence,
     ACHIEVEMENT_CATALOGUE,
 )
 from models.metadata import get_model_metadata
@@ -91,6 +93,9 @@ _state: dict = {
 
 # Set from CLI args before server start; triggers auto-start in lifespan
 _cli_config: "TournamentStartConfig | None" = None
+
+# Headless mode: skip WebSocket server, remove per-move delays, print to stdout
+_headless: bool = False
 
 
 # ── Tournament abort signal ───────────────────────────────────────────────
@@ -194,7 +199,7 @@ async def ws_endpoint(websocket: WebSocket):
 
 
 async def broadcast(event: dict):
-    if not _connected_clients:
+    if _headless or not _connected_clients:
         return
     msg = json.dumps(event)
     dead = set()
@@ -288,6 +293,12 @@ async def api_model_profile(model_id: str):
 @app.get("/api/models/{model_id:path}/lesson-effectiveness")
 async def api_lesson_effectiveness(model_id: str):
     return database.get_lesson_effectiveness(model_id)
+
+
+@app.get("/api/models/{model_id:path}/coherence")
+async def api_coherence_stats(model_id: str):
+    """Average reasoning coherence score and timeout rate for a model."""
+    return database.get_coherence_stats(model_id)
 
 
 @app.post("/api/models/{model_id:path}/portrait")
@@ -464,7 +475,13 @@ class TournamentStartConfig(BaseModel):
     tutor_backend: str = "lmstudio"
     tutor_model: str = ""
     tutor_url: str = "http://localhost:1234/v1"
+    # Reasoning coherence judge (defaults to same as tutor when model is "")
+    judge_backend: str = "lmstudio"
+    judge_model: str = ""
+    judge_url: str = "http://localhost:1234/v1"
     games: int = 10
+    # Time control: seconds per move, 0 = no limit
+    move_timeout: int = 0
     # Human-play settings
     human_assisted: bool = True    # True = show Stockfish candidates; False = blind
     # Multi-player tournament fields (len >= 2 activates bracket mode)
@@ -584,6 +601,13 @@ async def api_start(config: TournamentStartConfig):
     _pause_event.set()
 
     tutor = TutorConfig(backend=config.tutor_backend, model_id=config.tutor_model, base_url=config.tutor_url)
+    # Judge config: fall back to tutor settings when judge_model is blank
+    _jm = config.judge_model or config.tutor_model
+    judge = JudgeConfig(
+        backend=config.judge_backend or config.tutor_backend,
+        model_id=_jm,
+        base_url=config.judge_url or config.tutor_url,
+    ) if _jm else None
 
     # ── Multi-player tournament mode ──────────────────────────────────
     if len(config.players) >= 2:
@@ -597,7 +621,8 @@ async def api_start(config: TournamentStartConfig):
         )
 
         players = [
-            build_player(ps.backend, ps.name or ps.model_id.split("/")[-1].split("@")[0], ps.model_id, ps.url, ps.thinking)
+            build_player(ps.backend, ps.name or ps.model_id.split("/")[-1].split("@")[0],
+                         ps.model_id, ps.url, ps.thinking, move_timeout=config.move_timeout)
             for ps in seeded
         ]
         pairings = generate_pairings(seeded, config.format, config.games_per_pair)
@@ -628,6 +653,7 @@ async def api_start(config: TournamentStartConfig):
                     pairings=pairings,
                     fmt=config.format,
                     tutor=tutor,
+                    judge=judge,
                 )
             except Exception as exc:
                 print(f"\n  Tournament ended: {type(exc).__name__}")
@@ -645,8 +671,8 @@ async def api_start(config: TournamentStartConfig):
         return {"ok": True}
 
     # ── Classic 2-player match mode ───────────────────────────────────
-    white = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking)
-    black = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking)
+    white = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking, move_timeout=config.move_timeout)
+    black = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking, move_timeout=config.move_timeout)
 
     # Register any human players so /api/human-move can reach them.
     _active_human_players.clear()
@@ -674,7 +700,7 @@ async def api_start(config: TournamentStartConfig):
 
     async def _run_and_catch():
         try:
-            await run_tournament(white, black, config.games, tutor)
+            await run_tournament(white, black, config.games, tutor, judge)
         except Exception as exc:
             # Absorb any stray exceptions (e.g. engine death on Ctrl+C,
             # a model timeout, etc) so the task doesn't surface as
@@ -737,6 +763,7 @@ async def play_game(
     stockfish: StockfishEngine,
     game_number: int,
     tutor: TutorConfig | None = None,
+    judge: "JudgeConfig | None" = None,
 ) -> dict:
     board = chess.Board()
     game  = chess.pgn.Game()
@@ -806,10 +833,23 @@ async def play_game(
         })
 
         # Run blocking model API call in thread pool — this is the main blocker
+        timed_out = False
+        timeout_secs = current_player.config.move_timeout or None
         try:
-            decision = await loop.run_in_executor(
+            coro = loop.run_in_executor(
                 None, current_player.choose_move, board, candidates, pgn_so_far
             )
+            decision = await asyncio.wait_for(coro, timeout=timeout_secs)
+        except asyncio.TimeoutError:
+            print(f"  ⏱  {current_player.config.name} timed out after {timeout_secs}s — top candidate used")
+            from models.base import MoveDecision
+            decision = MoveDecision(
+                move_uci=candidates[0][0].uci(),
+                reasoning=f"(timed out after {timeout_secs}s — fell back to top candidate)",
+                candidate_rank=1,
+                raw_response="",
+            )
+            timed_out = True
         except Exception as exc:
             # Model was unloaded, connection dropped, or API error mid-inference.
             # If a stop was requested, honour it cleanly; otherwise fall back to
@@ -848,6 +888,20 @@ async def play_game(
         else:
             move_qualities_black.append((san, quality))
 
+        # Reasoning coherence scoring — fire in thread pool so it doesn't
+        # block the game loop; skip for human/timed-out/fallback moves.
+        fen_before_push = board.fen()
+        coherence_score: float | None = None
+        if judge and not timed_out and not isinstance(current_player, HumanPlayer):
+            try:
+                coherence_score = await loop.run_in_executor(
+                    None,
+                    score_reasoning_coherence,
+                    decision.reasoning, san, fen_before_push, candidates, judge,
+                )
+            except Exception:
+                coherence_score = None
+
         board.push(chosen_move)
         node = node.add_variation(chosen_move)
         move_number += 1
@@ -864,6 +918,8 @@ async def play_game(
             "reasoning":      decision.reasoning,
             "thinking_content": decision.thinking_content,
             "fen_after":      board.fen(),
+            "coherence_score": coherence_score,
+            "timed_out":      timed_out,
         })
 
         await broadcast({
@@ -877,11 +933,14 @@ async def play_game(
             "candidate_rank": decision.candidate_rank,
             "reasoning":      decision.reasoning,
             "thinking_content": decision.thinking_content,
+            "coherence_score": coherence_score,
+            "timed_out":      timed_out,
             "score_cp_white": score_cp_white,
             "fen":            board.fen(),
         })
 
-        await asyncio.sleep(0.05)
+        if not _headless:
+            await asyncio.sleep(0.05)   # pacing for live viewer
 
     # ── Game over ──────────────────────────────────────────────────────
     result      = board.result()
@@ -937,6 +996,8 @@ async def play_game(
             reasoning=rec["reasoning"],
             thinking_content=rec["thinking_content"],
             fen_after=rec["fen_after"],
+            coherence_score=rec.get("coherence_score"),
+            timed_out=rec.get("timed_out", False),
         )
 
     # ── Achievements ───────────────────────────────────────────────────
@@ -1065,6 +1126,7 @@ async def run_bracket_tournament(
     pairings: list[tuple[PlayerSpec, PlayerSpec]],
     fmt: str,
     tutor: TutorConfig | None = None,
+    judge: "JudgeConfig | None" = None,
 ):
     total = len(pairings)
     game_results: list[dict] = []
@@ -1119,7 +1181,7 @@ async def run_bracket_tournament(
 
             print(f"\n♟  Game {actual_idx}/{total}: {white.config.name} (W) vs {black.config.name} (B)")
             try:
-                summary = await play_game(white, black, stockfish, actual_idx, tutor)
+                summary = await play_game(white, black, stockfish, actual_idx, tutor, judge)
             except TournamentAborted:
                 print("\n  Tournament stopped by user.")
                 database.abort_tournament(tournament_id)
@@ -1216,6 +1278,7 @@ async def run_tournament(
     black: ChessPlayer,
     n_games: int,
     tutor: TutorConfig | None = None,
+    judge: "JudgeConfig | None" = None,
 ):
     with StockfishEngine() as stockfish:
         for i in range(1, n_games + 1):
@@ -1230,7 +1293,7 @@ async def run_tournament(
 
             print(f"\n♟  Game {i}/{n_games}: {white.config.name} (W) vs {black.config.name} (B)")
             try:
-                summary = await play_game(white, black, stockfish, i, tutor)
+                summary = await play_game(white, black, stockfish, i, tutor, judge)
             except TournamentAborted:
                 print("\n  Tournament stopped by user.")
                 break
@@ -1245,7 +1308,8 @@ async def run_tournament(
             )
 
             white, black = black, white   # alternate colors
-            await asyncio.sleep(2)
+            if not _headless:
+                await asyncio.sleep(2)   # pause between games for live viewer
 
     _state["status"] = "idle"
     await broadcast({"type": "tournament_status", **_state})
@@ -1261,6 +1325,7 @@ def build_player(
     base_url: str | None = None,
     enable_thinking: bool = False,
     candidate_count: int | None = None,
+    move_timeout: int = 0,
 ) -> ChessPlayer:
     db_exists = Path("nimzo.db").exists()
     config = PlayerConfig(
@@ -1270,6 +1335,7 @@ def build_player(
         base_url=base_url,
         enable_thinking=enable_thinking,
         candidate_count=candidate_count if candidate_count is not None else 5,
+        move_timeout=move_timeout,
         lesson_memory=database.get_player_lessons(model_id) if db_exists else [],
         strategic_profile=database.get_strategic_profile(model_id) if db_exists else None,
     )
@@ -1326,9 +1392,16 @@ if __name__ == "__main__":
             "  python arena.py\n"
             "  → opens http://localhost:8765 — configure everything in the browser\n\n"
             "CLI mode (auto-starts tournament):\n"
-            "  python arena.py --white-model qwen3-30b --black-model llama-70b\n"
+            "  python arena.py --white-model qwen3-30b --black-model llama-70b\n\n"
+            "Config file mode:\n"
+            "  python arena.py --config tournament.toml\n\n"
+            "Headless benchmarking:\n"
+            "  python arena.py --config tournament.toml --headless\n"
         ),
     )
+    # --config loads everything from a TOML file; individual flags still override
+    parser.add_argument("--config",        default="",
+                        help="Path to a tournament.toml config file")
     # Model IDs intentionally NOT read from env vars — they must be passed
     # explicitly to trigger CLI mode.  Connection URLs and other non-model
     # settings are still env-configurable for convenience.
@@ -1343,24 +1416,89 @@ if __name__ == "__main__":
     parser.add_argument("--tutor-backend", default=os.environ.get("TUTOR_BACKEND", "lmstudio"))
     parser.add_argument("--tutor-model",   default=os.environ.get("TUTOR_MODEL",   ""))
     parser.add_argument("--tutor-url",     default=os.environ.get("TUTOR_URL",     "http://localhost:1234/v1"))
+    parser.add_argument("--judge-model",   default=os.environ.get("JUDGE_MODEL",   ""),
+                        help="Model for reasoning coherence scoring (defaults to tutor model)")
     parser.add_argument("--games",         type=int, default=int(os.environ.get("GAMES", 1)))
+    parser.add_argument("--move-timeout",  type=int, default=0,
+                        help="Per-move timeout in seconds (0 = no limit)")
     parser.add_argument("--thinking",      action="store_true", default=False,
                         help="Enable extended thinking for both players (LM Studio)")
+    parser.add_argument("--headless",      action="store_true", default=False,
+                        help="Run without HTTP server or browser — DB only, fast benchmarking")
     parser.add_argument("--port",          type=int, default=int(os.environ.get("PORT", 8765)))
     parser.add_argument("--no-browser",    action="store_true", default=False,
                         help="Don't auto-open the browser on startup")
     args = parser.parse_args()
 
+    # ── Config file mode ──────────────────────────────────────────────
+    if args.config:
+        from config_loader import load_config as _load_config
+        _cli_config = _load_config(args.config)
+        # CLI flags override config file values when explicitly non-default
+        if args.move_timeout:
+            _cli_config.move_timeout = args.move_timeout
+        if args.headless:
+            _headless = True
+    else:
+        _headless = args.headless
+
     port = args.port
+
+    if _headless:
+        # ── Headless mode: skip uvicorn entirely ──────────────────────
+        import asyncio as _asyncio
+
+        database.init_db()
+
+        cli_mode = bool(args.config or (args.white_model and args.black_model))
+        if not cli_mode:
+            parser.error("--headless requires --config or --white-model/--black-model")
+
+        if not args.config:
+            _cli_config = TournamentStartConfig(
+                white_backend=args.white_backend,
+                white_name=args.white_name or args.white_model.split("/")[-1].split("@")[0].split(":")[0],
+                white_model=args.white_model,
+                white_url=args.white_url,
+                white_thinking=args.thinking,
+                black_backend=args.black_backend,
+                black_name=args.black_name or args.black_model.split("/")[-1].split("@")[0].split(":")[0],
+                black_model=args.black_model,
+                black_url=args.black_url,
+                black_thinking=args.thinking,
+                tutor_backend=args.tutor_backend,
+                tutor_model=args.tutor_model,
+                tutor_url=args.tutor_url,
+                judge_model=args.judge_model,
+                games=args.games,
+                move_timeout=args.move_timeout,
+            )
+
+        w = _cli_config.white_name or _cli_config.white_model
+        b = _cli_config.black_name or _cli_config.black_model
+        g = _cli_config.games
+        print(f"⚡ Nimzo headless  ·  {w} vs {b}  ·  {g} game(s)")
+
+        async def _run_headless():
+            _pause_event.set()
+            await api_start(_cli_config)
+            # Wait for the task to finish
+            if _tournament_task:
+                await _tournament_task
+
+        _asyncio.run(_run_headless())
+        raise SystemExit(0)
+
+    # ── Normal (GUI) mode ─────────────────────────────────────────────
 
     # Free the port if something is already holding it
     if _free_port(port):
         print(f"⚠  Port {port} was in use — cleared stale process.")
         import time; time.sleep(0.4)   # brief pause for OS to release the socket
 
-    cli_mode = bool(args.white_model and args.black_model)
+    cli_mode = bool(args.white_model and args.black_model) or bool(args.config)
 
-    if cli_mode:
+    if cli_mode and not args.config:
         _cli_config = TournamentStartConfig(
             white_backend=args.white_backend,
             white_name=args.white_name or args.white_model.split("/")[-1].split("@")[0].split(":")[0],
@@ -1375,14 +1513,21 @@ if __name__ == "__main__":
             tutor_backend=args.tutor_backend,
             tutor_model=args.tutor_model,
             tutor_url=args.tutor_url,
+            judge_model=args.judge_model,
             games=args.games,
+            move_timeout=args.move_timeout,
         )
-        w = _cli_config.white_name
-        b = _cli_config.black_name
+
+    if _cli_config:
+        w = _cli_config.white_name or _cli_config.white_model
+        b = _cli_config.black_name or _cli_config.black_model
+        g = _cli_config.games
         print(f"🌐  Nimzo  →  http://localhost:{port}")
-        print(f"♟   {w} vs {b}  ·  {args.games} game(s)")
-        if args.tutor_model:
-            print(f"🎓  Tutor: {args.tutor_model}")
+        print(f"♟   {w} vs {b}  ·  {g} game(s)")
+        if _cli_config.tutor_model:
+            print(f"🎓  Tutor: {_cli_config.tutor_model}")
+        if _cli_config.move_timeout:
+            print(f"⏱  Move timeout: {_cli_config.move_timeout}s")
     else:
         print(f"🌐  Nimzo  →  http://localhost:{port}")
         print("    Open the browser to configure and start a tournament.")
