@@ -139,3 +139,16 @@ Then add a branch in `build_player()` in `arena.py`.
 |---|---|---|
 | `STOCKFISH_PATH` | `/usr/games/stockfish` | Path to stockfish binary |
 | `ANTHROPIC_API_KEY` | — | Required only if using Anthropic backend or lesson generation |
+
+## Git Workflow
+
+**Always branch from `main`.** Each phase gets its own short-lived branch cut directly from the current `origin/main`:
+
+```bash
+git fetch origin
+git worktree add .claude/worktrees/<phase-slug> -b <phase-slug> origin/main
+```
+
+Never branch from another feature branch — that's what causes cascading merge conflicts when earlier PRs land on main.
+
+**Keep branches small.** One phase = one branch = one PR = one merge commit on main. Merge (or squash-merge) promptly so the next phase starts clean.
