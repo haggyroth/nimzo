@@ -1440,6 +1440,7 @@
         Recent Games
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadHistory()">↻</span>
+          <span title="Export all games as PGN" style="font-size:10px;color:var(--text-dim);cursor:pointer" onclick="event.stopPropagation();exportAllPgn()">⬇ PGN</span>
           <span class="chevron">▾</span>
         </div>
       </div>
@@ -1593,6 +1594,7 @@
   </div>
 </div>
 
+<script src="js/viewer_utils.js"></script>
 <script>
 // ── Config ───────────────────────────────────────────────────────────────
 const API   = '';          // same origin
@@ -1792,39 +1794,9 @@ function sizeBoard() {
 }
 window.addEventListener('resize', sizeBoard);
 
-// ── FEN parser ────────────────────────────────────────────────────────────
-function parseFen(fen) {
-  return fen.split(' ')[0].split('/').map(row => {
-    const cells = [];
-    for (const ch of row) {
-      if (/\d/.test(ch)) for (let i = 0; i < +ch; i++) cells.push(null);
-      else cells.push(ch);
-    }
-    return cells;
-  });
-}
-
-// ── Captured pieces / material imbalance ──────────────────────────────────
-const STARTING_COUNTS = { p: 8, n: 2, b: 2, r: 2, q: 1 };   // king never captured
-const PIECE_VALUES    = { p: 1, n: 3, b: 3, r: 5, q: 9 };
-const GV_ORDER        = ['q', 'r', 'b', 'n', 'p'];          // heaviest first
-
-function computeCaptures(fen) {
-  const counts = { P:0,N:0,B:0,R:0,Q:0, p:0,n:0,b:0,r:0,q:0 };
-  for (const ch of fen.split(' ')[0]) {
-    if (counts.hasOwnProperty(ch)) counts[ch]++;
-  }
-  const whiteLost = {}, blackLost = {};
-  let whiteValue = 0, blackValue = 0;
-  for (const t of GV_ORDER) {
-    const T = t.toUpperCase();
-    whiteLost[t] = Math.max(0, STARTING_COUNTS[t] - counts[T]);
-    blackLost[t] = Math.max(0, STARTING_COUNTS[t] - counts[t]);
-    whiteValue  += counts[T] * PIECE_VALUES[t];
-    blackValue  += counts[t] * PIECE_VALUES[t];
-  }
-  return { whiteLost, blackLost, imbalance: whiteValue - blackValue };
-}
+// ── FEN parser / captures — defined in js/viewer_utils.js ─────────────────
+// parseFen(), computeCaptures(), STARTING_COUNTS, PIECE_VALUES, GV_ORDER
+// are loaded from the external script tag above.
 
 function renderGraveyardInto(el, lostMap, capturedAreWhite, advantage) {
   if (!el) return;
@@ -1856,14 +1828,7 @@ function renderGraveyards(fen, ids) {
   );
 }
 
-function uciToSquares(uci) {
-  if (!uci || uci.length < 4) return [null, null];
-  const fi = c => c.charCodeAt(0) - 97;
-  return [
-    { col: fi(uci[0]), row: 8 - +uci[1] },
-    { col: fi(uci[2]), row: 8 - +uci[3] },
-  ];
-}
+// uciToSquares() — defined in js/viewer_utils.js
 
 // ── Board render ──────────────────────────────────────────────────────────
 function renderBoard(animate) {
@@ -2213,23 +2178,7 @@ function renderLessons() {
 }
 
 // ── ELO sparkline ─────────────────────────────────────────────────────────
-function buildSparkline(history) {
-  // history: [{elo_after: number}, ...]
-  if (!history || history.length < 2) return '';
-  const W = 58, H = 20, pad = 1;
-  const vals = history.map(h => h.elo_after);
-  const lo = Math.min(...vals), hi = Math.max(...vals);
-  const range = hi - lo || 1;
-  const px = (i) => pad + (i / (vals.length - 1)) * (W - pad*2);
-  const py = (v) => H - pad - ((v - lo) / range) * (H - pad*2);
-  const pts = vals.map((v,i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
-  // Closed fill path: line points + bottom-right + bottom-left
-  const fill = `${pts} ${(W-pad).toFixed(1)},${H} ${pad},${H}`;
-  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
-    <polygon points="${fill}" fill="rgba(200,146,30,.18)" stroke="none"/>
-    <polyline points="${pts}" fill="none" stroke="var(--gold)" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
-  </svg>`;
-}
+// buildSparkline() — defined in js/viewer_utils.js
 
 // ── Leaderboard ───────────────────────────────────────────────────────────
 async function loadLeaderboard() {
@@ -2535,10 +2484,7 @@ function updateTournamentUI(status, gameNumber, totalGames) {
 // ── Model fetching ────────────────────────────────────────────────────────
 // Extract base model name: everything after last '/' and before first ':' or '@'
 // e.g. "lmstudio-community/gemma-4-e4b@q4_k_m" → "gemma-4-e4b"
-function extractModelName(modelId) {
-  const afterSlash = modelId.split('/').pop();
-  return afterSlash.split(/[:@]/)[0];
-}
+// extractModelName() — defined in js/viewer_utils.js
 
 function onModelSelect(side) {
   if (side === 'tutor') return;
@@ -2933,6 +2879,18 @@ function downloadPgn() {
   const a = document.createElement('a');
   a.href = `${API}/api/games/${id}/pgn`;
   a.download = '';   // server sets filename via Content-Disposition
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function exportAllPgn(modelId) {
+  const url = modelId
+    ? `${API}/api/games/export?model_id=${encodeURIComponent(modelId)}`
+    : `${API}/api/games/export`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -3340,10 +3298,7 @@ function renderEvalGraph() {
     <polyline points="${polyPts}" fill="none" stroke="${getComputedStyle(document.documentElement).getPropertyValue('--gold').trim() || '#c8921e'}" stroke-width="1.5" stroke-linejoin="round"/>`;
 }
 
-// ── Utility ───────────────────────────────────────────────────────────────
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+// ── Utility — escHtml() defined in js/viewer_utils.js ─────────────────────
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 applySettings();   // apply persisted settings before first render

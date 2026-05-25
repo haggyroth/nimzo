@@ -348,18 +348,22 @@ async def api_game_moves(game_id: int):
     return database.get_game_moves(game_id)
 
 
-@app.get("/api/games/{game_id}/pgn")
-async def api_game_pgn(game_id: int):
-    from fastapi.responses import PlainTextResponse
-    game_row = database.get_game(game_id)
-    if not game_row:
-        return PlainTextResponse("Game not found", status_code=404)
-    moves = database.get_game_moves(game_id)
+def _build_game_pgn(game_row: dict, moves: list[dict], round_number: Optional[int] = None) -> str:
+    """
+    Build an annotated PGN string for a single game.
 
-    lines = [
+    Includes quality glyphs (??, ?, !?, !, !!) and {comment} blocks with the
+    model's reasoning, move quality label, and candidate rank.  Used by both
+    the single-game download endpoint and the bulk export endpoint.
+    """
+    tags = [
         '[Event "Nimzo Arena"]',
         '[Site "localhost"]',
         f'[Date "{game_row["played_at"][:10]}"]',
+    ]
+    if round_number is not None:
+        tags.append(f'[Round "{round_number}"]')
+    tags += [
         f'[White "{game_row["white_name"]}"]',
         f'[Black "{game_row["black_name"]}"]',
         f'[Result "{game_row["result"]}"]',
@@ -370,45 +374,103 @@ async def api_game_pgn(game_id: int):
 
     tokens: list[str] = []
     for m in moves:
-        num     = m["move_number"]
-        san     = m["move_san"]
-        glyph   = _QUALITY_GLYPH.get(m["quality"] or "", "")
-        reason  = (m["reasoning"] or "").strip().replace("{", "(").replace("}", ")")
-        rank    = m["candidate_rank"]
+        num   = m["move_number"]
+        san   = m["move_san"]
+        glyph = _QUALITY_GLYPH.get(m["quality"] or "", "")
+        reason = (m["reasoning"] or "").strip().replace("{", "(").replace("}", ")")
+        rank  = m["candidate_rank"]
 
-        # Move number prefix for white moves (odd) and black's first token
         if num % 2 == 1:
             tokens.append(f"{(num + 1) // 2}.")
 
         tokens.append(san + glyph)
 
         comment_parts = []
-        if reason and reason != "(no reasoning)" and reason != "(parse failed — defaulted to top candidate)":
+        if reason and not reason.startswith("("):
             comment_parts.append(reason)
         if m["quality"] and m["quality"] != "good":
             comment_parts.append(m["quality"].capitalize())
         if rank:
             comment_parts.append(f"candidate #{rank}")
         if comment_parts:
-            tokens.append("{ " + " | ".join(comment_parts) + " }")
+            comment_content = " | ".join(comment_parts)
+            # Wrap long comments internally so no line exceeds 80 chars
+            comment_lines: list[str] = []
+            cur = "{"
+            for word in comment_content.split():
+                candidate = (cur + " " + word) if cur != "{" else ("{ " + word)
+                if len(candidate) <= 78:
+                    cur = candidate
+                else:
+                    comment_lines.append(cur)
+                    cur = "  " + word
+            comment_lines.append(cur + " }")
+            tokens.append("\n".join(comment_lines))
 
     tokens.append(game_row["result"])
 
-    # Wrap at ~80 chars
-    pgn_body = ""
+    # Word-wrap at ~80 chars (tokens that are already multi-line are kept intact)
+    body = ""
     line = ""
     for tok in tokens:
-        if line and len(line) + 1 + len(tok) > 78:
-            pgn_body += line + "\n"
+        if "\n" in tok:
+            # Multi-line comment: flush current line, then emit comment as-is
+            if line:
+                body += line + "\n"
+            body += tok + "\n"
+            line = ""
+        elif line and len(line) + 1 + len(tok) > 78:
+            body += line + "\n"
             line = tok
         else:
             line = (line + " " + tok).lstrip()
     if line:
-        pgn_body += line + "\n"
+        body += line + "\n"
 
-    filename = f"nimzo_{game_row['white_name']}_vs_{game_row['black_name']}_{game_id}.pgn".replace(" ", "_")
+    return "\n".join(tags) + body
+
+
+@app.get("/api/games/{game_id}/pgn")
+async def api_game_pgn(game_id: int):
+    from fastapi.responses import PlainTextResponse
+    game_row = database.get_game(game_id)
+    if not game_row:
+        return PlainTextResponse("Game not found", status_code=404)
+    moves = database.get_game_moves(game_id)
+    pgn = _build_game_pgn(game_row, moves)
+    filename = (
+        f"nimzo_{game_row['white_name']}_vs_{game_row['black_name']}_{game_id}.pgn"
+        .replace(" ", "_")
+    )
     return PlainTextResponse(
-        "\n".join(lines) + pgn_body,
+        pgn,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/games/export")
+async def api_games_export(model_id: Optional[str] = None, limit: int = 5000):
+    """
+    Bulk PGN export — all games as a single annotated PGN file.
+
+    Query params:
+      model_id — restrict to games where this model played (optional)
+      limit    — max games to export (default 5 000)
+    """
+    from fastapi.responses import PlainTextResponse
+    rows = database.get_all_games(model_id=model_id, limit=limit)
+    if not rows:
+        return PlainTextResponse("# No games found\n", status_code=200)
+
+    parts: list[str] = []
+    for i, row in enumerate(rows, 1):
+        moves = database.get_game_moves(row["id"])
+        parts.append(_build_game_pgn(row, moves, round_number=i))
+
+    filename = "nimzo_export.pgn" if not model_id else f"nimzo_{model_id}_export.pgn"
+    filename = filename.replace("/", "_").replace(" ", "_")
+    return PlainTextResponse(
+        "\n".join(parts),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
