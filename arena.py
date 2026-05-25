@@ -31,6 +31,7 @@ load_dotenv()
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 
@@ -50,7 +51,12 @@ from analysis import (
     ACHIEVEMENT_CATALOGUE,
 )
 from models.metadata import get_model_metadata
+from models.portraits import generate_portrait
 import db as database
+
+# ── Portraits directory ───────────────────────────────────────────────────
+_PORTRAITS_DIR = Path("portraits")
+_PORTRAITS_DIR.mkdir(exist_ok=True)
 
 
 # ── Global tournament state ───────────────────────────────────────────────
@@ -130,6 +136,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="Nimzo", lifespan=lifespan)
+app.mount("/portraits", StaticFiles(directory=str(_PORTRAITS_DIR)), name="portraits")
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────
@@ -233,7 +240,39 @@ async def api_model_profile(model_id: str):
     profile["metadata"] = await loop.run_in_executor(
         None, get_model_metadata, model_id,
     )
+    # Include portrait URL if already generated
+    portrait_path = database.get_portrait_path(model_id)
+    profile["portrait_url"] = f"/{portrait_path}" if portrait_path else None
     return profile
+
+
+@app.post("/api/models/{model_id:path}/portrait")
+async def api_generate_portrait(model_id: str):
+    """
+    Generate (or retrieve cached) portrait for a model.
+
+    Returns ``{portrait_url: "/portraits/abc.png"}`` on success,
+    ``{portrait_url: null}`` if no API key or generation fails.
+    Runs the blocking Imagen call in a thread-pool executor.
+    """
+    # Return cached path without regenerating
+    existing = database.get_portrait_path(model_id)
+    if existing and Path(existing).exists():
+        return {"portrait_url": f"/{existing}"}
+
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        return {"portrait_url": None}
+
+    loop = asyncio.get_event_loop()
+    path = await loop.run_in_executor(
+        None, generate_portrait, model_id, api_key, _PORTRAITS_DIR
+    )
+
+    if path:
+        database.set_portrait_path(model_id, path)
+
+    return {"portrait_url": f"/{path}" if path else None}
 
 
 @app.get("/api/achievements/catalogue")
@@ -453,6 +492,8 @@ async def play_game(
         "black": black.config.name,
         "white_elo": round(white.elo),
         "black_elo": round(black.elo),
+        "white_model_id": white.config.model_id,
+        "black_model_id": black.config.model_id,
         "fen": board.fen(),
     })
 

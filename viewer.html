@@ -166,6 +166,13 @@
     }
     .p-left { display: flex; align-items: center; gap: 9px; }
     .p-swatch { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .p-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      object-fit: cover; flex-shrink: 0;
+      border: 1px solid var(--border-hi);
+      background: var(--bg-raised);
+      display: none;   /* hidden until portrait loads */
+    }
     .p-name {
       font-family: 'Cinzel', serif;
       font-size: 12px;
@@ -672,6 +679,34 @@
     }
     .mc-close:hover { color: var(--gold); }
 
+    .mc-portrait {
+      width: 110px; height: 110px; border-radius: 50%;
+      object-fit: cover; object-position: top center;
+      border: 2px solid var(--border-hi);
+      display: block; margin: 0 auto 14px;
+      background: var(--bg-raised);
+    }
+    .mc-portrait-placeholder {
+      width: 110px; height: 110px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 42px; margin: 0 auto 14px;
+      background: var(--bg-raised); border: 2px solid var(--border);
+    }
+    .mc-portrait-generating {
+      width: 110px; height: 110px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 6px;
+      background: var(--bg-raised); border: 2px dashed var(--border-hi);
+      margin: 0 auto 14px; font-size: 9px; color: var(--text-dim);
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+    .mc-portrait-generating .spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid var(--border-hi); border-top-color: var(--gold);
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     .mc-name {
       font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700;
       color: var(--text); letter-spacing: .8px; margin-bottom: 2px;
@@ -895,6 +930,7 @@
   <div class="board-col" id="boardCol">
     <div class="player-strip" id="stripBlack">
       <div class="p-left">
+        <img class="p-avatar" id="avatarBlack" alt="">
         <div class="p-swatch" style="background:#1a1a1a;border:1px solid #444"></div>
         <div class="p-name" id="nameBlack">—</div>
       </div>
@@ -913,6 +949,7 @@
 
     <div class="player-strip" id="stripWhite">
       <div class="p-left">
+        <img class="p-avatar" id="avatarWhite" alt="">
         <div class="p-swatch" style="background:#f0f0f0;border:1px solid #bbb"></div>
         <div class="p-name" id="nameWhite">—</div>
       </div>
@@ -1156,8 +1193,8 @@ const FILES  = ['a','b','c','d','e','f','g','h'];
 let gameState = {
   fen:        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
   lastUci:    null,
-  white:      { name: '—', elo: null },
-  black:      { name: '—', elo: null },
+  white:      { name: '—', elo: null, model_id: null, portrait_url: null },
+  black:      { name: '—', elo: null, model_id: null, portrait_url: null },
   thinking:   null,
   candidates: [],
   lastEvalCp:  null,
@@ -1678,8 +1715,8 @@ function onBackendChange(side) {
 
 // ── WebSocket event dispatch ──────────────────────────────────────────────
 function onGameStart(d) {
-  gameState.white    = { name: d.white, elo: d.white_elo };
-  gameState.black    = { name: d.black, elo: d.black_elo };
+  gameState.white    = { name: d.white, elo: d.white_elo, model_id: d.white_model_id || null, portrait_url: null };
+  gameState.black    = { name: d.black, elo: d.black_elo, model_id: d.black_model_id || null, portrait_url: null };
   gameState.fen      = d.fen || gameState.fen;
   gameState.lastUci    = null;
   gameState.thinking   = null;
@@ -1690,7 +1727,28 @@ function onGameStart(d) {
   document.getElementById('evalPane').style.display = 'none';
   document.getElementById('historyPane').innerHTML = '';
   document.getElementById('overlay').classList.remove('show');
+  // Reset avatars
+  ['White','Black'].forEach(c => {
+    const el = document.getElementById(`avatar${c}`);
+    el.src = ''; el.style.display = 'none';
+  });
   updatePlayers(); updateAnalysis(); renderBoard();
+  // Kick off portrait fetch for both players (non-blocking)
+  if (d.white_model_id) fetchPortrait(d.white_model_id, 'White');
+  if (d.black_model_id) fetchPortrait(d.black_model_id, 'Black');
+}
+
+async function fetchPortrait(modelId, color) {
+  try {
+    const r = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' });
+    const j = await r.json();
+    if (j.portrait_url) {
+      gameState[color.toLowerCase()].portrait_url = j.portrait_url;
+      const el = document.getElementById(`avatar${color}`);
+      el.onload = () => { el.style.display = 'block'; };
+      el.src = j.portrait_url;
+    }
+  } catch(e) { /* portrait optional */ }
 }
 
 function onThinking(d) {
@@ -1871,12 +1929,51 @@ function closeReplay() {
 }
 
 // ── Model card modal ──────────────────────────────────────────────────────
+function renderPortraitBlock(p) {
+  if (p.portrait_url) {
+    return `<img class="mc-portrait" src="${escHtml(p.portrait_url)}" alt="${escHtml(p.name || '')} portrait">`;
+  }
+  // Placeholder with model family initial or chess piece
+  const family = (p.metadata && p.metadata.family) || '';
+  const icon = family ? family[0].toUpperCase() : '♟';
+  return `<div class="mc-portrait-placeholder">${icon}</div>`;
+}
+
 async function openModelCard(modelId) {
   try {
     const p = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/profile`)
       .then(r => r.json());
     renderModelCard(p);
     document.getElementById('modelModal').classList.add('show');
+    // If no portrait yet, generate one and update the card when done
+    if (!p.portrait_url) {
+      const portraitEl = document.getElementById('mcCard').querySelector('.mc-portrait-placeholder, .mc-portrait');
+      if (portraitEl) {
+        portraitEl.outerHTML = `<div class="mc-portrait-generating"><div class="spinner"></div>Painting…</div>`;
+      }
+      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' })
+        .then(r => r.json())
+        .then(j => {
+          if (j.portrait_url) {
+            p.portrait_url = j.portrait_url;
+            const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+            if (gen) {
+              const img = document.createElement('img');
+              img.className = 'mc-portrait';
+              img.src = j.portrait_url;
+              img.alt = (p.name || '') + ' portrait';
+              gen.replaceWith(img);
+            }
+          } else {
+            const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+            if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+          }
+        })
+        .catch(() => {
+          const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+          if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+        });
+    }
   } catch (e) {
     console.error('Model card load failed:', e);
   }
@@ -1929,6 +2026,7 @@ function renderModelCard(p) {
   const fmtScore = (w, d, t) => t ? `${(((w + 0.5*d)/t)*100).toFixed(0)}%` : '—';
 
   document.getElementById('mcBody').innerHTML = `
+    ${renderPortraitBlock(p)}
     <div class="mc-name">${escHtml(p.name || '—')}</div>
     <div class="mc-modelid">${escHtml(p.model_id || '')} · ${escHtml(p.backend || '')}</div>
     ${renderMetadata(p.metadata)}

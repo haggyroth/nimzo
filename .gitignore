@@ -8,6 +8,9 @@
 openings_cache.json
 hf_metadata_cache.json
 
+# Generated portraits (large binary files; regenerated on demand)
+portraits/
+
 # Python
 __pycache__/
 *.py[cod]

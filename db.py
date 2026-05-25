@@ -98,6 +98,11 @@ def _migrate(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE lessons ADD COLUMN lesson_type TEXT DEFAULT 'improve'")
     except sqlite3.OperationalError:
         pass  # already exists
+    # Add portrait_path column if missing
+    try:
+        conn.execute("ALTER TABLE players ADD COLUMN portrait_path TEXT")
+    except sqlite3.OperationalError:
+        pass  # already exists
 
 
 # ── Players ──────────────────────────────────────────────────────────────
@@ -137,6 +142,24 @@ def get_player_game_count(model_id: str) -> int:
             (model_id,),
         ).fetchone()
         return row["cnt"] if row else 0
+
+
+def get_portrait_path(model_id: str) -> Optional[str]:
+    """Return the stored portrait_path for a player, or None if not yet generated."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT portrait_path FROM players WHERE model_id = ?", (model_id,)
+        ).fetchone()
+        return row["portrait_path"] if row else None
+
+
+def set_portrait_path(model_id: str, path: str) -> None:
+    """Persist a generated portrait path for a player."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE players SET portrait_path = ? WHERE model_id = ?",
+            (path, model_id),
+        )
 
 
 # ── Games ────────────────────────────────────────────────────────────────

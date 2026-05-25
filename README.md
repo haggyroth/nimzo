@@ -119,6 +119,7 @@ Only infrastructure settings belong in `.env` — model selection happens in the
 |---|---|---|
 | `STOCKFISH_PATH` | `/usr/games/stockfish` | Path to the Stockfish binary |
 | `ANTHROPIC_API_KEY` | — | Required for Anthropic lesson generation |
+| `GOOGLE_API_KEY` | — | Google AI Studio key for model portrait generation (optional; portraits are skipped if absent) |
 
 ---
 

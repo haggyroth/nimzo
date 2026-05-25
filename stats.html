@@ -263,6 +263,33 @@
       letter-spacing: 1.5px; text-transform: uppercase;
     }
     .mc-close:hover { color: var(--gold); }
+    .mc-portrait {
+      width: 110px; height: 110px; border-radius: 50%;
+      object-fit: cover; object-position: top center;
+      border: 2px solid var(--border-hi);
+      display: block; margin: 0 auto 14px;
+      background: var(--bg-raised);
+    }
+    .mc-portrait-placeholder {
+      width: 110px; height: 110px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 42px; margin: 0 auto 14px;
+      background: var(--bg-raised); border: 2px solid var(--border);
+    }
+    .mc-portrait-generating {
+      width: 110px; height: 110px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 6px;
+      background: var(--bg-raised); border: 2px dashed var(--border-hi);
+      margin: 0 auto 14px; font-size: 9px; color: var(--text-dim);
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+    .mc-portrait-generating .spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid var(--border-hi); border-top-color: var(--gold);
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .mc-name {
       font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700;
       color: var(--text); letter-spacing: .8px; margin-bottom: 2px;
@@ -624,6 +651,15 @@ function escHtml(s) {
 }
 
 // ── Model card modal ──────────────────────────────────────────────────────
+function renderPortraitBlock(p) {
+  if (p.portrait_url) {
+    return `<img class="mc-portrait" src="${escHtml(p.portrait_url)}" alt="${escHtml(p.name || '')} portrait">`;
+  }
+  const family = (p.metadata && p.metadata.family) || '';
+  const icon = family ? family[0].toUpperCase() : '♟';
+  return `<div class="mc-portrait-placeholder">${icon}</div>`;
+}
+
 async function openModelCard(modelId) {
   if (!modelId) return;
   try {
@@ -631,6 +667,30 @@ async function openModelCard(modelId) {
       .then(r => r.json());
     renderModelCard(p);
     document.getElementById('modelModal').classList.add('show');
+    if (!p.portrait_url) {
+      const portraitEl = document.getElementById('mcCard').querySelector('.mc-portrait-placeholder, .mc-portrait');
+      if (portraitEl) portraitEl.outerHTML = `<div class="mc-portrait-generating"><div class="spinner"></div>Painting…</div>`;
+      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' })
+        .then(r => r.json())
+        .then(j => {
+          if (j.portrait_url) {
+            const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+            if (gen) {
+              const img = document.createElement('img');
+              img.className = 'mc-portrait'; img.src = j.portrait_url;
+              img.alt = (p.name || '') + ' portrait';
+              gen.replaceWith(img);
+            }
+          } else {
+            const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+            if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+          }
+        })
+        .catch(() => {
+          const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+          if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+        });
+    }
   } catch (e) { console.error('Model card load failed:', e); }
 }
 function closeModelCard() { document.getElementById('modelModal').classList.remove('show'); }
@@ -673,6 +733,7 @@ function renderModelCard(p) {
   const fmtScore = (w, d, t) => t ? `${(((w + 0.5*d)/t)*100).toFixed(0)}%` : '—';
 
   document.getElementById('mcBody').innerHTML = `
+    ${renderPortraitBlock(p)}
     <div class="mc-name">${escHtml(p.name || '—')}</div>
     <div class="mc-modelid">${escHtml(p.model_id || '')} · ${escHtml(p.backend || '')}</div>
     ${renderMetadata(p.metadata)}
@@ -856,8 +917,16 @@ function renderCompareSide(p, slot, winner) {
       }).join('') + `</div>`
     : `<div class="mc-no-traits" style="font-size:9px">No badges yet.</div>`;
 
+  const portraitHtml = p.portrait_url
+    ? `<img class="mc-portrait" src="${escHtml(p.portrait_url)}" alt="${escHtml(p.name)} portrait"
+        style="width:80px;height:80px;margin-bottom:8px">`
+    : `<div class="mc-portrait-placeholder" style="width:80px;height:80px;font-size:28px;margin-bottom:8px">${
+        ((p.metadata && p.metadata.family) || '')[0] || '♟'
+      }</div>`;
+
   return `
     <div class="cmp-side ${slot} ${winner ? 'winner' : ''}">
+      ${portraitHtml}
       <div class="cmp-name">${escHtml(p.name)}</div>
       <div class="cmp-modelid">${escHtml(p.model_id)}</div>
       ${renderMetadata(p.metadata)}
