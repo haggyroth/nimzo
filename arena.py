@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import asyncio
 import json
+from typing import Optional
 import argparse
 import chess
 import chess.pgn
@@ -39,6 +40,7 @@ from engine import StockfishEngine
 from models.base import ChessPlayer, PlayerConfig
 from models.anthropic_player import AnthropicPlayer
 from models.lmstudio_player import LMStudioPlayer
+from models.human_player import HumanPlayer
 from analysis import (
     TutorConfig,
     calculate_elos,
@@ -77,6 +79,10 @@ _state: dict = {
     "black": None,
     "white_elo": None,
     "black_elo": None,
+    # Human-play flags
+    "white_is_human": False,
+    "black_is_human": False,
+    "human_assisted": True,
     # Tournament-mode fields (None in 2-player match mode)
     "format": None,           # "round_robin" | "gauntlet" | "match"
     "standings": None,        # list[dict] or None
@@ -402,6 +408,23 @@ async def api_games(limit: int = 20):
     return database.get_recent_games(limit)
 
 
+class HumanMoveRequest(BaseModel):
+    uci: str
+
+
+@app.post("/api/human-move")
+async def api_human_move(body: HumanMoveRequest):
+    """
+    Receive the human player's chosen move from the browser.
+    Accepts the move for whichever color is currently awaiting input.
+    """
+    for color, hp in list(_active_human_players.items()):
+        if hp.submit_move(body.uci):
+            return {"ok": True, "color": color, "uci": body.uci}
+    from fastapi import HTTPException
+    raise HTTPException(status_code=400, detail="No human player awaiting a move, or illegal move")
+
+
 @app.get("/api/models")
 async def api_models(url: str = "http://localhost:1234/v1"):
     import httpx
@@ -419,6 +442,12 @@ class PlayerSpec(BaseModel):
     model_id: str = ""
     url: str = "http://localhost:1234/v1"
     thinking: bool = False
+    candidate_count: Optional[int] = None   # override default 5; None = use default
+
+
+# ── Active human player registry ─────────────────────────────────────────
+# Keyed by "white" or "black"; populated at game start, cleared after.
+_active_human_players: dict[str, HumanPlayer] = {}
 
 
 class TournamentStartConfig(BaseModel):
@@ -436,6 +465,8 @@ class TournamentStartConfig(BaseModel):
     tutor_model: str = ""
     tutor_url: str = "http://localhost:1234/v1"
     games: int = 10
+    # Human-play settings
+    human_assisted: bool = True    # True = show Stockfish candidates; False = blind
     # Multi-player tournament fields (len >= 2 activates bracket mode)
     players: list[PlayerSpec] = []
     format: str = "round_robin"   # "round_robin" | "gauntlet"
@@ -614,20 +645,30 @@ async def api_start(config: TournamentStartConfig):
         return {"ok": True}
 
     # ── Classic 2-player match mode ───────────────────────────────────
-    white  = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking)
-    black  = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking)
+    white = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking)
+    black = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking)
+
+    # Register any human players so /api/human-move can reach them.
+    _active_human_players.clear()
+    if isinstance(white, HumanPlayer):
+        _active_human_players["white"] = white
+    if isinstance(black, HumanPlayer):
+        _active_human_players["black"] = black
 
     _state.update({
-        "status":        "running",
-        "game_number":   0,
-        "total_games":   config.games,
-        "white":         config.white_name,
-        "black":         config.black_name,
-        "white_elo":     round(white.elo),
-        "black_elo":     round(black.elo),
-        "format":        "match",
-        "standings":     None,
-        "tournament_id": None,
+        "status":          "running",
+        "game_number":     0,
+        "total_games":     config.games,
+        "white":           config.white_name,
+        "black":           config.black_name,
+        "white_elo":       round(white.elo),
+        "black_elo":       round(black.elo),
+        "white_is_human":  isinstance(white, HumanPlayer),
+        "black_is_human":  isinstance(black, HumanPlayer),
+        "human_assisted":  config.human_assisted,
+        "format":          "match",
+        "standings":       None,
+        "tournament_id":   None,
     })
     await broadcast({"type": "tournament_status", **_state})
 
@@ -644,7 +685,10 @@ async def api_start(config: TournamentStartConfig):
             global _stop_requested
             _stop_requested = False
             _pause_event.set()
+            _active_human_players.clear()
             _state["status"] = "idle"
+            _state["white_is_human"] = False
+            _state["black_is_human"] = False
             try:
                 await broadcast({"type": "tournament_status", **_state})
             except Exception:
@@ -714,6 +758,8 @@ async def play_game(
         "black_elo": round(black.elo),
         "white_model_id": white.config.model_id,
         "black_model_id": black.config.model_id,
+        "white_is_human": isinstance(white, HumanPlayer),
+        "black_is_human": isinstance(black, HumanPlayer),
         "fen": board.fen(),
     })
 
@@ -745,6 +791,7 @@ async def play_game(
         game.accept(exporter)
         pgn_so_far = str(exporter)
 
+        is_human = isinstance(current_player, HumanPlayer)
         await broadcast({
             "type": "thinking",
             "player": current_player.config.name,
@@ -754,6 +801,8 @@ async def play_game(
                 {"uci": m.uci(), "san": board.san(m), "score_cp": s}
                 for m, s in candidates
             ],
+            "is_human_turn": is_human,
+            "legal_uci": current_player.get_legal_uci_moves() if is_human else [],
         })
 
         # Run blocking model API call in thread pool — this is the main blocker
@@ -941,6 +990,8 @@ async def play_game(
         (white, "White", move_qualities_white),
         (black, "Black", move_qualities_black),
     ]:
+        if isinstance(player, HumanPlayer):
+            continue   # humans don't receive AI-generated lessons
         quality_summary = build_quality_summary(qualities)
         lessons = generate_lessons(
             pgn=pgn_string,
@@ -1209,6 +1260,7 @@ def build_player(
     model_id: str,
     base_url: str | None = None,
     enable_thinking: bool = False,
+    candidate_count: int | None = None,
 ) -> ChessPlayer:
     db_exists = Path("nimzo.db").exists()
     config = PlayerConfig(
@@ -1217,6 +1269,7 @@ def build_player(
         backend=backend,
         base_url=base_url,
         enable_thinking=enable_thinking,
+        candidate_count=candidate_count if candidate_count is not None else 5,
         lesson_memory=database.get_player_lessons(model_id) if db_exists else [],
         strategic_profile=database.get_strategic_profile(model_id) if db_exists else None,
     )
@@ -1224,6 +1277,8 @@ def build_player(
         player = AnthropicPlayer(config)
     elif backend == "lmstudio":
         player = LMStudioPlayer(config)
+    elif backend == "human":
+        player = HumanPlayer(config)
     else:
         raise ValueError(f"Unknown backend: {backend!r}")
 

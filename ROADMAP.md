@@ -149,12 +149,12 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 ---
 
 ## Phase 11 — Human Play & Advanced Metrics
-*Future*
+*v11 release*
 
-- [ ] **Human vs LLM**: click-on-board move input for human turns; `human` backend in `build_player()`; ELO stored by username; legal move highlighting on square click
-- [ ] **Assisted vs blind mode**: toggle whether the human sees Stockfish candidates or plays without hints
+- [x] **Human vs LLM**: click-on-board move input for human turns; `human` backend in `build_player()`; ELO stored by username; legal move highlighting on square click
+- [x] **Assisted vs blind mode**: toggle whether the human sees Stockfish candidates or plays without hints
 - [ ] **Reasoning coherence scoring**: post-move micro-eval — did the model's stated reasoning justify the chosen move? Produces a "reasoning integrity" stat per model; genuinely novel for LLM comparison; requires a small judge model call per move
-- [ ] **Stockfish difficulty scaling**: reduce candidate count or depth for human play / weaker models so they're not getting top-10 guidance and still blundering
+- [x] **Stockfish difficulty scaling**: reduce candidate count or depth for human play / weaker models so they're not getting top-10 guidance and still blundering
 
 ---
 

@@ -250,6 +250,43 @@
     .sq.hi-from { background: var(--sq-from) !important; }
     .sq.hi-to   { background: var(--sq-to)   !important; }
 
+    /* ── Human-play: legal move dots & selected piece ──────────────── */
+    .sq.sq-legal::after {
+      content: '';
+      position: absolute;
+      width: 28%; height: 28%;
+      border-radius: 50%;
+      background: rgba(0,0,0,.22);
+      pointer-events: none;
+    }
+    .sq.sq-legal.has-piece::after {
+      /* ring instead of dot for squares that have a piece */
+      width: 86%; height: 86%;
+      background: transparent;
+      border: 4px solid rgba(0,0,0,.22);
+    }
+    .sq.sq-selected { background: rgba(20, 180, 80, .50) !important; }
+    .sq.sq-legal    { cursor: pointer; }
+
+    /* ── Human turn banner ─────────────────────────────────────────── */
+    #humanTurnBanner {
+      display: none;
+      position: absolute;
+      bottom: 40px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(20,160,80,.88);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      padding: 5px 14px;
+      border-radius: 12px;
+      pointer-events: none;
+      z-index: 10;
+      white-space: nowrap;
+    }
+    #humanTurnBanner.show { display: block; }
+
     .sq-label {
       position: absolute; font-size: 8px; font-weight: 500;
       color: var(--sq-label-color, #888);
@@ -1161,6 +1198,7 @@
 
     <div class="board-wrap" id="boardWrap">
       <div id="board"></div>
+      <div id="humanTurnBanner">YOUR MOVE</div>
       <button id="flipBtn" class="flip-btn" onclick="toggleFlip()" title="Flip to Black's perspective">⇅</button>
     </div>
 
@@ -1230,6 +1268,7 @@
               <select class="ctrl-select" id="whiteBackend" onchange="onBackendChange('white')">
                 <option value="lmstudio">LM Studio</option>
                 <option value="anthropic">Anthropic</option>
+                <option value="human">Human</option>
               </select>
               <div class="url-row" id="whiteUrlRow">
                 <input class="ctrl-input" id="whiteUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
@@ -1250,6 +1289,7 @@
               <select class="ctrl-select" id="blackBackend" onchange="onBackendChange('black')">
                 <option value="lmstudio">LM Studio</option>
                 <option value="anthropic">Anthropic</option>
+                <option value="human">Human</option>
               </select>
               <div class="url-row" id="blackUrlRow">
                 <input class="ctrl-input" id="blackUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
@@ -1284,6 +1324,15 @@
             <div class="games-row">
               <span>Number of games</span>
               <input type="number" id="gamesCount" value="1" min="1" max="200">
+            </div>
+
+            <!-- Human-play options (visible only when a human backend is chosen) -->
+            <div id="humanOpts" style="display:none">
+              <hr class="divider">
+              <label class="toggle-row">
+                <input type="checkbox" id="humanAssisted" checked>
+                Assisted mode (see Stockfish candidates)
+              </label>
             </div>
 
             <button class="start-btn" id="startBtn" onclick="startTournament()">▶ Start Match</button>
@@ -1710,7 +1759,16 @@ let gameState = {
   lastEvalCp:  null,
   boardFlipped: localStorage.getItem('boardFlipped') === 'true',
   lastGameId:   null,
+  // Human-play state
+  humanColor:     null,     // 'white' | 'black' | null
+  humanAssisted:  true,     // show Stockfish candidates?
+  isHumanTurn:    false,
+  humanLegalUci:  [],       // all legal moves for current position
+  humanCandidates:[], // UCI of Stockfish candidates
 };
+
+// ── Human board interaction state ─────────────────────────────────────────
+let humanSelected = null;   // UCI from-square, e.g. 'e2', when a piece is selected
 
 let tournamentStatus = 'idle';
 let isPaused = false;
@@ -1826,6 +1884,21 @@ function renderBoard(animate) {
   const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
   const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
 
+  // Precompute human move highlighting sets
+  const isHumanTurn  = gameState.isHumanTurn;
+  const allowedUci   = isHumanTurn
+    ? (gameState.humanAssisted ? gameState.humanCandidates : gameState.humanLegalUci)
+    : [];
+  // Legal destinations from humanSelected piece (filtered to allowedUci)
+  const legalDests   = new Set();
+  if (isHumanTurn && humanSelected) {
+    allowedUci.forEach(uci => {
+      if (uci.startsWith(humanSelected)) legalDests.add(uci.slice(2, 4));
+    });
+  }
+  // Set of from-squares that have at least one allowed move
+  const movableSqs   = new Set(allowedUci.map(u => u.slice(0,2)));
+
   el.innerHTML = ‘’;
   rows.forEach((r, ri) => {
     cols.forEach((c, ci) => {
@@ -1835,6 +1908,19 @@ function renderBoard(animate) {
       const k = key(r,c);
       if (k===fromKey) sq.classList.add(‘hi-from’);
       if (k===toKey)   sq.classList.add(‘hi-to’);
+
+      // Human-play: square name in algebraic notation
+      const sqName = FILES[c] + (8 - r);
+
+      if (isHumanTurn && humanSelected) {
+        // Selected piece square
+        if (sqName === humanSelected) sq.classList.add(‘sq-selected’);
+        // Legal destination for selected piece
+        if (legalDests.has(sqName)) {
+          sq.classList.add(‘sq-legal’);
+          if (matrix[r][c]) sq.classList.add(‘has-piece’);
+        }
+      }
 
       // Rank label on the leftmost visible column (color set by CSS)
       if (ci===0) {
@@ -1863,6 +1949,12 @@ function renderBoard(animate) {
         }
         sq.appendChild(span);
       }
+
+      // Add click handler for human turns
+      if (isHumanTurn) {
+        sq.addEventListener(‘click’, () => onHumanSquareClick(sqName, allowedUci, legalDests));
+      }
+
       el.appendChild(sq);
     });
   });
@@ -1881,15 +1973,83 @@ function toggleFlip() {
   renderBoard();
 }
 
+// ── Human board click handler ─────────────────────────────────────────────
+function onHumanSquareClick(sqName, allowedUci, legalDests) {
+  if (!gameState.isHumanTurn) return;
+
+  if (humanSelected) {
+    // Second click: try to make a move
+    const uci = humanSelected + sqName;
+    // Check promotion: pawn reaching back rank (simplified: assume queen)
+    const promotions = allowedUci.filter(u => u.startsWith(uci));
+    if (promotions.length > 0) {
+      // Use queen promotion if available, else first
+      const chosen = promotions.find(u => u.endsWith('q')) || promotions[0];
+      submitHumanMove(chosen);
+      return;
+    }
+    // Not a valid destination — maybe clicking a new piece
+    const movableSqs = new Set(allowedUci.map(u => u.slice(0,2)));
+    if (movableSqs.has(sqName)) {
+      humanSelected = sqName;
+      renderBoard();
+      return;
+    }
+    // Deselect
+    humanSelected = null;
+    renderBoard();
+    return;
+  }
+
+  // First click: select a piece that has legal moves
+  const movableSqs2 = new Set(allowedUci.map(u => u.slice(0,2)));
+  if (movableSqs2.has(sqName)) {
+    humanSelected = sqName;
+    renderBoard();
+  }
+}
+
+async function submitHumanMove(uci) {
+  humanSelected = null;
+  gameState.isHumanTurn = false;
+  const banner = document.getElementById('humanTurnBanner');
+  if (banner) banner.classList.remove('show');
+  renderBoard();  // clear highlights immediately
+
+  try {
+    const res = await fetch(`${API}/api/human-move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uci }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('Human move rejected:', err.detail || res.status);
+      // Re-enable human turn on error so they can try again
+      gameState.isHumanTurn = true;
+      if (banner) banner.classList.add('show');
+      renderBoard();
+    }
+  } catch(e) {
+    console.error('Failed to submit human move:', e);
+    gameState.isHumanTurn = true;
+    if (banner) banner.classList.add('show');
+    renderBoard();
+  }
+}
+
 // ── Player strips ─────────────────────────────────────────────────────────
 function updatePlayers() {
   document.getElementById('nameWhite').textContent = gameState.white.name;
   document.getElementById('nameBlack').textContent = gameState.black.name;
   document.getElementById('eloWhite').textContent  = gameState.white.elo!=null ? 'ELO '+Math.round(gameState.white.elo) : '—';
   document.getElementById('eloBlack').textContent  = gameState.black.elo!=null ? 'ELO '+Math.round(gameState.black.elo) : '—';
-  document.getElementById('thinkWhite').classList.toggle('on', gameState.thinking==='white');
-  document.getElementById('thinkBlack').classList.toggle('on', gameState.thinking==='black');
-  document.getElementById('boardWrap').classList.toggle('thinking', gameState.thinking!==null);
+  // Don't show "thinking" spinner for human turns — the board click UI handles it
+  const llmThinkingWhite = gameState.thinking==='white' && !gameState.isHumanTurn;
+  const llmThinkingBlack = gameState.thinking==='black' && !gameState.isHumanTurn;
+  document.getElementById('thinkWhite').classList.toggle('on', llmThinkingWhite);
+  document.getElementById('thinkBlack').classList.toggle('on', llmThinkingBlack);
+  document.getElementById('boardWrap').classList.toggle('thinking', llmThinkingWhite || llmThinkingBlack);
 
   // Live eval readout — show current centipawn advantage in each player strip
   const cp  = gameState.lastEvalCp;
@@ -1921,10 +2081,35 @@ function updateAnalysis() {
     body.innerHTML = '<div class="idle-hint"><div class="king">♟</div><div>Awaiting next move</div></div>';
     return;
   }
+
   const name  = gameState.thinking==='white' ? gameState.white.name : gameState.black.name;
   const cands = gameState.candidates || [];
-  const maxSc = Math.max(...cands.map(c=>c.score_cp!=null?Math.abs(c.score_cp):0), 1);
 
+  // Human turn: show candidates as clickable list (assisted) or simple prompt (blind)
+  if (gameState.isHumanTurn) {
+    if (!gameState.humanAssisted || cands.length === 0) {
+      body.innerHTML = `<div class="idle-hint"><div class="king">♟</div><div>Click a piece to move</div></div>`;
+      return;
+    }
+    const maxSc = Math.max(...cands.map(c=>c.score_cp!=null?Math.abs(c.score_cp):0), 1);
+    let html = `<div class="thinking-tag" style="color:var(--gold-bright)">Your candidates — click to move</div>`;
+    cands.forEach((c,i) => {
+      const sc  = c.score_cp;
+      const str = sc!=null ? (sc>0?'+':'')+(sc/100).toFixed(2) : '?';
+      const pct = sc!=null ? Math.round(Math.abs(sc)/maxSc*100) : 50;
+      const col = sc==null?'var(--text-dim)':sc>0?'var(--gold)':sc<-100?'var(--q-blunder)':'var(--text-mid)';
+      html += `<div class="cand-row" style="cursor:pointer" onclick="submitHumanMove('${c.uci}')">
+        <span class="cand-idx">${i+1}</span>
+        <span class="cand-san">${c.san}</span>
+        <div class="cand-bar"><div class="cand-bar-fill" style="width:${pct}%;background:${col}"></div></div>
+        <span class="cand-score">${str}</span>
+      </div>`;
+    });
+    body.innerHTML = html;
+    return;
+  }
+
+  const maxSc = Math.max(...cands.map(c=>c.score_cp!=null?Math.abs(c.score_cp):0), 1);
   let html = `<div class="thinking-tag on"><div class="dot"></div>${escHtml(name)}</div>`;
   cands.forEach((c,i) => {
     const sc  = c.score_cp;
@@ -2210,8 +2395,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Tournament controls ───────────────────────────────────────────────────
 async function startTournament() {
-  const wModel = document.getElementById('whiteModel').value;
-  const bModel = document.getElementById('blackModel').value;
+  const wBackend = document.getElementById('whiteBackend').value;
+  const bBackend = document.getElementById('blackBackend').value;
+  const wModel   = wBackend === 'human' ? (document.getElementById('whiteName').value || 'Human') : document.getElementById('whiteModel').value;
+  const bModel   = bBackend === 'human' ? (document.getElementById('blackName').value || 'Human') : document.getElementById('blackModel').value;
   if (!wModel || !bModel) { alert('Select models for both players.'); return; }
 
   const tutorBackend = document.getElementById('tutorBackend').value;
@@ -2219,20 +2406,21 @@ async function startTournament() {
   const tutorUrl     = tutorBackend==='none' ? '' : document.getElementById('tutorUrl').value;
 
   const cfg = {
-    white_backend:  document.getElementById('whiteBackend').value,
-    white_name:     document.getElementById('whiteName').value || 'White',
-    white_model:    wModel,
-    white_url:      document.getElementById('whiteUrl').value,
-    white_thinking: document.getElementById('whiteThinking').checked,
-    black_backend:  document.getElementById('blackBackend').value,
-    black_name:     document.getElementById('blackName').value || 'Black',
-    black_model:    bModel,
-    black_url:      document.getElementById('blackUrl').value,
-    black_thinking: document.getElementById('blackThinking').checked,
-    tutor_backend:  tutorBackend==='none' ? 'lmstudio' : tutorBackend,
-    tutor_model:    tutorModel,
-    tutor_url:      tutorUrl || 'http://localhost:1234/v1',
-    games:          parseInt(document.getElementById('gamesCount').value) || 10,
+    white_backend:   wBackend,
+    white_name:      document.getElementById('whiteName').value || 'White',
+    white_model:     wModel,
+    white_url:       document.getElementById('whiteUrl').value,
+    white_thinking:  document.getElementById('whiteThinking').checked,
+    black_backend:   bBackend,
+    black_name:      document.getElementById('blackName').value || 'Black',
+    black_model:     bModel,
+    black_url:       document.getElementById('blackUrl').value,
+    black_thinking:  document.getElementById('blackThinking').checked,
+    tutor_backend:   tutorBackend==='none' ? 'lmstudio' : tutorBackend,
+    tutor_model:     tutorModel,
+    tutor_url:       tutorUrl || 'http://localhost:1234/v1',
+    games:           parseInt(document.getElementById('gamesCount').value) || 10,
+    human_assisted:  document.getElementById('humanAssisted') ? document.getElementById('humanAssisted').checked : true,
   };
 
   const res = await fetch(`${API}/api/tournament/start`, {
@@ -2382,15 +2570,41 @@ function onBackendChange(side) {
   // Handle "none" for both tutor variants
   const isTutor = side === 'tutor' || side === 'trnTutor';
   const modelId = side === 'trnTutor' ? 'trnTutorModel' : side + 'Model';
+
   if (isTutor && backend === 'none') {
     if (urlRow) urlRow.style.display = 'none';
     const ms = document.getElementById(modelId);
     if (ms) ms.style.display = 'none';
     return;
   }
+
+  // Human backend: hide URL, model, and thinking rows; show humanOpts
+  if (backend === 'human') {
+    if (urlRow) urlRow.style.display = 'none';
+    const modelSel = document.getElementById(modelId);
+    if (modelSel) { modelSel.innerHTML = '<option value="">— human player —</option>'; modelSel.style.display = 'none'; }
+    const thinkRow = document.getElementById(side + 'Thinking');
+    if (thinkRow) { thinkRow.parentElement.style.display = 'none'; }
+    // Show humanOpts if either white or black is human
+    const hoEl = document.getElementById('humanOpts');
+    if (hoEl) hoEl.style.display = '';
+    return;
+  }
+
+  // Restore hidden rows if switching away from human
   if (urlRow) urlRow.style.display = '';
-  const modelSel = document.getElementById(modelId);
-  if (modelSel) modelSel.style.display = '';
+  const modelSel2 = document.getElementById(modelId);
+  if (modelSel2) modelSel2.style.display = '';
+  const thinkRow2 = document.getElementById(side + 'Thinking');
+  if (thinkRow2) thinkRow2.parentElement.style.display = '';
+
+  // Hide humanOpts if neither side is now human
+  const wb = document.getElementById('whiteBackend');
+  const bb = document.getElementById('blackBackend');
+  if (wb && bb && wb.value !== 'human' && bb.value !== 'human') {
+    const hoEl = document.getElementById('humanOpts');
+    if (hoEl) hoEl.style.display = 'none';
+  }
 
   if (backend === 'anthropic') {
     // For Anthropic, populate with known models instead of fetching
@@ -2414,6 +2628,15 @@ function onGameStart(d) {
   gameState.thinking   = null;
   gameState.candidates = [];
   gameState.lastEvalCp = null;
+  gameState.isHumanTurn = false;
+  gameState.humanLegalUci = [];
+  gameState.humanCandidates = [];
+  humanSelected = null;
+  // Determine which color (if any) is the human player
+  if (d.white_is_human) gameState.humanColor = 'white';
+  else if (d.black_is_human) gameState.humanColor = 'black';
+  else gameState.humanColor = null;
+  gameState.humanAssisted = d.human_assisted !== false;
   _allLessons = {};
   evalHistory = [];
   document.getElementById('evalPane').style.display = 'none';
@@ -2449,6 +2672,17 @@ function onThinking(d) {
   gameState.candidates = d.candidates || [];
   if (d.color==='white' && d.player) gameState.white.name = d.player;
   if (d.color==='black' && d.player) gameState.black.name = d.player;
+
+  // Human-play setup
+  gameState.isHumanTurn   = !!d.is_human_turn;
+  gameState.humanLegalUci = d.legal_uci || [];
+  gameState.humanCandidates = (d.candidates || []).map(c => c.uci);
+  humanSelected = null;
+
+  // Show/hide "YOUR MOVE" banner
+  const banner = document.getElementById('humanTurnBanner');
+  if (banner) banner.classList.toggle('show', gameState.isHumanTurn);
+
   updatePlayers(); updateAnalysis(); renderBoard();
 }
 
@@ -2457,6 +2691,11 @@ function onMove(d) {
   gameState.lastUci    = d.uci;
   gameState.thinking   = null;
   gameState.candidates = [];
+  gameState.isHumanTurn = false;
+  gameState.humanLegalUci = [];
+  humanSelected = null;
+  const banner = document.getElementById('humanTurnBanner');
+  if (banner) banner.classList.remove('show');
   if (d.score_cp_white != null) gameState.lastEvalCp = d.score_cp_white;
   updatePlayers(); updateAnalysis(); renderBoard(true);  // true = animate the arriving piece
   addMoveCard(d);
@@ -2465,6 +2704,10 @@ function onMove(d) {
 
 function onGameOver(d) {
   gameState.thinking = null;
+  gameState.isHumanTurn = false;
+  humanSelected = null;
+  const banner = document.getElementById('humanTurnBanner');
+  if (banner) banner.classList.remove('show');
   updatePlayers();
 
   const resultMap = { '1-0':'White Wins','0-1':'Black Wins','1/2-1/2':'Draw' };
@@ -2597,10 +2840,20 @@ function onTournamentStatus(d) {
   if (d.black)      gameState.black.name = d.black;
   if (d.white_elo)  gameState.white.elo  = d.white_elo;
   if (d.black_elo)  gameState.black.elo  = d.black_elo;
+  if (d.white_is_human != null) {
+    if (d.white_is_human) gameState.humanColor = 'white';
+    else if (d.black_is_human) gameState.humanColor = 'black';
+    else gameState.humanColor = null;
+  }
+  if (d.human_assisted != null) gameState.humanAssisted = d.human_assisted;
   // Clear thinking state when the tournament stops — prevents stale
   // "● thinking" indicator and analysis dot from lingering on screen.
   if (d.status === 'idle' || d.status === 'stopping') {
     gameState.thinking = null;
+    gameState.isHumanTurn = false;
+    humanSelected = null;
+    const banner = document.getElementById('humanTurnBanner');
+    if (banner) banner.classList.remove('show');
   }
   // Show/hide live standings
   if (d.standings) renderStandings(d.standings);
