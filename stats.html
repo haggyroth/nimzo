@@ -129,6 +129,119 @@
     /* ── Loading spinner ── */
     .loading { padding: 20px; text-align: center; color: var(--text-dim); font-size: 9px; letter-spacing: 2px; }
 
+    /* ── Compare section ── */
+    .cmp-controls {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .cmp-controls select {
+      flex: 1; min-width: 140px;
+      background: var(--bg-input);
+      color: var(--text);
+      border: 1px solid var(--border-hi);
+      padding: 8px 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: .3px;
+      cursor: pointer;
+    }
+    .cmp-controls select:hover { border-color: var(--gold); }
+    .cmp-vs {
+      font-family: 'Cinzel', serif; font-size: 14px;
+      color: var(--gold); letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .cmp-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+    @media (max-width: 780px) {
+      .cmp-grid { grid-template-columns: 1fr; }
+      .cmp-side.b { border-left: none; border-top: 1px solid var(--border); }
+    }
+    .cmp-side {
+      padding: 18px 20px;
+    }
+    .cmp-side.b { border-left: 1px solid var(--border); }
+    .cmp-side.winner { background: linear-gradient(180deg, rgba(200,146,30,.07), transparent 60%); }
+
+    .cmp-name {
+      font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700;
+      color: var(--text); letter-spacing: .5px;
+    }
+    .cmp-modelid {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; color: var(--text-dim); letter-spacing: .4px;
+      word-break: break-all; margin-bottom: 8px;
+    }
+    .cmp-elo {
+      font-family: 'Cinzel', serif; font-size: 26px; font-weight: 700;
+      color: var(--gold); letter-spacing: 1px; line-height: 1;
+      margin: 10px 0 2px;
+    }
+    .cmp-elo .delta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; font-weight: 500; margin-left: 8px;
+    }
+    .cmp-elo .delta.up   { color: #56c45a; }
+    .cmp-elo .delta.down { color: var(--q-blunder); }
+    .cmp-record {
+      font-size: 10px; color: var(--text-mid); letter-spacing: 1px;
+    }
+    .cmp-section {
+      margin-top: 16px;
+      font-size: 8.5px; letter-spacing: 1.8px; text-transform: uppercase;
+      color: var(--gold-bright); font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .cmp-rates {
+      display: flex; flex-direction: column; gap: 7px;
+    }
+    .cmp-rate-row {
+      display: grid; grid-template-columns: 80px 1fr 38px;
+      align-items: center; gap: 10px;
+      font-size: 10px;
+    }
+    .cmp-rate-label { color: var(--text-mid); letter-spacing: .4px; }
+    .cmp-rate-track {
+      height: 5px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .cmp-rate-fill {
+      height: 100%;
+      background: var(--gold);
+      transition: width .25s;
+    }
+    .cmp-rate-fill.lead    { background: var(--gold-bright); }
+    .cmp-rate-fill.dim     { background: var(--border-hi); }
+    .cmp-rate-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--text); text-align: right;
+    }
+    .cmp-rate-val.lead { color: var(--gold-bright); font-weight: 600; }
+
+    .cmp-h2h {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-family: 'Cinzel', serif;
+      font-size: 12px; letter-spacing: 1px;
+      color: var(--text);
+    }
+    .cmp-h2h .score { font-size: 18px; color: var(--gold); margin: 0 10px; }
+    .cmp-h2h .none  { font-size: 10px; color: var(--text-dim); font-style: italic; }
+
+    .cmp-empty {
+      padding: 50px 20px; text-align: center;
+      color: var(--text-dim); font-size: 10px; letter-spacing: 1px;
+    }
+
     /* ── Model card modal (shared with viewer.html) ── */
     #modelModal {
       display: none; position: fixed; inset: 0;
@@ -271,6 +384,19 @@
 </header>
 
 <div class="page">
+
+  <!-- ── Compare Models ── -->
+  <div class="card" id="compareSection">
+    <div class="section-title">Compare Models</div>
+    <div class="cmp-controls">
+      <select id="cmpSelectA"></select>
+      <span class="cmp-vs">vs</span>
+      <select id="cmpSelectB"></select>
+    </div>
+    <div id="cmpBody">
+      <div class="cmp-empty">Pick two models above to compare.</div>
+    </div>
+  </div>
 
   <!-- ── ELO History ── -->
   <div class="card" id="eloSection">
@@ -610,8 +736,274 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.getElementById('modelModal').classList.contains('show')) closeModelCard();
 });
 
+// ── Compare Models ────────────────────────────────────────────────────────
+let _h2hRows = null;   // cached from /api/stats/h2h
+
+async function initCompare() {
+  // Populate both dropdowns from the leaderboard
+  const lb = await fetch(`${API}/api/leaderboard`).then(r => r.json()).catch(() => []);
+  if (!lb.length) {
+    document.getElementById('cmpBody').innerHTML =
+      `<div class="cmp-empty">No models yet. Play a game first.</div>`;
+    return;
+  }
+  const a = document.getElementById('cmpSelectA');
+  const b = document.getElementById('cmpSelectB');
+  const opts = lb.map(r =>
+    `<option value="${escHtml(r.model_id)}">${escHtml(r.name)} (${r.elo})</option>`
+  ).join('');
+  const blank = `<option value="">— pick a model —</option>`;
+  a.innerHTML = blank + opts;
+  b.innerHTML = blank + opts;
+
+  // Restore from URL params if present, otherwise pick top 2
+  const params = new URLSearchParams(location.search);
+  const initA = params.get('a') || (lb[0] && lb[0].model_id) || '';
+  const initB = params.get('b') || (lb[1] && lb[1].model_id) || '';
+  a.value = initA;
+  b.value = initB;
+
+  a.addEventListener('change', onCompareChange);
+  b.addEventListener('change', onCompareChange);
+
+  // Prefetch H2H rows so we don't refetch on every dropdown change
+  _h2hRows = await fetch(`${API}/api/stats/h2h`).then(r => r.json()).catch(() => []);
+
+  onCompareChange();
+}
+
+function onCompareChange() {
+  const a = document.getElementById('cmpSelectA').value;
+  const b = document.getElementById('cmpSelectB').value;
+
+  const url = new URL(location.href);
+  if (a) url.searchParams.set('a', a); else url.searchParams.delete('a');
+  if (b) url.searchParams.set('b', b); else url.searchParams.delete('b');
+  history.replaceState(null, '', url);
+
+  if (!a || !b) {
+    document.getElementById('cmpBody').innerHTML =
+      `<div class="cmp-empty">Pick two models above to compare.</div>`;
+    return;
+  }
+  if (a === b) {
+    document.getElementById('cmpBody').innerHTML =
+      `<div class="cmp-empty">Choose two different models.</div>`;
+    return;
+  }
+  loadCompare(a, b);
+}
+
+async function loadCompare(idA, idB) {
+  document.getElementById('cmpBody').innerHTML =
+    `<div class="cmp-empty">Loading…</div>`;
+  let [pA, pB] = await Promise.all([
+    fetch(`${API}/api/models/${encodeURIComponent(idA)}/profile`).then(r => r.json()),
+    fetch(`${API}/api/models/${encodeURIComponent(idB)}/profile`).then(r => r.json()),
+  ]);
+  renderCompare(pA, pB);
+}
+
+function _rate(num, denom) { return denom ? num / denom : 0; }
+
+function renderCompare(pA, pB) {
+  const winnerSide = (pA.elo || 0) > (pB.elo || 0) ? 'a'
+                  : (pB.elo || 0) > (pA.elo || 0) ? 'b' : null;
+
+  document.getElementById('cmpBody').innerHTML = `
+    <div class="cmp-grid">
+      ${renderCompareSide(pA, 'a', winnerSide === 'a')}
+      ${renderCompareSide(pB, 'b', winnerSide === 'b')}
+    </div>
+    ${renderRateBars(pA, pB)}
+    ${renderH2HRow(pA.model_id, pB.model_id, pA.name, pB.name)}
+  `;
+}
+
+function renderCompareSide(p, slot, winner) {
+  const m = p.moves || {}, c = p.color || {}, g = p.games || {};
+  const wins   = (c.white_wins||0) + (c.black_wins||0);
+  const draws  = (c.white_draws||0) + (c.black_draws||0);
+  const losses = (c.white_losses||0) + (c.black_losses||0);
+  const total  = m.total_moves || 0;
+
+  // Move-quality bar
+  const qkeys = ['q_best','q_excellent','q_good','q_inaccuracy','q_mistake','q_blunder'];
+  const qcls  = { q_best:'q-best', q_excellent:'q-excellent', q_good:'q-good',
+                  q_inaccuracy:'q-inaccuracy', q_mistake:'q-mistake', q_blunder:'q-blunder' };
+  const qSum = qkeys.reduce((s,k) => s + (m[k]||0), 0);
+  const qBar = qSum
+    ? qkeys.map(k => {
+        const n = m[k] || 0;
+        if (!n) return '';
+        const pct = (n / qSum * 100).toFixed(2);
+        return `<span class="${qcls[k]}" style="width:${pct}%" title="${k.slice(2)}: ${n}"></span>`;
+      }).join('')
+    : '<span style="width:100%;background:var(--border)"></span>';
+
+  const traits = (p.traits && p.traits.length)
+    ? p.traits.slice(0, 3).map(t =>
+        `<div class="mc-trait">
+           <span class="mc-trait-label">${escHtml(t.label)}</span>
+           <span class="mc-trait-detail">${escHtml(t.detail)}</span>
+         </div>`).join('')
+    : `<div class="mc-no-traits">No personality signal yet.</div>`;
+
+  const badges = (p.achievements && p.achievements.length)
+    ? `<div class="mc-badges">` + p.achievements.map(a => {
+        const x = a.times > 1 ? `<span class="b-times">×${a.times}</span>` : '';
+        return `<span class="mc-badge badge-${a.code}" title="${escHtml(a.desc)}">${escHtml(a.label)}${x}</span>`;
+      }).join('') + `</div>`
+    : `<div class="mc-no-traits" style="font-size:9px">No badges yet.</div>`;
+
+  return `
+    <div class="cmp-side ${slot} ${winner ? 'winner' : ''}">
+      <div class="cmp-name">${escHtml(p.name)}</div>
+      <div class="cmp-modelid">${escHtml(p.model_id)}</div>
+      ${renderMetadata(p.metadata)}
+      <div class="cmp-elo">${p.elo ?? '—'}</div>
+      <div class="cmp-record">${wins}/${draws}/${losses} · ${g.total_games || 0} games</div>
+
+      <div class="cmp-section">Move quality (${total} moves)</div>
+      <div class="mc-qbar">${qBar}</div>
+
+      <div class="cmp-section">Personality</div>
+      ${traits}
+
+      <div class="cmp-section">Achievements ${(p.achievements && p.achievements.length) ? '· ' + p.achievements.reduce((s,a)=>s+a.times, 0) : ''}</div>
+      ${badges}
+    </div>
+  `;
+}
+
+function renderRateBars(pA, pB) {
+  const mA = pA.moves || {}, mB = pB.moves || {};
+  const cA = pA.color || {}, cB = pB.color || {};
+  const gA = pA.games || {}, gB = pB.games || {};
+
+  const wGA = (cA.white_wins||0)+(cA.white_draws||0)+(cA.white_losses||0);
+  const bGA = (cA.black_wins||0)+(cA.black_draws||0)+(cA.black_losses||0);
+  const wGB = (cB.white_wins||0)+(cB.white_draws||0)+(cB.white_losses||0);
+  const bGB = (cB.black_wins||0)+(cB.black_draws||0)+(cB.black_losses||0);
+
+  const rates = [
+    {
+      label: 'Best moves',
+      a: _rate(mA.q_best, mA.total_moves) * 100,
+      b: _rate(mB.q_best, mB.total_moves) * 100,
+      fmt: v => v.toFixed(1) + '%',
+      higher_is_better: true,
+    },
+    {
+      label: 'Blunders',
+      a: _rate(mA.q_blunder, mA.total_moves) * 100,
+      b: _rate(mB.q_blunder, mB.total_moves) * 100,
+      fmt: v => v.toFixed(2) + '%',
+      higher_is_better: false,
+    },
+    {
+      label: 'Captures',
+      a: _rate(mA.captures, mA.total_moves) * 100,
+      b: _rate(mB.captures, mB.total_moves) * 100,
+      fmt: v => v.toFixed(1) + '%',
+      higher_is_better: null,
+    },
+    {
+      label: 'Checks',
+      a: _rate(mA.checks, mA.total_moves) * 100,
+      b: _rate(mB.checks, mB.total_moves) * 100,
+      fmt: v => v.toFixed(1) + '%',
+      higher_is_better: null,
+    },
+    {
+      label: 'White win %',
+      a: wGA ? ((cA.white_wins||0) + 0.5*(cA.white_draws||0)) / wGA * 100 : 0,
+      b: wGB ? ((cB.white_wins||0) + 0.5*(cB.white_draws||0)) / wGB * 100 : 0,
+      fmt: v => v.toFixed(0) + '%',
+      higher_is_better: true,
+    },
+    {
+      label: 'Black win %',
+      a: bGA ? ((cA.black_wins||0) + 0.5*(cA.black_draws||0)) / bGA * 100 : 0,
+      b: bGB ? ((cB.black_wins||0) + 0.5*(cB.black_draws||0)) / bGB * 100 : 0,
+      fmt: v => v.toFixed(0) + '%',
+      higher_is_better: true,
+    },
+    {
+      label: 'Avg game len',
+      a: gA.avg_game_moves || 0,
+      b: gB.avg_game_moves || 0,
+      fmt: v => v ? Math.round(v) + ' moves' : '—',
+      higher_is_better: null,
+    },
+  ];
+
+  // Find the max value per row to normalize bar widths
+  const rows = rates.map(r => {
+    const max = Math.max(r.a, r.b, 1);
+    let leadA = false, leadB = false;
+    if (r.higher_is_better === true) {
+      leadA = r.a > r.b; leadB = r.b > r.a;
+    } else if (r.higher_is_better === false) {
+      leadA = r.a < r.b && r.a > 0 || (r.a === 0 && r.b > 0);
+      leadB = r.b < r.a && r.b > 0 || (r.b === 0 && r.a > 0);
+    }
+    const fillCls = (mine, theirs, lead) =>
+      mine === 0 ? 'dim' : (lead ? 'lead' : '');
+    const fillA = fillCls(r.a, r.b, leadA);
+    const fillB = fillCls(r.b, r.a, leadB);
+    return `
+      <div class="cmp-rate-row">
+        <div class="cmp-rate-val ${leadA ? 'lead' : ''}" style="text-align:left">${r.fmt(r.a)}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <div class="cmp-rate-track" style="flex:1;direction:rtl">
+            <div class="cmp-rate-fill ${fillA}" style="width:${(r.a/max*100).toFixed(1)}%"></div>
+          </div>
+          <div class="cmp-rate-label" style="text-align:center;min-width:80px">${r.label}</div>
+          <div class="cmp-rate-track" style="flex:1">
+            <div class="cmp-rate-fill ${fillB}" style="width:${(r.b/max*100).toFixed(1)}%"></div>
+          </div>
+        </div>
+        <div class="cmp-rate-val ${leadB ? 'lead' : ''}">${r.fmt(r.b)}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div style="padding:14px 20px 18px;border-top:1px solid var(--border)">
+      <div class="cmp-section" style="margin-top:0;text-align:center">Head-to-head rates</div>
+      <div class="cmp-rates">${rows}</div>
+    </div>
+  `;
+}
+
+function renderH2HRow(idA, idB, nameA, nameB) {
+  if (!_h2hRows) return '';
+  // Pull both directions from the cached h2h list and aggregate
+  let aWins = 0, draws = 0, bWins = 0;
+  _h2hRows.forEach(r => {
+    if (r.white_model_id === idA && r.black_model_id === idB) {
+      aWins += r.white_wins; draws += r.draws; bWins += r.black_wins;
+    } else if (r.white_model_id === idB && r.black_model_id === idA) {
+      bWins += r.white_wins; draws += r.draws; aWins += r.black_wins;
+    }
+  });
+  const total = aWins + draws + bWins;
+  if (!total) {
+    return `<div class="cmp-h2h"><span class="none">No direct games yet between these two.</span></div>`;
+  }
+  return `
+    <div class="cmp-h2h">
+      ${escHtml(nameA)}
+      <span class="score">${aWins} – ${draws} – ${bWins}</span>
+      ${escHtml(nameB)}
+      <span style="display:block;font-size:9px;color:var(--text-dim);margin-top:4px;letter-spacing:1.5px">${total} games played</span>
+    </div>
+  `;
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────
-Promise.all([loadEloCharts(), loadQuality(), loadColorStats(), loadH2H()]);
+Promise.all([initCompare(), loadEloCharts(), loadQuality(), loadColorStats(), loadH2H()]);
 </script>
 
 <!-- ── Model card modal ───────────────────────────────────────────────── -->

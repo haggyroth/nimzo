@@ -69,7 +69,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [x] **Metadata fields**: parameter count, architecture family, quantization, file size, context length, backend
 - [x] **Achievement / badge system**: new `achievements` DB table; conditions computed post-game (e.g. "Flawless Game" — zero blunders, "Comeback King" — won from -5cp deficit, "Theorist" — 10+ book moves before first deviation)
 - [x] **Trophy display**: badges shown on model cards, player strips during games, and leaderboard rows
-- [ ] **Model comparison view**: side-by-side stat comparison of any two models
+- [x] **Model comparison view**: side-by-side stat comparison of any two models
 - [ ] **Model profile pictures**: generate a chess grandmaster portrait per model via Google AI Studio (Gemini Flash/Nano — free tier); prompt seeded deterministically from the model ID so the same model always gets the same image; stored as file + path in DB; displayed on model cards, leaderboard rows, and player strips during games — e.g. "Qwen3-30B is playing in the style of Mikhail Tal"
 
 ### Achievement ideas
