@@ -681,6 +681,23 @@
       font-size: 9px; color: var(--text-dim); letter-spacing: .5px;
       word-break: break-all;
     }
+    .mc-meta {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      margin-top: 8px;
+    }
+    .mc-meta-chip {
+      display: inline-flex; align-items: baseline; gap: 4px;
+      padding: 3px 8px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      font-size: 9px; letter-spacing: .5px;
+      color: var(--text-mid);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .mc-meta-chip .k { color: var(--text-dim); text-transform: uppercase; font-size: 8px; }
+    .mc-meta-chip .v { color: var(--gold-bright); font-weight: 500; }
+    .mc-meta-chip a { color: inherit; text-decoration: none; border-bottom: 1px dotted; }
+    .mc-meta-chip a:hover { color: var(--gold); }
     .mc-row {
       display: flex; gap: 22px; margin-top: 16px;
       padding: 12px 0; border-top: 1px solid var(--border);
@@ -1914,6 +1931,7 @@ function renderModelCard(p) {
   document.getElementById('mcBody').innerHTML = `
     <div class="mc-name">${escHtml(p.name || '—')}</div>
     <div class="mc-modelid">${escHtml(p.model_id || '')} · ${escHtml(p.backend || '')}</div>
+    ${renderMetadata(p.metadata)}
 
     <div class="mc-row">
       <div>
@@ -1967,6 +1985,30 @@ function renderBadges(achievements) {
     const times = a.times > 1 ? `<span class="b-times">×${a.times}</span>` : '';
     return `<span class="mc-badge badge-${a.code}" title="${escHtml(a.desc)}">${escHtml(a.label)}${times}</span>`;
   }).join('') + `</div>`;
+}
+
+function renderMetadata(meta) {
+  if (!meta) return '';
+  const chips = [];
+  const chip = (k, v, href) => {
+    const inner = href
+      ? `<a href="${href}" target="_blank" rel="noopener">${escHtml(v)}</a>`
+      : escHtml(v);
+    chips.push(`<span class="mc-meta-chip"><span class="k">${escHtml(k)}</span><span class="v">${inner}</span></span>`);
+  };
+  if (meta.family)          chip('Family',  meta.family);
+  if (meta.param_count) {
+    const ap = meta.active_params ? ` (${meta.active_params} active)` : '';
+    chip('Params',  meta.param_count + ap);
+  }
+  if (meta.quantization)    chip('Quant',   meta.quantization);
+  if (meta.architecture)    chip('Arch',    meta.architecture);
+  if (meta.context_length)  chip('Ctx',     meta.context_length.toLocaleString());
+  if (meta.file_size_label) chip('Size',    meta.file_size_label);
+  if (meta.license)         chip('License', meta.license);
+  if (meta.hf_url)          chip('HF',      'open ↗', meta.hf_url);
+  if (!chips.length) return '';
+  return `<div class="mc-meta">${chips.join('')}</div>`;
 }
 
 function rpGo(idx) {

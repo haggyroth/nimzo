@@ -65,8 +65,8 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 *Future*
 
 - [x] **Model cards**: modal/panel that appears when a model is selected in the UI — displays name, ELO, W/D/L, games played, average move quality, personality summary, and metadata
-- [ ] **Model metadata strategy**: LM Studio's `/models` returns IDs but not specs; options are (a) parse from filename conventions (`qwen3-30b-a3b@q4_k_m` → 30B params, Q4_K_M quant), (b) HuggingFace API lookup by model ID, (c) manual entry in a `model_profiles.json` sidecar — likely a combination
-- [ ] **Metadata fields**: parameter count, architecture family, quantization, file size, context length, backend
+- [x] **Model metadata strategy**: LM Studio's `/models` returns IDs but not specs; options are (a) parse from filename conventions (`qwen3-30b-a3b@q4_k_m` → 30B params, Q4_K_M quant), (b) HuggingFace API lookup by model ID, (c) manual entry in a `model_profiles.json` sidecar — likely a combination
+- [x] **Metadata fields**: parameter count, architecture family, quantization, file size, context length, backend
 - [x] **Achievement / badge system**: new `achievements` DB table; conditions computed post-game (e.g. "Flawless Game" — zero blunders, "Comeback King" — won from -5cp deficit, "Theorist" — 10+ book moves before first deviation)
 - [x] **Trophy display**: badges shown on model cards, player strips during games, and leaderboard rows
 - [ ] **Model comparison view**: side-by-side stat comparison of any two models

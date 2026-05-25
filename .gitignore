@@ -6,6 +6,7 @@
 
 # Runtime caches
 openings_cache.json
+hf_metadata_cache.json
 
 # Python
 __pycache__/

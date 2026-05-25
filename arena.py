@@ -49,6 +49,7 @@ from analysis import (
     evaluate_achievements,
     ACHIEVEMENT_CATALOGUE,
 )
+from models.metadata import get_model_metadata
 import db as database
 
 
@@ -227,6 +228,11 @@ async def api_model_profile(model_id: str):
         }
         for a in database.get_player_achievements(model_id)
     ]
+    # Run HF fetch off the event loop so a slow HF response can't stall the UI.
+    loop = asyncio.get_event_loop()
+    profile["metadata"] = await loop.run_in_executor(
+        None, get_model_metadata, model_id,
+    )
     return profile
 
 
