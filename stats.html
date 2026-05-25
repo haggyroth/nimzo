@@ -223,6 +223,31 @@
     /* Clickable names hint */
     .clickable-name { cursor: pointer; transition: color .15s; }
     .clickable-name:hover { color: var(--gold-bright); }
+
+    /* Achievement badges (shared with viewer.html) */
+    .mc-badges { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+    .mc-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 9px 4px 7px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-hi);
+      border-left: 3px solid var(--gold);
+      font-family: 'Cinzel', serif;
+      font-size: 10px; font-weight: 600; letter-spacing: .6px;
+      color: var(--text); cursor: help;
+    }
+    .mc-badge.badge-flawless     { border-left-color: #56c45a; }
+    .mc-badge.badge-tactician    { border-left-color: #93c97e; }
+    .mc-badge.badge-crusher      { border-left-color: #c46d3a; }
+    .mc-badge.badge-grinder      { border-left-color: #c8921e; }
+    .mc-badge.badge-comeback     { border-left-color: #b070d0; }
+    .mc-badge.badge-giant_killer { border-left-color: #4b9fd5; }
+    .mc-badge.badge-iron_wall    { border-left-color: #6a8aaa; }
+    .mc-badge.badge-theorist     { border-left-color: #d09a4a; }
+    .mc-badge .b-times {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; color: var(--gold-bright); letter-spacing: 0;
+    }
   </style>
 </head>
 <body>
@@ -527,8 +552,20 @@ function renderModelCard(p) {
       <span class="lb-mistake">mistake ${m.q_mistake || 0}</span>
       <span class="lb-blunder">blunder ${m.q_blunder || 0}</span>
     </div>
+    <div class="mc-section-head">Achievements ${(p.achievements && p.achievements.length) ? '· ' + p.achievements.reduce((s,a)=>s+a.times, 0) : ''}</div>
+    ${renderBadges(p.achievements)}
     <div class="mc-section-head">Personality</div>${traits}
     <div class="mc-section-head">Recent lessons</div>${lessons}`;
+}
+
+function renderBadges(achievements) {
+  if (!achievements || !achievements.length) {
+    return `<div class="mc-no-traits">No achievements yet — keep playing.</div>`;
+  }
+  return `<div class="mc-badges">` + achievements.map(a => {
+    const times = a.times > 1 ? `<span class="b-times">×${a.times}</span>` : '';
+    return `<span class="mc-badge badge-${a.code}" title="${escHtml(a.desc)}">${escHtml(a.label)}${times}</span>`;
+  }).join('') + `</div>`;
 }
 
 document.addEventListener('keydown', e => {

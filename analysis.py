@@ -79,6 +79,18 @@ def detect_opening(pgn_string: str) -> tuple[str, str] | None:
     Replay the game and return the deepest ECO match as (code, name).
     Returns None if no opening is recognised or openings.json is absent.
     """
+    deep = detect_opening_depth(pgn_string)
+    if deep is None:
+        return None
+    eco, name, _ = deep
+    return (eco, name)
+
+
+def detect_opening_depth(pgn_string: str) -> tuple[str, str, int] | None:
+    """
+    Like detect_opening but also returns the ply count at which theory was
+    last matched. Useful for awarding 'Theorist' achievements.
+    """
     import chess
     import chess.pgn
     import io
@@ -92,13 +104,13 @@ def detect_opening(pgn_string: str) -> tuple[str, str] | None:
         if game is None:
             return None
         board = game.board()
-        last_match: tuple[str, str] | None = None
-        for move in game.mainline_moves():
+        last_match: tuple[str, str, int] | None = None
+        for ply, move in enumerate(game.mainline_moves(), start=1):
             board.push(move)
             epd = board.epd()
             entry = openings.get(epd)
             if entry:
-                last_match = (entry["eco"], entry["name"])
+                last_match = (entry["eco"], entry["name"], ply)
         return last_match
     except Exception:
         return None
@@ -274,6 +286,87 @@ def generate_lessons(
     except Exception as e:
         print(f"  ⚠  Lesson generation failed ({tutor.backend}/{tutor.model_id}): {e}")
         return {"improve": [], "strength": []}
+
+
+ACHIEVEMENT_CATALOGUE: dict[str, dict] = {
+    "flawless":     {"label": "Flawless",     "desc": "Played a game with no blunders or mistakes."},
+    "comeback":     {"label": "Comeback",     "desc": "Won from a position 3+ pawns behind."},
+    "crusher":      {"label": "Crusher",      "desc": "Won the game in 25 moves or fewer."},
+    "grinder":      {"label": "Grinder",      "desc": "Won a game that lasted 70+ moves."},
+    "tactician":    {"label": "Tactician",    "desc": "Played 5+ best moves in a row."},
+    "iron_wall":    {"label": "Iron Wall",    "desc": "Held a draw against an opponent rated 100+ ELO above."},
+    "giant_killer": {"label": "Giant Killer", "desc": "Beat an opponent rated 100+ ELO above."},
+    "theorist":     {"label": "Theorist",     "desc": "Stayed in opening theory for 12+ ply."},
+}
+
+
+def evaluate_achievements(
+    *,
+    color: str,                                  # 'white' | 'black'
+    result: str,                                 # '1-0' | '0-1' | '1/2-1/2'
+    total_moves: int,
+    move_qualities: list[tuple[str, str]],       # (san, quality)
+    score_history_white: list[float | None],     # per-move score_cp from White's POV
+    player_elo_before: float,
+    opp_elo_before: float,
+    opening_ply: int | None = None,
+) -> list[str]:
+    """
+    Returns a list of achievement codes earned by `color` in this game.
+    All inputs are derived from data already collected during the game.
+    """
+    earned: list[str] = []
+
+    won  = (color == "white" and result == "1-0") or (color == "black" and result == "0-1")
+    drew = result == "1/2-1/2"
+
+    # Flawless — no blunders or mistakes anywhere in the player's moves
+    qualities = [q for _, q in move_qualities]
+    has_blunder = any(q in ("blunder", "mistake") for q in qualities)
+    if qualities and not has_blunder:
+        earned.append("flawless")
+
+    # Tactician — 5 best moves in a row
+    streak = best_streak = 0
+    for q in qualities:
+        if q == "best":
+            streak += 1
+            best_streak = max(best_streak, streak)
+        else:
+            streak = 0
+    if best_streak >= 5:
+        earned.append("tactician")
+
+    # Crusher / Grinder — only on wins
+    if won and total_moves <= 25:
+        earned.append("crusher")
+    if won and total_moves >= 70:
+        earned.append("grinder")
+
+    # Comeback — player was ≤ -300cp from their POV at some point, then won
+    if won and score_history_white:
+        # Convert White-POV scores to this player's POV
+        sign = 1 if color == "white" else -1
+        worst = min(
+            (sign * cp for cp in score_history_white if cp is not None),
+            default=None,
+        )
+        if worst is not None and worst <= -300:
+            earned.append("comeback")
+
+    # Upset achievements vs higher-rated opponent
+    elo_diff = opp_elo_before - player_elo_before
+    if elo_diff >= 100:
+        if won:
+            earned.append("giant_killer")
+        elif drew:
+            earned.append("iron_wall")
+
+    # Theorist — opening theory matched for 12+ ply
+    if opening_ply and opening_ply >= 12:
+        earned.append("theorist")
+
+    return earned
 
 
 def derive_personality_traits(profile: dict) -> list[dict]:

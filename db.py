@@ -62,6 +62,15 @@ CREATE TABLE IF NOT EXISTS lessons (
     lesson_type TEXT DEFAULT 'improve',   -- 'improve' | 'strength'
     created_at  TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS achievements (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id   INTEGER REFERENCES players(id),
+    game_id     INTEGER REFERENCES games(id),
+    code        TEXT NOT NULL,
+    awarded_at  TEXT DEFAULT (datetime('now')),
+    UNIQUE(player_id, game_id, code)
+);
 """
 
 
@@ -347,7 +356,11 @@ def get_leaderboard() -> list[dict]:
                       END) AS losses,
                 COUNT(g.id)     AS total_games,
                 bg.best_score   AS best_game_score,
-                bg.best_game_id AS best_game_id
+                bg.best_game_id AS best_game_id,
+                COALESCE(
+                  (SELECT COUNT(*) FROM achievements a WHERE a.player_id = p.id),
+                  0
+                ) AS achievement_count
             FROM players p
             LEFT JOIN games g
               ON g.white_player_id = p.id OR g.black_player_id = p.id
@@ -568,3 +581,97 @@ def get_model_profile(model_id: str) -> dict | None:
             "games":          dict(game_summary) if game_summary else {},
             "recent_lessons": [dict(r) for r in recent_lessons],
         }
+
+
+# ── Achievements ──────────────────────────────────────────────────────────
+
+def record_achievements(player_model_id: str, game_id: int, codes: list[str]):
+    if not codes:
+        return
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM players WHERE model_id = ?", (player_model_id,)
+        ).fetchone()
+        if not row:
+            return
+        pid = row["id"]
+        for code in codes:
+            try:
+                conn.execute(
+                    "INSERT INTO achievements (player_id, game_id, code) VALUES (?, ?, ?)",
+                    (pid, game_id, code),
+                )
+            except sqlite3.IntegrityError:
+                pass  # already awarded this code on this game
+
+
+def get_player_achievements(model_id: str) -> list[dict]:
+    """All achievements earned by a model, with counts per code."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT a.code, COUNT(*) AS times, MAX(a.awarded_at) AS latest
+            FROM achievements a
+            JOIN players p ON a.player_id = p.id
+            WHERE p.model_id = ?
+            GROUP BY a.code
+            ORDER BY times DESC, latest DESC
+            """,
+            (model_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_achievements_for_game(game_id: int) -> dict[str, list[str]]:
+    """Returns {model_id: [codes...]} earned by each player in this game."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT p.model_id, a.code
+            FROM achievements a
+            JOIN players p ON a.player_id = p.id
+            WHERE a.game_id = ?
+            """,
+            (game_id,),
+        ).fetchall()
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        out.setdefault(r["model_id"], []).append(r["code"])
+    return out
+
+
+def get_leaderboard_achievement_counts() -> dict[str, int]:
+    """Map model_id → total achievements (for compact display on leaderboard)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT p.model_id, COUNT(*) AS n
+            FROM achievements a
+            JOIN players p ON a.player_id = p.id
+            GROUP BY p.id
+            """,
+        ).fetchall()
+    return {r["model_id"]: r["n"] for r in rows}
+
+
+def games_for_backfill() -> list[dict]:
+    """Every game with all data needed to evaluate achievements (PGN + ELO + result)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT g.id, g.result, g.termination, g.total_moves, g.pgn,
+                   g.white_elo_before, g.black_elo_before,
+                   wp.model_id AS white_model_id, bp.model_id AS black_model_id
+            FROM games g
+            JOIN players wp ON g.white_player_id = wp.id
+            JOIN players bp ON g.black_player_id = bp.id
+            ORDER BY g.id ASC
+            """
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def has_any_achievements() -> bool:
+    with get_conn() as conn:
+        row = conn.execute("SELECT 1 FROM achievements LIMIT 1").fetchone()
+    return row is not None

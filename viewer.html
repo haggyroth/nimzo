@@ -754,6 +754,57 @@
     .lb-name { cursor: pointer; }
     .lb-name:hover { color: var(--gold); }
 
+    /* Achievement badges */
+    .mc-badges {
+      display: flex; flex-wrap: wrap; gap: 7px;
+      margin-top: 4px;
+    }
+    .mc-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 9px 4px 7px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-hi);
+      border-left: 3px solid var(--gold);
+      font-family: 'Cinzel', serif;
+      font-size: 10px; font-weight: 600; letter-spacing: .6px;
+      color: var(--text);
+      cursor: help;
+    }
+    .mc-badge.badge-flawless     { border-left-color: #56c45a; }
+    .mc-badge.badge-tactician    { border-left-color: #93c97e; }
+    .mc-badge.badge-crusher      { border-left-color: #c46d3a; }
+    .mc-badge.badge-grinder      { border-left-color: #c8921e; }
+    .mc-badge.badge-comeback     { border-left-color: #b070d0; }
+    .mc-badge.badge-giant_killer { border-left-color: #4b9fd5; }
+    .mc-badge.badge-iron_wall    { border-left-color: #6a8aaa; }
+    .mc-badge.badge-theorist     { border-left-color: #d09a4a; }
+    .mc-badge .b-times {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; color: var(--gold-bright);
+      letter-spacing: 0;
+    }
+
+    /* Leaderboard achievement chip */
+    .lb-badges-cell {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--gold-bright);
+      text-align: right; letter-spacing: .3px;
+      cursor: help;
+    }
+    .lb-badges-cell.dim { color: var(--text-dim); cursor: default; }
+
+    /* Freshly-earned banner on game-over overlay */
+    .ov-badges {
+      display: flex; justify-content: center; flex-wrap: wrap;
+      gap: 8px; margin-top: 14px;
+    }
+    .ov-badges .mc-badge { font-size: 11px; padding: 5px 11px 5px 9px; }
+    .ov-badges-label {
+      font-size: 9px; color: var(--gold-bright);
+      letter-spacing: 2.5px; text-transform: uppercase;
+      margin-top: 18px;
+    }
+
     .rp-move-list {
       width: 180px; max-height: 440px; overflow-y: auto;
       background: var(--bg-panel); border: 1px solid var(--border);
@@ -1064,6 +1115,8 @@
   <div class="ov-sub"     id="ovSub"></div>
   <div class="ov-opening" id="ovOpening"></div>
   <div class="ov-elos"    id="ovElos"></div>
+  <div class="ov-badges-label" id="ovBadgesLabel" style="display:none">Achievements earned</div>
+  <div class="ov-badges"  id="ovBadges"></div>
   <div class="ov-actions">
     <button class="ov-btn" id="ovDownloadBtn" onclick="downloadPgn()" style="display:none">
       ↓ PGN
@@ -1400,7 +1453,7 @@ async function loadLeaderboard() {
     );
 
     let html = `<table class="lb-table"><thead><tr>
-      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th><th title="Best game score (avg move quality, 0–100). Click to replay.">Best</th><th></th>
+      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th><th title="Best game score (avg move quality, 0–100). Click to replay.">Best</th><th title="Achievement badges">★</th><th></th>
     </tr></thead><tbody>`;
     rows.forEach((r, i) => {
       const spark = buildSparkline(histories[i]);
@@ -1409,12 +1462,16 @@ async function loadLeaderboard() {
       const bestCell  = (bestScore != null && bestId != null)
         ? `<td class="lb-best" title="Replay best game (#${bestId})" onclick="openReplay(${bestId})">${Math.round(bestScore)}</td>`
         : `<td class="lb-best dim">—</td>`;
+      const badgeCell = r.achievement_count > 0
+        ? `<td class="lb-badges-cell" title="${r.achievement_count} achievements — click name for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${r.achievement_count}</td>`
+        : `<td class="lb-badges-cell dim">—</td>`;
       html += `<tr>
         <td class="lb-rank">${i+1}</td>
         <td class="lb-name" title="${escHtml(r.model_id)} — click for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${escHtml(r.name)}</td>
         <td class="lb-elo">${r.elo}</td>
         <td class="lb-wdl">${r.wins}/${r.draws}/${r.losses}</td>
         ${bestCell}
+        ${badgeCell}
         <td class="lb-spark">${spark}</td>
       </tr>`;
     });
@@ -1660,6 +1717,16 @@ function onGameOver(d) {
     <div class="ov-elo-block"><div class="ov-elo-name">${escHtml(gameState.black.name)}</div>
       <div class="ov-elo-val">${d.black_elo_after!=null?Math.round(d.black_elo_after):'—'}</div></div>`;
   document.getElementById('ovElos').innerHTML = eloHtml;
+
+  // Freshly-earned achievements
+  const ach = d.achievements || { white: [], black: [] };
+  const renderForSide = (color, list) => list.map(a =>
+    `<span class="mc-badge badge-${a.code}" title="${escHtml(a.desc)} (${color})">${escHtml(a.label)}</span>`
+  ).join('');
+  const badgesHtml = renderForSide('White', ach.white || []) + renderForSide('Black', ach.black || []);
+  document.getElementById('ovBadges').innerHTML = badgesHtml;
+  document.getElementById('ovBadgesLabel').style.display = badgesHtml ? '' : 'none';
+
   document.getElementById('overlay').classList.add('show');
 
   if (d.white_elo_after!=null) gameState.white.elo = d.white_elo_after;
@@ -1881,12 +1948,25 @@ function renderModelCard(p) {
       <span class="lb-blunder">blunder ${m.q_blunder || 0}</span>
     </div>
 
+    <div class="mc-section-head">Achievements ${(p.achievements && p.achievements.length) ? '· ' + p.achievements.reduce((s,a)=>s+a.times, 0) : ''}</div>
+    ${renderBadges(p.achievements)}
+
     <div class="mc-section-head">Personality</div>
     ${traits}
 
     <div class="mc-section-head">Recent lessons</div>
     ${lessons}
   `;
+}
+
+function renderBadges(achievements) {
+  if (!achievements || !achievements.length) {
+    return `<div class="mc-no-traits">No achievements yet — keep playing.</div>`;
+  }
+  return `<div class="mc-badges">` + achievements.map(a => {
+    const times = a.times > 1 ? `<span class="b-times">×${a.times}</span>` : '';
+    return `<span class="mc-badge badge-${a.code}" title="${escHtml(a.desc)}">${escHtml(a.label)}${times}</span>`;
+  }).join('') + `</div>`;
 }
 
 function rpGo(idx) {

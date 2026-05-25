@@ -44,7 +44,10 @@ from analysis import (
     generate_lessons,
     build_quality_summary,
     detect_opening,
+    detect_opening_depth,
     derive_personality_traits,
+    evaluate_achievements,
+    ACHIEVEMENT_CATALOGUE,
 )
 import db as database
 
@@ -79,9 +82,48 @@ class TournamentAborted(Exception):
 
 # ── FastAPI app ───────────────────────────────────────────────────────────
 
+def backfill_achievements() -> int:
+    """One-time pass to evaluate achievements for games that predate the feature."""
+    n_total = 0
+    for g in database.games_for_backfill():
+        moves = database.get_game_moves(g["id"])
+        if not moves:
+            continue
+        score_history = [m.get("score_cp") for m in moves]
+        # move_number is per-ply; odd = White, even = Black
+        white_quals = [(m["move_san"], m["quality"]) for m in moves if m["move_number"] % 2 == 1]
+        black_quals = [(m["move_san"], m["quality"]) for m in moves if m["move_number"] % 2 == 0]
+
+        opening_deep = detect_opening_depth(g["pgn"]) if g.get("pgn") else None
+        opening_ply  = opening_deep[2] if opening_deep else None
+
+        for color, quals, elo_b, opp_b, model_id in [
+            ("white", white_quals, g["white_elo_before"], g["black_elo_before"], g["white_model_id"]),
+            ("black", black_quals, g["black_elo_before"], g["white_elo_before"], g["black_model_id"]),
+        ]:
+            codes = evaluate_achievements(
+                color=color,
+                result=g["result"],
+                total_moves=g["total_moves"] or 0,
+                move_qualities=quals,
+                score_history_white=score_history,
+                player_elo_before=elo_b or 1200.0,
+                opp_elo_before=opp_b   or 1200.0,
+                opening_ply=opening_ply,
+            )
+            if codes:
+                database.record_achievements(model_id, g["id"], codes)
+                n_total += len(codes)
+    return n_total
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     database.init_db()
+    if not database.has_any_achievements():
+        n = backfill_achievements()
+        if n:
+            print(f"🏅 Backfilled {n} achievements from existing games.")
     if _cli_config is not None:
         asyncio.create_task(_auto_start(_cli_config))
     yield
@@ -177,7 +219,20 @@ async def api_model_profile(model_id: str):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Model not found")
     profile["traits"] = derive_personality_traits(profile)
+    profile["achievements"] = [
+        {
+            "code":  a["code"],
+            "times": a["times"],
+            **ACHIEVEMENT_CATALOGUE.get(a["code"], {"label": a["code"], "desc": ""}),
+        }
+        for a in database.get_player_achievements(model_id)
+    ]
     return profile
+
+
+@app.get("/api/achievements/catalogue")
+async def api_achievement_catalogue():
+    return ACHIEVEMENT_CATALOGUE
 
 
 @app.get("/api/games/{game_id}")
@@ -521,8 +576,10 @@ async def play_game(
     game.headers["Result"] = result
     pgn_string = str(game)
 
-    # Opening detection
-    opening = detect_opening(pgn_string)   # (eco_code, name) or None
+    # Opening detection — keep both forms (with ply depth + classic 2-tuple)
+    opening_deep = detect_opening_depth(pgn_string)   # (eco, name, ply) or None
+    opening = (opening_deep[0], opening_deep[1]) if opening_deep else None
+    opening_ply = opening_deep[2] if opening_deep else None
 
     # ELO — use game count for dynamic K
     w_count = database.get_player_game_count(white.config.model_id)
@@ -563,6 +620,28 @@ async def play_game(
             fen_after=rec["fen_after"],
         )
 
+    # ── Achievements ───────────────────────────────────────────────────
+    score_history_white = [rec["score_cp"] for rec in move_records]
+    awards: dict[str, list[str]] = {}
+    for player, color, qualities, elo_b, opp_elo_b in [
+        (white, "white", move_qualities_white, w_elo_before, b_elo_before),
+        (black, "black", move_qualities_black, b_elo_before, w_elo_before),
+    ]:
+        codes = evaluate_achievements(
+            color=color,
+            result=result,
+            total_moves=move_number,
+            move_qualities=qualities,
+            score_history_white=score_history_white,
+            player_elo_before=elo_b,
+            opp_elo_before=opp_elo_b,
+            opening_ply=opening_ply,
+        )
+        if codes:
+            database.record_achievements(player.config.model_id, game_id, codes)
+            awards[player.config.model_id] = codes
+            print(f"  🏅 {player.config.name}: {', '.join(codes)}")
+
     await broadcast({
         "type":            "game_over",
         "game_id":         game_id,
@@ -574,6 +653,16 @@ async def play_game(
         "pgn":             pgn_string,
         "opening_eco":     opening[0] if opening else None,
         "opening_name":    opening[1] if opening else None,
+        "achievements":    {
+            "white": [
+                {"code": c, **ACHIEVEMENT_CATALOGUE.get(c, {"label": c, "desc": ""})}
+                for c in awards.get(white.config.model_id, [])
+            ],
+            "black": [
+                {"code": c, **ACHIEVEMENT_CATALOGUE.get(c, {"label": c, "desc": ""})}
+                for c in awards.get(black.config.model_id, [])
+            ],
+        },
     })
 
     # ── Lessons for both players ───────────────────────────────────────
