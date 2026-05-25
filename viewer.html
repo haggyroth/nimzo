@@ -23,6 +23,9 @@
       --sq-dark:      #8b6148;
       --sq-from:      rgba(255,200,30,.45);
       --sq-to:        rgba(255,200,30,.28);
+      --piece-font:   'Noto Chess', 'Segoe UI Symbol', 'Apple Color Emoji', serif;
+      --ui-font:      'JetBrains Mono', monospace;
+      --ui-scale:     1;
       --q-best:       #ffd700;
       --q-excellent:  #56c45a;
       --q-good:       #90c83a;
@@ -37,7 +40,7 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       height: 100vh;
       display: flex;
       flex-direction: column;
@@ -166,6 +169,13 @@
     }
     .p-left { display: flex; align-items: center; gap: 9px; }
     .p-swatch { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .p-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      object-fit: cover; flex-shrink: 0;
+      border: 1px solid var(--border-hi);
+      background: var(--bg-raised);
+      display: none;   /* hidden until portrait loads */
+    }
     .p-name {
       font-family: 'Cinzel', serif;
       font-size: 12px;
@@ -184,6 +194,40 @@
     .p-eval.adv-even  { color: var(--text-mid); }
     .p-think { font-size: 9px; color: var(--gold-bright); display: none; }
     .p-think.on { display: flex; align-items: center; gap: 3px; animation: blink .7s infinite; }
+
+    .p-graveyard {
+      display: flex; align-items: center;
+      flex: 1; min-width: 0;
+      margin: 0 10px;
+      font-size: 14px; line-height: 1;
+      letter-spacing: -3px;
+      color: #a8a4a0;
+      overflow: hidden; white-space: nowrap;
+    }
+    .p-graveyard .gv-piece { display: inline-block; }
+    .p-graveyard .gv-adv {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; font-weight: 500;
+      letter-spacing: .5px;
+      color: var(--gold-bright);
+      margin-left: 8px;
+    }
+    /* Replay modal variant — smaller */
+    .rp-graveyard {
+      display: flex; align-items: center;
+      flex: 1; min-width: 0;
+      margin: 0 8px;
+      font-size: 12px; line-height: 1;
+      letter-spacing: -3px;
+      color: #a8a4a0;
+      overflow: hidden; white-space: nowrap;
+    }
+    .rp-graveyard .gv-adv {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px; letter-spacing: .4px;
+      color: var(--gold-bright);
+      margin-left: 6px;
+    }
 
     .board-wrap {
       position: relative;
@@ -206,16 +250,45 @@
     .sq.hi-from { background: var(--sq-from) !important; }
     .sq.hi-to   { background: var(--sq-to)   !important; }
 
-    .sq-label { position: absolute; font-size: 8px; font-weight: 500; opacity: .4; line-height: 1; pointer-events: none; }
+    .sq-label {
+      position: absolute; font-size: 8px; font-weight: 500;
+      color: var(--sq-label-color, #888);
+      opacity: .5; line-height: 1; pointer-events: none;
+    }
     .sq-label.rank { top: 2px; left: 3px; }
     .sq-label.file { bottom: 2px; right: 2px; }
+    .sq.light .sq-label { color: var(--sq-dark); }
+    .sq.dark  .sq-label { color: var(--sq-light); }
 
     .piece {
+      font-family: var(--piece-font);
       font-size: calc(var(--board-px, 460px) / 8 * .76);
       line-height: 1; user-select: none; pointer-events: none;
     }
     .piece.w { color: #f8f8f8; filter: drop-shadow(0 1px 3px rgba(0,0,0,.9)); }
     .piece.b { color: #161616; filter: drop-shadow(0 1px 2px rgba(255,255,255,.12)); }
+
+    /* ── Piece set: letters ─────────────────────────────────────────── */
+    body.pieces-letters .piece {
+      font-family: var(--ui-font) !important;
+      font-weight: 700;
+      font-size: calc(var(--board-px, 460px) / 8 * .52);
+    }
+    body.pieces-letters .piece.w { color: #f0f0f0; filter: none; }
+    body.pieces-letters .piece.b {
+      color: #f0f0f0;
+      -webkit-text-stroke: 1.5px #111;
+      filter: none;
+    }
+
+    /* ── Piece move animation ───────────────────────────────────────── */
+    @keyframes pieceArrive {
+      from { transform: translate(var(--move-dx, 0), var(--move-dy, 0)) scale(1.05); opacity: .7; }
+      to   { transform: translate(0, 0) scale(1); opacity: 1; }
+    }
+    .piece.moving {
+      animation: pieceArrive 0.18s cubic-bezier(.2, .6, .4, 1) forwards;
+    }
 
     .flip-btn {
       position: absolute;
@@ -413,7 +486,7 @@
       background: var(--bg-input);
       border: 1px solid var(--border);
       color: var(--text);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 10px;
       padding: 5px 8px;
       outline: none;
@@ -427,7 +500,7 @@
       background: var(--bg-input);
       border: 1px solid var(--border);
       color: var(--text);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 10px;
       padding: 5px 8px;
       outline: none;
@@ -482,7 +555,7 @@
       background: transparent;
       border: 1px solid var(--border-hi);
       color: var(--text-mid);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 10px;
       letter-spacing: 2px;
       text-transform: uppercase;
@@ -512,6 +585,16 @@
     .lb-name  { color: var(--text); font-weight: 500; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .lb-elo   { color: var(--gold); }
     .lb-wdl   { color: var(--text-mid); font-size: 9px; }
+    .lb-best  {
+      color: var(--gold-bright);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: .3px;
+      text-align: right;
+      cursor: pointer;
+    }
+    .lb-best.dim { color: var(--text-dim); cursor: default; }
+    .lb-best:not(.dim):hover { color: #fff; }
     .lb-spark { width: 60px; padding: 4px 6px 4px 2px; }
     .lb-spark svg { display: block; overflow: visible; }
     .lb-empty { padding: 14px 12px; font-size: 10px; color: var(--text-dim); text-align: center; }
@@ -605,6 +688,213 @@
     .rp-btn:disabled { opacity: .25; cursor: default; }
     .rp-counter { font-size: 9px; color: var(--text-mid); min-width: 60px; text-align: center; }
 
+    /* ── Model card modal ───────────────────────────────────────────── */
+    #modelModal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(7,9,12,.92); backdrop-filter: blur(12px);
+      z-index: 320; align-items: center; justify-content: center;
+    }
+    #modelModal.show { display: flex; animation: fadeIn .2s ease; }
+    .mc-card {
+      width: 520px; max-width: 92vw; max-height: 86vh; overflow-y: auto;
+      background: var(--bg-panel); border: 1px solid var(--border-hi);
+      box-shadow: 0 30px 80px rgba(0,0,0,.85);
+      padding: 22px 26px 24px;
+      position: relative;
+    }
+    .mc-card::-webkit-scrollbar { width: 4px; }
+    .mc-card::-webkit-scrollbar-thumb { background: var(--border-hi); }
+    .mc-close {
+      position: absolute; top: 14px; right: 16px;
+      font-size: 10px; color: var(--text-mid); cursor: pointer;
+      letter-spacing: 1.5px; text-transform: uppercase;
+    }
+    .mc-close:hover { color: var(--gold); }
+
+    .mc-portrait {
+      width: 110px; height: 110px; border-radius: 50%;
+      object-fit: cover; object-position: top center;
+      border: 2px solid var(--border-hi);
+      display: block; margin: 0 auto 14px;
+      background: var(--bg-raised);
+    }
+    .mc-portrait-placeholder {
+      width: 110px; height: 110px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 42px; margin: 0 auto 14px;
+      background: var(--bg-raised); border: 2px solid var(--border);
+    }
+    .mc-portrait-generating {
+      width: 110px; height: 110px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 6px;
+      background: var(--bg-raised); border: 2px dashed var(--border-hi);
+      margin: 0 auto 14px; font-size: 9px; color: var(--text-dim);
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+    .mc-portrait-generating .spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid var(--border-hi); border-top-color: var(--gold);
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .mc-name {
+      font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700;
+      color: var(--text); letter-spacing: .8px; margin-bottom: 2px;
+    }
+    .mc-modelid {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; color: var(--text-dim); letter-spacing: .5px;
+      word-break: break-all;
+    }
+    .mc-meta {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      margin-top: 8px;
+    }
+    .mc-meta-chip {
+      display: inline-flex; align-items: baseline; gap: 4px;
+      padding: 3px 8px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      font-size: 9px; letter-spacing: .5px;
+      color: var(--text-mid);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .mc-meta-chip .k { color: var(--text-dim); text-transform: uppercase; font-size: 8px; }
+    .mc-meta-chip .v { color: var(--gold-bright); font-weight: 500; }
+    .mc-meta-chip a { color: inherit; text-decoration: none; border-bottom: 1px dotted; }
+    .mc-meta-chip a:hover { color: var(--gold); }
+    .mc-row {
+      display: flex; gap: 22px; margin-top: 16px;
+      padding: 12px 0; border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .mc-stat-label { font-size: 8px; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px; }
+    .mc-stat-value { font-family: 'Cinzel', serif; font-size: 18px; color: var(--gold); font-weight: 600; }
+    .mc-stat-sub   { font-size: 9px; color: var(--text-mid); margin-top: 1px; }
+
+    .mc-section-head {
+      font-size: 9px; letter-spacing: 1.8px; text-transform: uppercase;
+      color: var(--gold-bright); margin: 18px 0 10px;
+      font-weight: 600;
+    }
+
+    .mc-trait {
+      display: flex; gap: 10px; align-items: baseline;
+      padding: 7px 0; border-bottom: 1px dashed var(--border);
+    }
+    .mc-trait:last-child { border-bottom: none; }
+    .mc-trait-label {
+      font-family: 'Cinzel', serif; font-size: 12px;
+      color: var(--text); font-weight: 600;
+      min-width: 130px;
+    }
+    .mc-trait-detail { font-size: 10px; color: var(--text-mid); flex: 1; }
+    .mc-no-traits { font-size: 10px; color: var(--text-dim); font-style: italic; }
+
+    .mc-qbar {
+      display: flex; height: 6px; width: 100%;
+      background: var(--bg-input); border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .mc-qbar > span { display: block; height: 100%; }
+    .mc-qbar .q-best       { background: #56c45a; }
+    .mc-qbar .q-excellent  { background: #93c97e; }
+    .mc-qbar .q-good       { background: #c8b87a; }
+    .mc-qbar .q-inaccuracy { background: #d09a4a; }
+    .mc-qbar .q-mistake    { background: #c46d3a; }
+    .mc-qbar .q-blunder    { background: #b04a3a; }
+    .mc-qbar-legend {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      font-size: 9px; color: var(--text-mid); margin-top: 6px;
+    }
+    .mc-qbar-legend span::before {
+      content: ''; display: inline-block; width: 7px; height: 7px;
+      margin-right: 4px; vertical-align: middle;
+    }
+    .mc-qbar-legend .lb-best       ::before { background: #56c45a; }
+    .mc-qbar-legend .lb-excellent  ::before { background: #93c97e; }
+    .mc-qbar-legend .lb-good       ::before { background: #c8b87a; }
+    .mc-qbar-legend .lb-inaccuracy ::before { background: #d09a4a; }
+    .mc-qbar-legend .lb-mistake    ::before { background: #c46d3a; }
+    .mc-qbar-legend .lb-blunder    ::before { background: #b04a3a; }
+
+    .mc-profile {
+      font-size: 10px; color: var(--text-mid); line-height: 1.6;
+      padding: 8px 10px; background: var(--bg-raised);
+      border-left: 2px solid var(--gold); border-radius: 2px;
+      margin-bottom: 4px; white-space: pre-wrap;
+    }
+    .mc-lesson {
+      padding: 6px 0; border-bottom: 1px dashed var(--border);
+      font-size: 10px; color: var(--text-mid); line-height: 1.45;
+    }
+    .mc-lesson:last-child { border-bottom: none; }
+    .mc-lesson .tag {
+      display: inline-block; font-size: 8px; letter-spacing: 1.2px;
+      text-transform: uppercase; padding: 1px 5px; margin-right: 7px;
+      border: 1px solid currentColor; border-radius: 2px;
+      vertical-align: 1px;
+    }
+    .mc-lesson .tag.improve  { color: #d09a4a; }
+    .mc-lesson .tag.strength { color: #93c97e; }
+
+    /* Make leaderboard names clickable */
+    .lb-name { cursor: pointer; }
+    .lb-name:hover { color: var(--gold); }
+
+    /* Achievement badges */
+    .mc-badges {
+      display: flex; flex-wrap: wrap; gap: 7px;
+      margin-top: 4px;
+    }
+    .mc-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 9px 4px 7px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-hi);
+      border-left: 3px solid var(--gold);
+      font-family: 'Cinzel', serif;
+      font-size: 10px; font-weight: 600; letter-spacing: .6px;
+      color: var(--text);
+      cursor: help;
+    }
+    .mc-badge.badge-flawless     { border-left-color: #56c45a; }
+    .mc-badge.badge-tactician    { border-left-color: #93c97e; }
+    .mc-badge.badge-crusher      { border-left-color: #c46d3a; }
+    .mc-badge.badge-grinder      { border-left-color: #c8921e; }
+    .mc-badge.badge-comeback     { border-left-color: #b070d0; }
+    .mc-badge.badge-giant_killer { border-left-color: #4b9fd5; }
+    .mc-badge.badge-iron_wall    { border-left-color: #6a8aaa; }
+    .mc-badge.badge-theorist     { border-left-color: #d09a4a; }
+    .mc-badge .b-times {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; color: var(--gold-bright);
+      letter-spacing: 0;
+    }
+
+    /* Leaderboard achievement chip */
+    .lb-badges-cell {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--gold-bright);
+      text-align: right; letter-spacing: .3px;
+      cursor: help;
+    }
+    .lb-badges-cell.dim { color: var(--text-dim); cursor: default; }
+
+    /* Freshly-earned banner on game-over overlay */
+    .ov-badges {
+      display: flex; justify-content: center; flex-wrap: wrap;
+      gap: 8px; margin-top: 14px;
+    }
+    .ov-badges .mc-badge { font-size: 11px; padding: 5px 11px 5px 9px; }
+    .ov-badges-label {
+      font-size: 9px; color: var(--gold-bright);
+      letter-spacing: 2.5px; text-transform: uppercase;
+      margin-top: 18px;
+    }
+
     .rp-move-list {
       width: 180px; max-height: 440px; overflow-y: auto;
       background: var(--bg-panel); border: 1px solid var(--border);
@@ -648,6 +938,167 @@
       cursor: pointer; transition: border-color .2s, color .2s;
     }
     .ov-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+    /* ── Settings panel ─────────────────────────────────────────── */
+    .settings-body { padding: 10px 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+
+    .setting-group { display: flex; flex-direction: column; gap: 6px; }
+    .setting-label {
+      font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    /* Theme swatches */
+    .theme-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+    .theme-swatch {
+      width: 28px; height: 28px; border-radius: 3px;
+      border: 2px solid transparent; cursor: pointer;
+      position: relative; overflow: hidden;
+      transition: border-color .15s;
+    }
+    .theme-swatch:hover { border-color: var(--border-hi); }
+    .theme-swatch.active { border-color: var(--gold) !important; }
+    .theme-swatch .th-l { position: absolute; inset: 0 50% 0 0; }
+    .theme-swatch .th-d { position: absolute; inset: 0 0 0 50%; }
+
+    /* Color pickers */
+    .color-row { display: flex; gap: 6px; align-items: center; }
+    .color-row label {
+      font-size: 9px; color: var(--text-mid); flex: 1;
+    }
+    input[type=color] {
+      width: 32px; height: 22px; padding: 1px 2px;
+      border: 1px solid var(--border); background: var(--bg-input);
+      cursor: pointer; border-radius: 2px;
+    }
+    input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type=color]::-webkit-color-swatch { border: none; }
+
+    /* Piece set selector */
+    .piece-set-opts { display: flex; gap: 6px; }
+    .piece-set-btn {
+      flex: 1; padding: 5px 4px;
+      background: var(--bg-input); border: 1px solid var(--border);
+      color: var(--text-dim); font-family: var(--ui-font);
+      font-size: 9px; cursor: pointer;
+      transition: border-color .15s, color .15s;
+      text-align: center;
+    }
+    .piece-set-btn:hover { border-color: var(--border-hi); color: var(--text); }
+    .piece-set-btn.active { border-color: var(--gold); color: var(--gold); }
+
+    /* Font selector */
+    .font-opts { display: flex; gap: 6px; }
+    .font-btn {
+      flex: 1; padding: 5px 4px;
+      background: var(--bg-input); border: 1px solid var(--border);
+      color: var(--text-dim); font-size: 9px; cursor: pointer;
+      transition: border-color .15s, color .15s;
+      text-align: center;
+    }
+    .font-btn:hover { border-color: var(--border-hi); color: var(--text); }
+    .font-btn.active { border-color: var(--gold); color: var(--gold); }
+
+    /* Scale slider */
+    .scale-row { display: flex; align-items: center; gap: 8px; }
+    .scale-row span { font-size: 9px; color: var(--text-dim); min-width: 32px; text-align: right; }
+    input[type=range] {
+      flex: 1; accent-color: var(--gold); height: 2px; cursor: pointer;
+    }
+
+    /* Reset link */
+    .settings-reset {
+      font-size: 8px; color: var(--text-dim); letter-spacing: 1px;
+      cursor: pointer; text-transform: uppercase; text-align: right;
+      transition: color .15s;
+    }
+    .settings-reset:hover { color: var(--danger); }
+
+    /* ── Mode tabs (Match / Tournament) ────────────────────────── */
+    .mode-tabs {
+      display: flex; border-bottom: 1px solid var(--border);
+      margin: 0; padding: 0;
+    }
+    .mode-tab {
+      flex: 1; padding: 7px 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--text-dim); background: transparent;
+      border: none; border-bottom: 2px solid transparent;
+      cursor: pointer; transition: color .15s, border-color .15s;
+      text-align: center;
+    }
+    .mode-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+    .mode-tab:hover:not(.active) { color: var(--text); }
+
+    /* ── Tournament player rows ─────────────────────────────────── */
+    .trn-player-row {
+      border: 1px solid var(--border); padding: 8px 10px;
+      display: flex; flex-direction: column; gap: 5px;
+      position: relative;
+    }
+    .trn-player-num {
+      font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .trn-remove-btn {
+      position: absolute; top: 6px; right: 8px;
+      background: transparent; border: none;
+      color: var(--text-dim); font-size: 12px; cursor: pointer;
+      line-height: 1; padding: 0 2px;
+      transition: color .15s;
+    }
+    .trn-remove-btn:hover { color: var(--danger); }
+    .trn-add-btn {
+      padding: 5px; background: transparent;
+      border: 1px dashed var(--border-hi); color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+      cursor: pointer; transition: border-color .15s, color .15s;
+      width: 100%;
+    }
+    .trn-add-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+    /* ── Live standings table ───────────────────────────────────── */
+    .standings-wrap { padding: 8px 10px 12px; }
+    .standings-title {
+      font-size: 8px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--text-dim); margin-bottom: 8px;
+    }
+    .stn-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .stn-table th {
+      padding: 4px 6px; text-align: left; font-size: 7px; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--text-dim); font-weight: 400;
+      border-bottom: 1px solid var(--border);
+    }
+    .stn-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); }
+    .stn-table tr:last-child td { border-bottom: none; }
+    .stn-rank  { color: var(--text-dim); font-size: 9px; }
+    .stn-name  { color: var(--text); font-weight: 500; max-width: 80px;
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stn-pts   { color: var(--gold); font-weight: 600; }
+    .stn-wdl   { color: var(--text-mid); font-size: 9px; }
+    .stn-leader td { background: rgba(200,146,30,.05); }
+
+    /* ── Tournament winner overlay ──────────────────────────────── */
+    .ov-title-badge {
+      font-family: 'Cinzel', serif;
+      font-size: 13px; letter-spacing: 3px; text-transform: uppercase;
+      color: var(--gold-bright); margin-top: 6px;
+    }
+
+    /* ── Tournament history (stats page shared style) ───────────── */
+    .th-row {
+      padding: 8px 10px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+      font-size: 10px; cursor: pointer; transition: background .1s;
+    }
+    .th-row:hover { background: var(--bg-card); }
+    .th-format { font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+                 color: var(--text-dim); min-width: 70px; }
+    .th-winner { color: var(--gold); font-weight: 500; flex: 1; }
+    .th-title  { color: var(--text-mid); font-size: 9px; font-style: italic; }
+    .th-meta   { color: var(--text-dim); font-size: 9px; text-align: right; min-width: 40px; }
   </style>
 </head>
 <body>
@@ -678,9 +1129,11 @@
   <div class="board-col" id="boardCol">
     <div class="player-strip" id="stripBlack">
       <div class="p-left">
+        <img class="p-avatar" id="avatarBlack" alt="">
         <div class="p-swatch" style="background:#1a1a1a;border:1px solid #444"></div>
         <div class="p-name" id="nameBlack">—</div>
       </div>
+      <div class="p-graveyard" id="graveyardBlack"></div>
       <div class="p-right">
         <div class="p-think" id="thinkBlack">● thinking</div>
         <div class="p-eval"  id="evalBlack"></div>
@@ -695,9 +1148,11 @@
 
     <div class="player-strip" id="stripWhite">
       <div class="p-left">
+        <img class="p-avatar" id="avatarWhite" alt="">
         <div class="p-swatch" style="background:#f0f0f0;border:1px solid #bbb"></div>
         <div class="p-name" id="nameWhite">—</div>
       </div>
+      <div class="p-graveyard" id="graveyardWhite"></div>
       <div class="p-right">
         <div class="p-think" id="thinkWhite">● thinking</div>
         <div class="p-eval"  id="evalWhite"></div>
@@ -739,73 +1194,131 @@
 
       <!-- Setup form (shown when idle) -->
       <div id="setupForm">
-        <div class="ctrl-body">
 
-          <!-- White player -->
-          <div class="player-cfg">
-            <div class="cfg-label">♙ White</div>
-            <input class="ctrl-input" id="whiteName" placeholder="Display name" value="White">
-            <select class="ctrl-select" id="whiteBackend" onchange="onBackendChange('white')">
-              <option value="lmstudio">LM Studio</option>
-              <option value="anthropic">Anthropic</option>
-            </select>
-            <div class="url-row" id="whiteUrlRow">
-              <input class="ctrl-input" id="whiteUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
-              <button class="fetch-btn" onclick="fetchModels('white')" title="Load models">⟳</button>
-            </div>
-            <select class="ctrl-select" id="whiteModel" onchange="onModelSelect('white')"><option value="">— select model —</option></select>
-            <label class="toggle-row">
-              <input type="checkbox" id="whiteThinking"> Extended thinking
-            </label>
-          </div>
-
-          <hr class="divider">
-
-          <!-- Black player -->
-          <div class="player-cfg">
-            <div class="cfg-label">♟ Black</div>
-            <input class="ctrl-input" id="blackName" placeholder="Display name" value="Black">
-            <select class="ctrl-select" id="blackBackend" onchange="onBackendChange('black')">
-              <option value="lmstudio">LM Studio</option>
-              <option value="anthropic">Anthropic</option>
-            </select>
-            <div class="url-row" id="blackUrlRow">
-              <input class="ctrl-input" id="blackUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
-              <button class="fetch-btn" onclick="fetchModels('black')" title="Load models">⟳</button>
-            </div>
-            <select class="ctrl-select" id="blackModel" onchange="onModelSelect('black')"><option value="">— select model —</option></select>
-            <label class="toggle-row">
-              <input type="checkbox" id="blackThinking"> Extended thinking
-            </label>
-          </div>
-
-          <hr class="divider">
-
-          <!-- Tutor -->
-          <div class="player-cfg">
-            <div class="cfg-label">📚 Tutor</div>
-            <select class="ctrl-select" id="tutorBackend" onchange="onBackendChange('tutor')">
-              <option value="lmstudio">LM Studio (local)</option>
-              <option value="anthropic">Anthropic (cloud)</option>
-              <option value="none">Disabled</option>
-            </select>
-            <div class="url-row" id="tutorUrlRow">
-              <input class="ctrl-input" id="tutorUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
-              <button class="fetch-btn" onclick="fetchModels('tutor')" title="Load models">⟳</button>
-            </div>
-            <select class="ctrl-select" id="tutorModel"><option value="">— select model —</option></select>
-          </div>
-
-          <hr class="divider">
-
-          <!-- Games count -->
-          <div class="games-row">
-            <span>Number of games</span>
-            <input type="number" id="gamesCount" value="1" min="1" max="200">
-          </div>
-
-          <button class="start-btn" id="startBtn" onclick="startTournament()">▶ Start Tournament</button>
+        <!-- Mode tabs -->
+        <div class="mode-tabs">
+          <button class="mode-tab active" id="tabMatch"      onclick="setMode('match')">Match</button>
+          <button class="mode-tab"        id="tabTournament" onclick="setMode('tournament')">Tournament</button>
         </div>
+
+        <!-- ── Match mode ── -->
+        <div id="matchForm">
+          <div class="ctrl-body">
+
+            <!-- White player -->
+            <div class="player-cfg">
+              <div class="cfg-label">♙ White</div>
+              <input class="ctrl-input" id="whiteName" placeholder="Display name" value="White">
+              <select class="ctrl-select" id="whiteBackend" onchange="onBackendChange('white')">
+                <option value="lmstudio">LM Studio</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+              <div class="url-row" id="whiteUrlRow">
+                <input class="ctrl-input" id="whiteUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+                <button class="fetch-btn" onclick="fetchModels('white')" title="Load models">⟳</button>
+              </div>
+              <select class="ctrl-select" id="whiteModel" onchange="onModelSelect('white')"><option value="">— select model —</option></select>
+              <label class="toggle-row">
+                <input type="checkbox" id="whiteThinking"> Extended thinking
+              </label>
+            </div>
+
+            <hr class="divider">
+
+            <!-- Black player -->
+            <div class="player-cfg">
+              <div class="cfg-label">♟ Black</div>
+              <input class="ctrl-input" id="blackName" placeholder="Display name" value="Black">
+              <select class="ctrl-select" id="blackBackend" onchange="onBackendChange('black')">
+                <option value="lmstudio">LM Studio</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+              <div class="url-row" id="blackUrlRow">
+                <input class="ctrl-input" id="blackUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+                <button class="fetch-btn" onclick="fetchModels('black')" title="Load models">⟳</button>
+              </div>
+              <select class="ctrl-select" id="blackModel" onchange="onModelSelect('black')"><option value="">— select model —</option></select>
+              <label class="toggle-row">
+                <input type="checkbox" id="blackThinking"> Extended thinking
+              </label>
+            </div>
+
+            <hr class="divider">
+
+            <!-- Tutor -->
+            <div class="player-cfg">
+              <div class="cfg-label">📚 Tutor</div>
+              <select class="ctrl-select" id="tutorBackend" onchange="onBackendChange('tutor')">
+                <option value="lmstudio">LM Studio (local)</option>
+                <option value="anthropic">Anthropic (cloud)</option>
+                <option value="none">Disabled</option>
+              </select>
+              <div class="url-row" id="tutorUrlRow">
+                <input class="ctrl-input" id="tutorUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+                <button class="fetch-btn" onclick="fetchModels('tutor')" title="Load models">⟳</button>
+              </div>
+              <select class="ctrl-select" id="tutorModel"><option value="">— select model —</option></select>
+            </div>
+
+            <hr class="divider">
+
+            <!-- Games count -->
+            <div class="games-row">
+              <span>Number of games</span>
+              <input type="number" id="gamesCount" value="1" min="1" max="200">
+            </div>
+
+            <button class="start-btn" id="startBtn" onclick="startTournament()">▶ Start Match</button>
+          </div>
+        </div>
+
+        <!-- ── Tournament mode ── -->
+        <div id="tournamentForm" style="display:none">
+          <div class="ctrl-body">
+
+            <!-- Format -->
+            <div class="games-row">
+              <span>Format</span>
+              <select class="ctrl-select" id="trnFormat" style="width:120px">
+                <option value="round_robin">Round Robin</option>
+                <option value="gauntlet">Gauntlet</option>
+              </select>
+            </div>
+
+            <!-- Games per pair -->
+            <div class="games-row">
+              <span>Games / pair</span>
+              <input type="number" id="trnGamesPair" value="2" min="1" max="20">
+            </div>
+
+            <hr class="divider">
+
+            <!-- Dynamic player list -->
+            <div id="trnPlayerList" style="display:flex;flex-direction:column;gap:8px"></div>
+
+            <button class="trn-add-btn" onclick="trnAddPlayer()">+ Add Player</button>
+
+            <hr class="divider">
+
+            <!-- Tutor (shared with match form via separate IDs) -->
+            <div class="player-cfg">
+              <div class="cfg-label">📚 Tutor</div>
+              <select class="ctrl-select" id="trnTutorBackend" onchange="onBackendChange('trnTutor')">
+                <option value="lmstudio">LM Studio (local)</option>
+                <option value="anthropic">Anthropic (cloud)</option>
+                <option value="none">Disabled</option>
+              </select>
+              <div class="url-row" id="trnTutorUrlRow">
+                <input class="ctrl-input" id="trnTutorUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+                <button class="fetch-btn" onclick="fetchModels('trnTutor')" title="Load models">⟳</button>
+              </div>
+              <select class="ctrl-select" id="trnTutorModel"><option value="">— select model —</option></select>
+            </div>
+
+            <button class="start-btn" onclick="startBracketTournament()">▶ Start Tournament</button>
+          </div>
+        </div>
+
       </div>
 
       <!-- Progress view (shown when running/paused) -->
@@ -816,6 +1329,14 @@
         </div>
         <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
       </div>
+    </div>
+
+    <!-- Live standings (tournament mode only) -->
+    <div class="ctrl-section" id="standingsSection" style="display:none">
+      <div class="ctrl-head" onclick="toggleSection('standingsSection')">
+        Live Standings <span class="chevron">▾</span>
+      </div>
+      <div id="standingsBody"></div>
     </div>
 
     <!-- Leaderboard section -->
@@ -854,6 +1375,80 @@
       </div>
     </div>
 
+    <!-- Settings section -->
+    <div class="ctrl-section" id="settingsSection">
+      <div class="ctrl-head" onclick="toggleSection('settingsSection')">
+        Appearance <span class="chevron">▾</span>
+      </div>
+      <div id="settingsBody">
+        <div class="settings-body">
+
+          <!-- Board theme presets -->
+          <div class="setting-group">
+            <div class="setting-label">Board Theme</div>
+            <div class="theme-swatches" id="themeSwatches"></div>
+          </div>
+
+          <!-- Custom board colors -->
+          <div class="setting-group">
+            <div class="setting-label">Custom Colors</div>
+            <div class="color-row">
+              <label>Light squares</label>
+              <input type="color" id="colorLight" oninput="onCustomColor()">
+            </div>
+            <div class="color-row">
+              <label>Dark squares</label>
+              <input type="color" id="colorDark" oninput="onCustomColor()">
+            </div>
+            <div class="color-row">
+              <label>Accent</label>
+              <input type="color" id="colorAccent" oninput="onCustomColor()">
+            </div>
+          </div>
+
+          <!-- Piece set -->
+          <div class="setting-group">
+            <div class="setting-label">Piece Set</div>
+            <div class="piece-set-opts">
+              <button class="piece-set-btn active" id="psUnicode" onclick="setPieceSet('unicode')">♔ Unicode</button>
+              <button class="piece-set-btn"         id="psLetters" onclick="setPieceSet('letters')">K Letters</button>
+            </div>
+          </div>
+
+          <!-- Font family -->
+          <div class="setting-group">
+            <div class="setting-label">UI Font</div>
+            <div class="font-opts">
+              <button class="font-btn active" id="fontMono"   onclick="setFont('mono')"   style="font-family:'JetBrains Mono',monospace">Mono</button>
+              <button class="font-btn"        id="fontSystem" onclick="setFont('system')" style="font-family:system-ui,sans-serif">System</button>
+            </div>
+          </div>
+
+          <!-- Board flip -->
+          <div class="setting-group">
+            <div class="setting-label">Board Orientation</div>
+            <button class="piece-set-btn" id="flipBtnSettings" onclick="toggleFlip()" style="width:100%">⇅ Flip Board</button>
+          </div>
+
+          <div class="settings-reset" onclick="resetSettings()">↺ Reset to defaults</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tournament history section -->
+    <div class="ctrl-section" id="tournamentHistorySection">
+      <div class="ctrl-head" onclick="toggleSection('tournamentHistorySection')">
+        Tournament History
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadTournamentHistory()">↻</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div id="tournamentHistoryBody">
+        <div class="lb-empty">No tournaments yet</div>
+      </div>
+    </div>
+
   </div>
 </main>
 
@@ -866,6 +1461,7 @@
         <div class="rp-swatch" style="background:#1a1a1a;border:1px solid #444"></div>
         <span class="rp-strip-name" id="rpNameBlack">—</span>
       </div>
+      <div class="rp-graveyard" id="rpGraveyardBlack"></div>
       <span class="rp-strip-elo" id="rpEloBlack">—</span>
     </div>
     <!-- Board -->
@@ -878,6 +1474,7 @@
         <div class="rp-swatch" style="background:#f0f0f0;border:1px solid #bbb"></div>
         <span class="rp-strip-name" id="rpNameWhite">—</span>
       </div>
+      <div class="rp-graveyard" id="rpGraveyardWhite"></div>
       <span class="rp-strip-elo" id="rpEloWhite">—</span>
     </div>
     <!-- Controls -->
@@ -898,11 +1495,21 @@
   <div class="rp-move-list" id="rpMoveList"></div>
 </div>
 
+<!-- ── Model card modal ───────────────────────────────────────────────── -->
+<div id="modelModal" onclick="if(event.target.id==='modelModal') closeModelCard()">
+  <div class="mc-card" id="mcCard">
+    <div class="mc-close" onclick="closeModelCard()">Close ✕</div>
+    <div id="mcBody"></div>
+  </div>
+</div>
+
 <div id="overlay">
   <div class="ov-result"  id="ovResult"></div>
   <div class="ov-sub"     id="ovSub"></div>
   <div class="ov-opening" id="ovOpening"></div>
   <div class="ov-elos"    id="ovElos"></div>
+  <div class="ov-badges-label" id="ovBadgesLabel" style="display:none">Achievements earned</div>
+  <div class="ov-badges"  id="ovBadges"></div>
   <div class="ov-actions">
     <button class="ov-btn" id="ovDownloadBtn" onclick="downloadPgn()" style="display:none">
       ↓ PGN
@@ -918,15 +1525,168 @@
 const API   = '';          // same origin
 const WS_URL = `ws://${location.host}/ws`;
 
-const PIECES = { K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙', k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟' };
+const PIECE_SETS = {
+  unicode: { K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙', k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟' },
+  letters: { K:'K', Q:'Q', R:'R', B:'B', N:'N', P:'P', k:'k', q:'q', r:'r', b:'b', n:'n', p:'p' },
+};
+
+const THEMES = {
+  wood:     { label:'Wood',      light:'#e8d5b0', dark:'#8b6148' },
+  green:    { label:'Green',     light:'#eeeed2', dark:'#769656' },
+  blue:     { label:'Blue',      light:'#dee3e6', dark:'#8ca2ad' },
+  walnut:   { label:'Walnut',    light:'#f0d9b5', dark:'#b58863' },
+  contrast: { label:'Contrast',  light:'#f0f0f0', dark:'#404040' },
+  midnight: { label:'Midnight',  light:'#334455', dark:'#1a2535' },
+};
+
+const FONTS = {
+  mono:   { label:'Mono',   value:"'JetBrains Mono', monospace" },
+  system: { label:'System', value:"system-ui, -apple-system, sans-serif" },
+};
+
+const _DEFAULT_SETTINGS = {
+  theme:    'wood',
+  lightSq:  '#e8d5b0',
+  darkSq:   '#8b6148',
+  accent:   '#c8921e',
+  pieceSet: 'unicode',
+  font:     'mono',
+};
+
+// Load settings from localStorage
+const _settings = Object.assign({}, _DEFAULT_SETTINGS,
+  JSON.parse(localStorage.getItem('nimzo_settings') || '{}')
+);
+
+function saveSettings() {
+  localStorage.setItem('nimzo_settings', JSON.stringify(_settings));
+}
+
+function applySettings() {
+  const root = document.documentElement;
+  root.style.setProperty('--sq-light', _settings.lightSq);
+  root.style.setProperty('--sq-dark',  _settings.darkSq);
+  root.style.setProperty('--gold',        _settings.accent);
+  root.style.setProperty('--gold-bright', lightenHex(_settings.accent, 30));
+  root.style.setProperty('--ui-font',  FONTS[_settings.font]?.value || FONTS.mono.value);
+
+  // Piece set: body class switch
+  document.body.classList.toggle('pieces-letters', _settings.pieceSet === 'letters');
+
+  // Sync UI widgets (may not exist yet at initial call)
+  syncSettingsUI();
+  // Re-render eval graph with new accent if it has data
+  if (typeof renderEvalGraph === 'function' && typeof evalHistory !== 'undefined' && evalHistory.length) {
+    renderEvalGraph();
+  }
+}
+
+function syncSettingsUI() {
+  // Theme swatches
+  document.querySelectorAll('.theme-swatch').forEach(el => {
+    el.classList.toggle('active', el.dataset.theme === _settings.theme);
+  });
+  // Color pickers
+  const lEl = document.getElementById('colorLight');
+  const dEl = document.getElementById('colorDark');
+  const aEl = document.getElementById('colorAccent');
+  if (lEl) lEl.value = _settings.lightSq;
+  if (dEl) dEl.value = _settings.darkSq;
+  if (aEl) aEl.value = _settings.accent;
+  // Piece set buttons
+  document.querySelectorAll('.piece-set-btn[id^="ps"]').forEach(btn => {
+    btn.classList.toggle('active', btn.id === 'ps' + capitalize(_settings.pieceSet));
+  });
+  // Font buttons
+  document.querySelectorAll('.font-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.id === 'font' + capitalize(_settings.font));
+  });
+}
+
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function lightenHex(hex, amount) {
+  // Simple brightness boost for accent derived color
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
+  const clamp = v => Math.min(255, v + amount);
+  return '#' + [clamp(r), clamp(g), clamp(b)].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+function buildThemeSwatches() {
+  const container = document.getElementById('themeSwatches');
+  if (!container) return;
+  container.innerHTML = Object.entries(THEMES).map(([id, t]) =>
+    `<div class="theme-swatch${_settings.theme===id?' active':''}" data-theme="${id}"
+         title="${t.label}" onclick="setTheme('${id}')">
+       <div class="th-l" style="background:${t.light}"></div>
+       <div class="th-d" style="background:${t.dark}"></div>
+     </div>`
+  ).join('');
+}
+
+function setTheme(id) {
+  const t = THEMES[id];
+  if (!t) return;
+  _settings.theme   = id;
+  _settings.lightSq = t.light;
+  _settings.darkSq  = t.dark;
+  saveSettings();
+  applySettings();
+  buildThemeSwatches();  // refresh active state
+  renderBoard();
+}
+
+function onCustomColor() {
+  const lEl = document.getElementById('colorLight');
+  const dEl = document.getElementById('colorDark');
+  const aEl = document.getElementById('colorAccent');
+  _settings.theme   = 'custom';
+  _settings.lightSq = lEl.value;
+  _settings.darkSq  = dEl.value;
+  _settings.accent  = aEl.value;
+  saveSettings();
+  applySettings();
+  buildThemeSwatches();
+  renderBoard();
+  renderEvalGraph();  // re-render eval graph with new accent color
+}
+
+function setPieceSet(id) {
+  _settings.pieceSet = id;
+  saveSettings();
+  applySettings();
+  renderBoard();
+}
+
+function setFont(id) {
+  _settings.font = id;
+  saveSettings();
+  applySettings();
+}
+
+function resetSettings() {
+  Object.assign(_settings, _DEFAULT_SETTINGS);
+  saveSettings();
+  applySettings();
+  buildThemeSwatches();
+  renderBoard();
+}
+
+// PIECES is now dynamic — use current piece set
+function currentPieces() {
+  return PIECE_SETS[_settings.pieceSet] || PIECE_SETS.unicode;
+}
+
 const FILES  = ['a','b','c','d','e','f','g','h'];
 
 // ── State ────────────────────────────────────────────────────────────────
 let gameState = {
   fen:        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
   lastUci:    null,
-  white:      { name: '—', elo: null },
-  black:      { name: '—', elo: null },
+  white:      { name: '—', elo: null, model_id: null, portrait_url: null },
+  black:      { name: '—', elo: null, model_id: null, portrait_url: null },
   thinking:   null,
   candidates: [],
   lastEvalCp:  null,
@@ -962,6 +1722,58 @@ function parseFen(fen) {
   });
 }
 
+// ── Captured pieces / material imbalance ──────────────────────────────────
+const STARTING_COUNTS = { p: 8, n: 2, b: 2, r: 2, q: 1 };   // king never captured
+const PIECE_VALUES    = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+const GV_ORDER        = ['q', 'r', 'b', 'n', 'p'];          // heaviest first
+
+function computeCaptures(fen) {
+  const counts = { P:0,N:0,B:0,R:0,Q:0, p:0,n:0,b:0,r:0,q:0 };
+  for (const ch of fen.split(' ')[0]) {
+    if (counts.hasOwnProperty(ch)) counts[ch]++;
+  }
+  const whiteLost = {}, blackLost = {};
+  let whiteValue = 0, blackValue = 0;
+  for (const t of GV_ORDER) {
+    const T = t.toUpperCase();
+    whiteLost[t] = Math.max(0, STARTING_COUNTS[t] - counts[T]);
+    blackLost[t] = Math.max(0, STARTING_COUNTS[t] - counts[t]);
+    whiteValue  += counts[T] * PIECE_VALUES[t];
+    blackValue  += counts[t] * PIECE_VALUES[t];
+  }
+  return { whiteLost, blackLost, imbalance: whiteValue - blackValue };
+}
+
+function renderGraveyardInto(el, lostMap, capturedAreWhite, advantage) {
+  if (!el) return;
+  const parts = [];
+  for (const t of GV_ORDER) {
+    const n = lostMap[t] || 0;
+    if (!n) continue;
+    const glyph = capturedAreWhite ? currentPieces()[t.toUpperCase()] : currentPieces()[t];
+    for (let i = 0; i < n; i++) parts.push(`<span class="gv-piece">${glyph}</span>`);
+  }
+  if (advantage > 0) parts.push(`<span class="gv-adv">+${advantage}</span>`);
+  el.innerHTML = parts.join('');
+}
+
+function renderGraveyards(fen, ids) {
+  if (!fen) return;
+  const { whiteLost, blackLost, imbalance } = computeCaptures(fen);
+  // Black's strip shows the white pieces Black has captured
+  renderGraveyardInto(
+    document.getElementById(ids.black),
+    whiteLost, true,
+    imbalance < 0 ? -imbalance : 0,
+  );
+  // White's strip shows the black pieces White has captured
+  renderGraveyardInto(
+    document.getElementById(ids.white),
+    blackLost, false,
+    imbalance > 0 ? imbalance : 0,
+  );
+}
+
 function uciToSquares(uci) {
   if (!uci || uci.length < 4) return [null, null];
   const fi = c => c.charCodeAt(0) - 97;
@@ -972,49 +1784,65 @@ function uciToSquares(uci) {
 }
 
 // ── Board render ──────────────────────────────────────────────────────────
-function renderBoard() {
-  const el      = document.getElementById('board');
+function renderBoard(animate) {
+  const el      = document.getElementById(‘board’);
   const matrix  = parseFen(gameState.fen);
   const flipped = gameState.boardFlipped;
   const [from, to] = uciToSquares(gameState.lastUci);
   const key = (r,c) => r*8+c;
   const fromKey = from ? key(from.row,from.col) : -1;
   const toKey   = to   ? key(to.row,  to.col)   : -1;
+  const pieces  = currentPieces();
+
+  // Compute pixel offset for move animation
+  let animDx = 0, animDy = 0;
+  if (animate && from && to) {
+    const sqPx = el.clientWidth / 8;
+    const dCol = flipped ? (from.col - to.col) : (from.col - to.col);
+    const dRow = flipped ? (from.row - to.row) : (from.row - to.row);
+    animDx = dCol * sqPx;
+    animDy = dRow * sqPx;
+  }
 
   // When flipped: rows run 7→0 (rank 1 at top), cols run 7→0 (h-file at left)
   const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
   const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
 
-  el.innerHTML = '';
+  el.innerHTML = ‘’;
   rows.forEach((r, ri) => {
     cols.forEach((c, ci) => {
-      const sq    = document.createElement('div');
+      const sq    = document.createElement(‘div’);
       const light = (r+c)%2===0;
-      sq.className = 'sq ' + (light ? 'light' : 'dark');
+      sq.className = ‘sq ‘ + (light ? ‘light’ : ‘dark’);
       const k = key(r,c);
-      if (k===fromKey) sq.classList.add('hi-from');
-      if (k===toKey)   sq.classList.add('hi-to');
+      if (k===fromKey) sq.classList.add(‘hi-from’);
+      if (k===toKey)   sq.classList.add(‘hi-to’);
 
-      // Rank label on the leftmost visible column
+      // Rank label on the leftmost visible column (color set by CSS)
       if (ci===0) {
-        const lbl = document.createElement('span');
-        lbl.className='sq-label rank'; lbl.textContent=8-r;
-        lbl.style.color = light?'#8b6148':'#e8d5b0';
+        const lbl = document.createElement(‘span’);
+        lbl.className=’sq-label rank’; lbl.textContent=8-r;
         sq.appendChild(lbl);
       }
       // File label on the bottom visible row
       if (ri===7) {
-        const lbl = document.createElement('span');
-        lbl.className='sq-label file'; lbl.textContent=FILES[c];
-        lbl.style.color = light?'#8b6148':'#e8d5b0';
+        const lbl = document.createElement(‘span’);
+        lbl.className=’sq-label file’; lbl.textContent=FILES[c];
         sq.appendChild(lbl);
       }
 
       const piece = matrix[r][c];
       if (piece) {
-        const span = document.createElement('span');
-        span.className = 'piece ' + (piece===piece.toUpperCase()?'w':'b');
-        span.textContent = PIECES[piece]||piece;
+        const span = document.createElement(‘span’);
+        const isWhite = piece === piece.toUpperCase();
+        span.className = ‘piece ‘ + (isWhite ? ‘w’ : ‘b’);
+        span.textContent = pieces[piece] || piece;
+        // Animate the piece that just arrived at the destination square
+        if (animate && k === toKey && (animDx !== 0 || animDy !== 0)) {
+          span.style.setProperty(‘--move-dx’, animDx + ‘px’);
+          span.style.setProperty(‘--move-dy’, animDy + ‘px’);
+          span.classList.add(‘moving’);
+        }
         sq.appendChild(span);
       }
       el.appendChild(sq);
@@ -1022,8 +1850,11 @@ function renderBoard() {
   });
 
   // Keep flip button icon in sync
-  const btn = document.getElementById('flipBtn');
+  const btn = document.getElementById(‘flipBtn’);
   if (btn) btn.title = flipped ? "Flip to White’s perspective" : "Flip to Black’s perspective";
+
+  // Refresh captured-pieces graveyards
+  renderGraveyards(gameState.fen, { white: ‘graveyardWhite’, black: ‘graveyardBlack’ });
 }
 
 function toggleFlip() {
@@ -1184,15 +2015,25 @@ async function loadLeaderboard() {
     );
 
     let html = `<table class="lb-table"><thead><tr>
-      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th><th></th>
+      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th><th title="Best game score (avg move quality, 0–100). Click to replay.">Best</th><th title="Achievement badges">★</th><th></th>
     </tr></thead><tbody>`;
     rows.forEach((r, i) => {
       const spark = buildSparkline(histories[i]);
+      const bestScore = r.best_game_score;
+      const bestId    = r.best_game_id;
+      const bestCell  = (bestScore != null && bestId != null)
+        ? `<td class="lb-best" title="Replay best game (#${bestId})" onclick="openReplay(${bestId})">${Math.round(bestScore)}</td>`
+        : `<td class="lb-best dim">—</td>`;
+      const badgeCell = r.achievement_count > 0
+        ? `<td class="lb-badges-cell" title="${r.achievement_count} achievements — click name for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${r.achievement_count}</td>`
+        : `<td class="lb-badges-cell dim">—</td>`;
       html += `<tr>
         <td class="lb-rank">${i+1}</td>
-        <td class="lb-name" title="${escHtml(r.model_id)}">${escHtml(r.name)}</td>
+        <td class="lb-name" title="${escHtml(r.model_id)} — click for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${escHtml(r.name)}</td>
         <td class="lb-elo">${r.elo}</td>
         <td class="lb-wdl">${r.wins}/${r.draws}/${r.losses}</td>
+        ${bestCell}
+        ${badgeCell}
         <td class="lb-spark">${spark}</td>
       </tr>`;
     });
@@ -1225,6 +2066,120 @@ async function loadHistory() {
   } catch(e) {}
 }
 
+// ── Mode tabs ─────────────────────────────────────────────────────────────
+let currentMode = 'match';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('tabMatch').classList.toggle('active', mode==='match');
+  document.getElementById('tabTournament').classList.toggle('active', mode==='tournament');
+  document.getElementById('matchForm').style.display      = mode==='match' ? '' : 'none';
+  document.getElementById('tournamentForm').style.display = mode==='tournament' ? '' : 'none';
+}
+
+// ── Tournament player slots ────────────────────────────────────────────────
+let trnPlayers = [];   // [{id, name, backend, url, model, thinking}]
+let trnNextId = 0;
+
+function trnAddPlayer() {
+  const id = trnNextId++;
+  trnPlayers.push({ id, name: '', backend: 'lmstudio', url: 'http://localhost:1234/v1', model: '', thinking: false });
+  renderTrnPlayerList();
+}
+
+function trnRemovePlayer(id) {
+  if (trnPlayers.length <= 2) { alert('A tournament requires at least 2 players.'); return; }
+  trnPlayers = trnPlayers.filter(p => p.id !== id);
+  renderTrnPlayerList();
+}
+
+function renderTrnPlayerList() {
+  const list = document.getElementById('trnPlayerList');
+  const fmt  = document.getElementById('trnFormat').value;
+  list.innerHTML = trnPlayers.map((p, idx) => {
+    const label = fmt === 'gauntlet' && idx === 0 ? '👑 Champion' : `Player ${idx + 1}`;
+    return `<div class="trn-player-row" id="trnRow_${p.id}">
+      <div class="trn-player-num">${label}</div>
+      ${trnPlayers.length > 2 ? `<button class="trn-remove-btn" onclick="trnRemovePlayer(${p.id})" title="Remove">✕</button>` : ''}
+      <input class="ctrl-input" id="trnName_${p.id}" placeholder="Display name" value="${escHtml(p.name)}" oninput="trnSync(${p.id})">
+      <select class="ctrl-select" id="trnBackend_${p.id}" onchange="trnSyncBackend(${p.id})">
+        <option value="lmstudio" ${p.backend==='lmstudio'?'selected':''}>LM Studio</option>
+        <option value="anthropic" ${p.backend==='anthropic'?'selected':''}>Anthropic</option>
+      </select>
+      <div class="url-row">
+        <input class="ctrl-input" id="trnUrl_${p.id}" placeholder="http://localhost:1234/v1" value="${escHtml(p.url)}" oninput="trnSync(${p.id})">
+        <button class="fetch-btn" onclick="trnFetchModels(${p.id})" title="Load models">⟳</button>
+      </div>
+      <select class="ctrl-select" id="trnModel_${p.id}" onchange="trnSyncModel(${p.id})">
+        <option value="">— select model —</option>
+        ${p.model ? `<option value="${escHtml(p.model)}" selected>${escHtml(p.model)}</option>` : ''}
+      </select>
+      <label class="toggle-row">
+        <input type="checkbox" id="trnThink_${p.id}" ${p.thinking?'checked':''} onchange="trnSync(${p.id})"> Extended thinking
+      </label>
+    </div>`;
+  }).join('');
+}
+
+function trnSync(id) {
+  const p = trnPlayers.find(x => x.id === id);
+  if (!p) return;
+  p.name     = document.getElementById(`trnName_${id}`).value;
+  p.url      = document.getElementById(`trnUrl_${id}`).value;
+  p.thinking = document.getElementById(`trnThink_${id}`).checked;
+}
+
+function trnSyncBackend(id) {
+  const p = trnPlayers.find(x => x.id === id);
+  if (!p) return;
+  p.backend = document.getElementById(`trnBackend_${id}`).value;
+}
+
+function trnSyncModel(id) {
+  const p = trnPlayers.find(x => x.id === id);
+  if (!p) return;
+  p.model = document.getElementById(`trnModel_${id}`).value;
+  if (p.model && !p.name) {
+    p.name = extractModelName(p.model);
+    const nameEl = document.getElementById(`trnName_${id}`);
+    if (nameEl) nameEl.value = p.name;
+  }
+  if (/qwen/i.test(p.model)) {
+    const thinkEl = document.getElementById(`trnThink_${id}`);
+    if (thinkEl) { thinkEl.checked = false; p.thinking = false; }
+  }
+}
+
+async function trnFetchModels(id) {
+  const p = trnPlayers.find(x => x.id === id);
+  if (!p) return;
+  const url = document.getElementById(`trnUrl_${id}`).value || p.url;
+  try {
+    const data = await fetch(`${API}/api/models?url=${encodeURIComponent(url)}`).then(r=>r.json());
+    const sel  = document.getElementById(`trnModel_${id}`);
+    if (!sel) return;
+    const models = (data.data || []).map(m => m.id || m);
+    sel.innerHTML = '<option value="">— select model —</option>' +
+      models.map(m => `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('');
+    if (p.model) sel.value = p.model;
+  } catch(e) {}
+}
+
+// Init with 2 default players
+function initTrnPlayers() {
+  trnPlayers = [];
+  trnNextId = 0;
+  trnAddPlayer();
+  trnAddPlayer();
+}
+
+// Re-render when format changes (to update "Champion" label)
+document.addEventListener('DOMContentLoaded', () => {
+  initTrnPlayers();
+  const fmt = document.getElementById('trnFormat');
+  if (fmt) fmt.addEventListener('change', renderTrnPlayerList);
+});
+
 // ── Tournament controls ───────────────────────────────────────────────────
 async function startTournament() {
   const wModel = document.getElementById('whiteModel').value;
@@ -1250,6 +2205,42 @@ async function startTournament() {
     tutor_model:    tutorModel,
     tutor_url:      tutorUrl || 'http://localhost:1234/v1',
     games:          parseInt(document.getElementById('gamesCount').value) || 10,
+  };
+
+  const res = await fetch(`${API}/api/tournament/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  }).then(r=>r.json());
+
+  if (res.error) alert(res.error);
+}
+
+async function startBracketTournament() {
+  // Sync all player fields before reading
+  trnPlayers.forEach(p => trnSync(p.id));
+  // Validate
+  const incomplete = trnPlayers.filter(p => !p.model);
+  if (incomplete.length > 0) { alert('Select a model for every player.'); return; }
+  if (trnPlayers.length < 2) { alert('Add at least 2 players.'); return; }
+
+  const tutorBackend = document.getElementById('trnTutorBackend').value;
+  const tutorModel   = tutorBackend==='none' ? '' : document.getElementById('trnTutorModel').value;
+  const tutorUrl     = tutorBackend==='none' ? '' : document.getElementById('trnTutorUrl').value;
+
+  const cfg = {
+    players: trnPlayers.map(p => ({
+      backend:  p.backend,
+      name:     p.name || extractModelName(p.model),
+      model_id: p.model,
+      url:      p.url,
+      thinking: p.thinking,
+    })),
+    format:         document.getElementById('trnFormat').value,
+    games_per_pair: parseInt(document.getElementById('trnGamesPair').value) || 2,
+    tutor_backend:  tutorBackend==='none' ? 'lmstudio' : tutorBackend,
+    tutor_model:    tutorModel,
+    tutor_url:      tutorUrl || 'http://localhost:1234/v1',
   };
 
   const res = await fetch(`${API}/api/tournament/start`, {
@@ -1333,8 +2324,8 @@ function onModelSelect(side) {
 }
 
 async function fetchModels(side) {
-  const urlId = side === 'tutor' ? 'tutorUrl' : side + 'Url';
-  const selId = side === 'tutor' ? 'tutorModel' : side + 'Model';
+  const urlId = side === 'tutor' ? 'tutorUrl' : side === 'trnTutor' ? 'trnTutorUrl' : side + 'Url';
+  const selId = side === 'tutor' ? 'tutorModel' : side === 'trnTutor' ? 'trnTutorModel' : side + 'Model';
   const url   = document.getElementById(urlId).value.trim();
   if (!url) return;
 
@@ -1360,30 +2351,36 @@ async function fetchModels(side) {
 function onBackendChange(side) {
   const backend = document.getElementById(side + 'Backend').value;
   const urlRow  = document.getElementById(side + 'UrlRow');
-  if (side === 'tutor' && backend === 'none') {
-    urlRow.style.display = 'none';
-    document.getElementById('tutorModel').style.display = 'none';
+  // Handle "none" for both tutor variants
+  const isTutor = side === 'tutor' || side === 'trnTutor';
+  const modelId = side === 'trnTutor' ? 'trnTutorModel' : side + 'Model';
+  if (isTutor && backend === 'none') {
+    if (urlRow) urlRow.style.display = 'none';
+    const ms = document.getElementById(modelId);
+    if (ms) ms.style.display = 'none';
     return;
   }
   if (urlRow) urlRow.style.display = '';
-  const modelSel = document.getElementById(side + 'Model');
+  const modelSel = document.getElementById(modelId);
   if (modelSel) modelSel.style.display = '';
 
   if (backend === 'anthropic') {
     // For Anthropic, populate with known models instead of fetching
-    const sel = document.getElementById(side + 'Model');
-    sel.innerHTML = '';
-    ['claude-opus-4-7','claude-sonnet-4-6','claude-haiku-4-5-20251001'].forEach(m => {
-      const opt = document.createElement('option'); opt.value = opt.textContent = m; sel.appendChild(opt);
-    });
+    const sel = document.getElementById(modelId);
+    if (sel) {
+      sel.innerHTML = '';
+      ['claude-opus-4-7','claude-sonnet-4-6','claude-haiku-4-5-20251001'].forEach(m => {
+        const opt = document.createElement('option'); opt.value = opt.textContent = m; sel.appendChild(opt);
+      });
+    }
     if (urlRow) urlRow.style.display = 'none';
   }
 }
 
 // ── WebSocket event dispatch ──────────────────────────────────────────────
 function onGameStart(d) {
-  gameState.white    = { name: d.white, elo: d.white_elo };
-  gameState.black    = { name: d.black, elo: d.black_elo };
+  gameState.white    = { name: d.white, elo: d.white_elo, model_id: d.white_model_id || null, portrait_url: null };
+  gameState.black    = { name: d.black, elo: d.black_elo, model_id: d.black_model_id || null, portrait_url: null };
   gameState.fen      = d.fen || gameState.fen;
   gameState.lastUci    = null;
   gameState.thinking   = null;
@@ -1394,7 +2391,28 @@ function onGameStart(d) {
   document.getElementById('evalPane').style.display = 'none';
   document.getElementById('historyPane').innerHTML = '';
   document.getElementById('overlay').classList.remove('show');
+  // Reset avatars
+  ['White','Black'].forEach(c => {
+    const el = document.getElementById(`avatar${c}`);
+    el.src = ''; el.style.display = 'none';
+  });
   updatePlayers(); updateAnalysis(); renderBoard();
+  // Kick off portrait fetch for both players (non-blocking)
+  if (d.white_model_id) fetchPortrait(d.white_model_id, 'White');
+  if (d.black_model_id) fetchPortrait(d.black_model_id, 'Black');
+}
+
+async function fetchPortrait(modelId, color) {
+  try {
+    const r = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' });
+    const j = await r.json();
+    if (j.portrait_url) {
+      gameState[color.toLowerCase()].portrait_url = j.portrait_url;
+      const el = document.getElementById(`avatar${color}`);
+      el.onload = () => { el.style.display = 'block'; };
+      el.src = j.portrait_url;
+    }
+  } catch(e) { /* portrait optional */ }
 }
 
 function onThinking(d) {
@@ -1412,7 +2430,7 @@ function onMove(d) {
   gameState.thinking   = null;
   gameState.candidates = [];
   if (d.score_cp_white != null) gameState.lastEvalCp = d.score_cp_white;
-  updatePlayers(); updateAnalysis(); renderBoard();
+  updatePlayers(); updateAnalysis(); renderBoard(true);  // true = animate the arriving piece
   addMoveCard(d);
   pushEval(d.move_number, d.score_cp_white);
 }
@@ -1438,6 +2456,16 @@ function onGameOver(d) {
     <div class="ov-elo-block"><div class="ov-elo-name">${escHtml(gameState.black.name)}</div>
       <div class="ov-elo-val">${d.black_elo_after!=null?Math.round(d.black_elo_after):'—'}</div></div>`;
   document.getElementById('ovElos').innerHTML = eloHtml;
+
+  // Freshly-earned achievements
+  const ach = d.achievements || { white: [], black: [] };
+  const renderForSide = (color, list) => list.map(a =>
+    `<span class="mc-badge badge-${a.code}" title="${escHtml(a.desc)} (${color})">${escHtml(a.label)}</span>`
+  ).join('');
+  const badgesHtml = renderForSide('White', ach.white || []) + renderForSide('Black', ach.black || []);
+  document.getElementById('ovBadges').innerHTML = badgesHtml;
+  document.getElementById('ovBadgesLabel').style.display = badgesHtml ? '' : 'none';
+
   document.getElementById('overlay').classList.add('show');
 
   if (d.white_elo_after!=null) gameState.white.elo = d.white_elo_after;
@@ -1451,18 +2479,97 @@ function onLessons(d) {
   showLessons(d.player, d.color, d.improve || [], d.strength || []);
 }
 
+function renderStandings(standings) {
+  const sec  = document.getElementById('standingsSection');
+  const body = document.getElementById('standingsBody');
+  if (!standings || !standings.length) { sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  let html = `<div class="standings-wrap">
+    <table class="stn-table">
+      <thead><tr>
+        <th>#</th><th>Player</th><th>Pts</th><th>W-D-L</th>
+      </tr></thead><tbody>`;
+  standings.forEach((s, i) => {
+    html += `<tr class="${i===0?'stn-leader':''}">
+      <td class="stn-rank">${i+1}</td>
+      <td class="stn-name">${escHtml(s.name)}</td>
+      <td class="stn-pts">${s.points}</td>
+      <td class="stn-wdl">${s.wins}-${s.draws}-${s.losses}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  body.innerHTML = html;
+}
+
+function onStandingsUpdate(d) {
+  renderStandings(d.standings);
+}
+
+function onTournamentComplete(d) {
+  renderStandings(d.standings);
+  loadLeaderboard();
+  loadTournamentHistory();
+  // Show winner title in game-over overlay style
+  if (d.winner && d.title) {
+    const ov = document.getElementById('overlay');
+    document.getElementById('ovResult').textContent  = '🏆 Tournament Complete';
+    document.getElementById('ovSub').textContent     = `Winner: ${d.winner.name}`;
+    document.getElementById('ovOpening').textContent = '';
+    document.getElementById('ovElos').innerHTML = `<div class="ov-title-badge">"${d.title}"</div>`;
+    document.getElementById('ovBadgesLabel').style.display = 'none';
+    document.getElementById('ovBadges').innerHTML = '';
+    document.getElementById('ovDownloadBtn').style.display = 'none';
+    ov.style.display = 'flex';
+  }
+}
+
+async function loadTournamentHistory() {
+  try {
+    const history = await fetch(`${API}/api/tournament/history`).then(r=>r.json());
+    const body = document.getElementById('tournamentHistoryBody');
+    if (!history || !history.length) {
+      body.innerHTML = '<div class="lb-empty">No tournaments yet</div>';
+      return;
+    }
+    const fmtLabel = { round_robin: 'Round Robin', gauntlet: 'Gauntlet', match: 'Match' };
+    body.innerHTML = history.map(t => {
+      const date  = t.finished_at ? t.finished_at.slice(0,10) : (t.started_at||'').slice(0,10);
+      const games = t.total_games || '?';
+      return `<div class="th-row">
+        <span class="th-format">${fmtLabel[t.format]||t.format}</span>
+        <span class="th-winner">${escHtml(t.winner_name || '—')}</span>
+        <span class="th-title">${t.title ? '"'+escHtml(t.title)+'"' : ''}</span>
+        <span class="th-meta">${games}g · ${date}</span>
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
+
 function onTournamentStatus(d) {
   updateTournamentUI(d.status, d.game_number, d.total_games);
   if (d.white)      gameState.white.name = d.white;
   if (d.black)      gameState.black.name = d.black;
   if (d.white_elo)  gameState.white.elo  = d.white_elo;
   if (d.black_elo)  gameState.black.elo  = d.black_elo;
+  // Clear thinking state when the tournament stops — prevents stale
+  // "● thinking" indicator and analysis dot from lingering on screen.
+  if (d.status === 'idle' || d.status === 'stopping') {
+    gameState.thinking = null;
+  }
+  // Show/hide live standings
+  if (d.standings) renderStandings(d.standings);
+  else if (d.format === 'match' || !d.format) {
+    document.getElementById('standingsSection').style.display = 'none';
+  }
   updatePlayers();
-  if (d.status === 'idle') loadLeaderboard();
+  updateAnalysis();
+  if (d.status === 'idle') { loadLeaderboard(); loadTournamentHistory(); }
 }
 
 function onInitialState(d) {
   updateTournamentUI(d.status || 'idle', d.game_number || 0, d.total_games || 0);
+  if (d.standings) renderStandings(d.standings);
+  loadTournamentHistory();
 }
 
 function dispatch(msg) {
@@ -1474,8 +2581,10 @@ function dispatch(msg) {
       case 'move':              onMove(d);             break;
       case 'game_over':         onGameOver(d);         break;
       case 'lessons':           onLessons(d);          break;
-      case 'tournament_status': onTournamentStatus(d); break;
-      case 'state':             onInitialState(d);     break;
+      case 'tournament_status':  onTournamentStatus(d);  break;
+      case 'standings_update':   onStandingsUpdate(d);   break;
+      case 'tournament_complete':onTournamentComplete(d); break;
+      case 'state':              onInitialState(d);       break;
     }
   } catch(e) { console.warn('Bad WS message:', e); }
 }
@@ -1521,6 +2630,10 @@ const replay = { moves: [], cursor: 0, meta: null };
 
 async function openReplay(gameId, meta) {
   try {
+    // If caller didn't pass meta (e.g. opened from leaderboard), fetch it.
+    if (!meta) {
+      meta = await fetch(`${API}/api/games/${gameId}`).then(r => r.json());
+    }
     const moves = await fetch(`${API}/api/games/${gameId}/moves`).then(r => r.json());
     replay.moves  = moves;
     replay.cursor = 0;
@@ -1558,6 +2671,195 @@ async function openReplay(gameId, meta) {
 
 function closeReplay() {
   document.getElementById('replayModal').classList.remove('show');
+}
+
+// ── Model card modal ──────────────────────────────────────────────────────
+function renderPortraitBlock(p) {
+  if (p.portrait_url) {
+    return `<img class="mc-portrait" src="${escHtml(p.portrait_url)}" alt="${escHtml(p.name || '')} portrait">`;
+  }
+  // Placeholder with model family initial or chess piece
+  const family = (p.metadata && p.metadata.family) || '';
+  const icon = family ? family[0].toUpperCase() : '♟';
+  return `<div class="mc-portrait-placeholder">${icon}</div>`;
+}
+
+async function openModelCard(modelId) {
+  try {
+    const p = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/profile`)
+      .then(r => r.json());
+    renderModelCard(p);
+    document.getElementById('modelModal').classList.add('show');
+    // If no portrait yet, generate one and update the card when done
+    if (!p.portrait_url) {
+      const portraitEl = document.getElementById('mcCard').querySelector('.mc-portrait-placeholder, .mc-portrait');
+      if (portraitEl) {
+        portraitEl.outerHTML = `<div class="mc-portrait-generating"><div class="spinner"></div>Painting…</div>`;
+      }
+      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' })
+        .then(r => r.json())
+        .then(j => {
+          if (j.portrait_url) {
+            p.portrait_url = j.portrait_url;
+            const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+            if (gen) {
+              const img = document.createElement('img');
+              img.className = 'mc-portrait';
+              img.src = j.portrait_url;
+              img.alt = (p.name || '') + ' portrait';
+              gen.replaceWith(img);
+            }
+          } else {
+            const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+            if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+          }
+        })
+        .catch(() => {
+          const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+          if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+        });
+    }
+  } catch (e) {
+    console.error('Model card load failed:', e);
+  }
+}
+
+function closeModelCard() {
+  document.getElementById('modelModal').classList.remove('show');
+}
+
+function renderModelCard(p) {
+  const m = p.moves || {};
+  const c = p.color || {};
+  const g = p.games || {};
+  const total = m.total_moves || 0;
+  const wGames = (c.white_wins||0) + (c.white_draws||0) + (c.white_losses||0);
+  const bGames = (c.black_wins||0) + (c.black_draws||0) + (c.black_losses||0);
+  const wins   = (c.white_wins||0) + (c.black_wins||0);
+  const draws  = (c.white_draws||0) + (c.black_draws||0);
+  const losses = (c.white_losses||0) + (c.black_losses||0);
+
+  // Quality bar segments — width proportional to count
+  const qkeys = ['q_best','q_excellent','q_good','q_inaccuracy','q_mistake','q_blunder'];
+  const qcls  = { q_best:'q-best', q_excellent:'q-excellent', q_good:'q-good',
+                  q_inaccuracy:'q-inaccuracy', q_mistake:'q-mistake', q_blunder:'q-blunder' };
+  const qSum = qkeys.reduce((s,k) => s + (m[k]||0), 0);
+  const qBar = total && qSum
+    ? qkeys.map(k => {
+        const n = m[k] || 0;
+        if (!n) return '';
+        const pct = (n / qSum * 100).toFixed(2);
+        return `<span class="${qcls[k]}" style="width:${pct}%" title="${k.slice(2)}: ${n}"></span>`;
+      }).join('')
+    : '<span style="width:100%;background:var(--border)"></span>';
+
+  const traits = (p.traits && p.traits.length)
+    ? p.traits.map(t =>
+        `<div class="mc-trait">
+           <span class="mc-trait-label">${escHtml(t.label)}</span>
+           <span class="mc-trait-detail">${escHtml(t.detail)}</span>
+         </div>`).join('')
+    : `<div class="mc-no-traits">No personality signal yet — play more games.</div>`;
+
+  const lessons = (p.recent_lessons || []).map(l => {
+    const tag = l.lesson_type === 'strength' ? 'strength' : 'improve';
+    return `<div class="mc-lesson">
+              <span class="tag ${tag}">${tag}</span>${escHtml(l.lesson)}
+            </div>`;
+  }).join('') || `<div class="mc-no-traits">No lessons yet.</div>`;
+
+  // Strategic profile — rendered as formatted text if present
+  const profileHtml = p.strategic_profile
+    ? `<div class="mc-profile">${escHtml(p.strategic_profile).replace(/\n/g,'<br>')}</div>`
+    : null;
+
+  const fmtScore = (w, d, t) => t ? `${(((w + 0.5*d)/t)*100).toFixed(0)}%` : '—';
+
+  document.getElementById('mcBody').innerHTML = `
+    ${renderPortraitBlock(p)}
+    <div class="mc-name">${escHtml(p.name || '—')}</div>
+    <div class="mc-modelid">${escHtml(p.model_id || '')} · ${escHtml(p.backend || '')}</div>
+    ${renderMetadata(p.metadata)}
+
+    <div class="mc-row">
+      <div>
+        <div class="mc-stat-label">ELO</div>
+        <div class="mc-stat-value">${p.elo ?? '—'}</div>
+      </div>
+      <div>
+        <div class="mc-stat-label">Record</div>
+        <div class="mc-stat-value">${wins}/${draws}/${losses}</div>
+        <div class="mc-stat-sub">${g.total_games || 0} games</div>
+      </div>
+      <div>
+        <div class="mc-stat-label">As White</div>
+        <div class="mc-stat-value">${fmtScore(c.white_wins||0, c.white_draws||0, wGames)}</div>
+        <div class="mc-stat-sub">${wGames} games</div>
+      </div>
+      <div>
+        <div class="mc-stat-label">As Black</div>
+        <div class="mc-stat-value">${fmtScore(c.black_wins||0, c.black_draws||0, bGames)}</div>
+        <div class="mc-stat-sub">${bGames} games</div>
+      </div>
+    </div>
+
+    <div class="mc-section-head">Move quality (${total} moves)</div>
+    <div class="mc-qbar">${qBar}</div>
+    <div class="mc-qbar-legend">
+      <span class="lb-best">best ${m.q_best || 0}</span>
+      <span class="lb-excellent">excellent ${m.q_excellent || 0}</span>
+      <span class="lb-good">good ${m.q_good || 0}</span>
+      <span class="lb-inaccuracy">inaccuracy ${m.q_inaccuracy || 0}</span>
+      <span class="lb-mistake">mistake ${m.q_mistake || 0}</span>
+      <span class="lb-blunder">blunder ${m.q_blunder || 0}</span>
+    </div>
+
+    <div class="mc-section-head">Achievements ${(p.achievements && p.achievements.length) ? '· ' + p.achievements.reduce((s,a)=>s+a.times, 0) : ''}</div>
+    ${renderBadges(p.achievements)}
+
+    <div class="mc-section-head">Personality</div>
+    ${traits}
+
+    ${profileHtml
+      ? `<div class="mc-section-head">Strategic profile</div>${profileHtml}
+         <div class="mc-section-head">Recent lessons</div>${lessons}`
+      : `<div class="mc-section-head">Coach notes</div>${lessons}`
+    }
+  `;
+}
+
+function renderBadges(achievements) {
+  if (!achievements || !achievements.length) {
+    return `<div class="mc-no-traits">No achievements yet — keep playing.</div>`;
+  }
+  return `<div class="mc-badges">` + achievements.map(a => {
+    const times = a.times > 1 ? `<span class="b-times">×${a.times}</span>` : '';
+    return `<span class="mc-badge badge-${a.code}" title="${escHtml(a.desc)}">${escHtml(a.label)}${times}</span>`;
+  }).join('') + `</div>`;
+}
+
+function renderMetadata(meta) {
+  if (!meta) return '';
+  const chips = [];
+  const chip = (k, v, href) => {
+    const inner = href
+      ? `<a href="${href}" target="_blank" rel="noopener">${escHtml(v)}</a>`
+      : escHtml(v);
+    chips.push(`<span class="mc-meta-chip"><span class="k">${escHtml(k)}</span><span class="v">${inner}</span></span>`);
+  };
+  if (meta.family)          chip('Family',  meta.family);
+  if (meta.param_count) {
+    const ap = meta.active_params ? ` (${meta.active_params} active)` : '';
+    chip('Params',  meta.param_count + ap);
+  }
+  if (meta.quantization)    chip('Quant',   meta.quantization);
+  if (meta.architecture)    chip('Arch',    meta.architecture);
+  if (meta.context_length)  chip('Ctx',     meta.context_length.toLocaleString());
+  if (meta.file_size_label) chip('Size',    meta.file_size_label);
+  if (meta.license)         chip('License', meta.license);
+  if (meta.hf_url)          chip('HF',      'open ↗', meta.hf_url);
+  if (!chips.length) return '';
+  return `<div class="mc-meta">${chips.join('')}</div>`;
 }
 
 function rpGo(idx) {
@@ -1607,6 +2909,7 @@ function rpDrawBoard(fen, lastUci) {
   const toKey   = to   ? key(to.row,  to.col)   : -1;
   const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
   const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+  const pieces = currentPieces();
 
   el.innerHTML = '';
   rows.forEach((r, ri) => {
@@ -1620,35 +2923,41 @@ function rpDrawBoard(fen, lastUci) {
       if (ci===0) {
         const lbl = document.createElement('span');
         lbl.className='sq-label rank'; lbl.textContent=8-r;
-        lbl.style.color = light?'#8b6148':'#e8d5b0';
         sq.appendChild(lbl);
       }
       if (ri===7) {
         const lbl = document.createElement('span');
         lbl.className='sq-label file'; lbl.textContent=FILES[c];
-        lbl.style.color = light?'#8b6148':'#e8d5b0';
         sq.appendChild(lbl);
       }
       const piece = matrix[r][c];
       if (piece) {
         const span = document.createElement('span');
         span.className = 'piece ' + (piece===piece.toUpperCase()?'w':'b');
-        span.textContent = PIECES[piece]||piece;
+        span.textContent = pieces[piece] || piece;
         sq.appendChild(span);
       }
       el.appendChild(sq);
     });
   });
+
+  // Refresh captured-pieces graveyards for replay
+  renderGraveyards(fen, { white: 'rpGraveyardWhite', black: 'rpGraveyardBlack' });
 }
 
 // Keyboard navigation for replay
 document.addEventListener('keydown', e => {
+  // Escape closes whichever modal is open
+  if (e.key === 'Escape') {
+    if (document.getElementById('modelModal').classList.contains('show')) closeModelCard();
+    if (document.getElementById('replayModal').classList.contains('show')) closeReplay();
+    return;
+  }
   if (!document.getElementById('replayModal').classList.contains('show')) return;
   if (e.key === 'ArrowLeft'  || e.key === 'ArrowDown')  rpGo(replay.cursor - 1);
   if (e.key === 'ArrowRight' || e.key === 'ArrowUp')    rpGo(replay.cursor + 1);
   if (e.key === 'Home')  rpGo(0);
   if (e.key === 'End')   rpGo(replay.moves.length);
-  if (e.key === 'Escape') closeReplay();
 });
 
 function toggleSection(id) {
@@ -1691,7 +3000,7 @@ function renderEvalGraph() {
     <path d="${fillAbove}" fill="rgba(232,184,74,0.18)"/>
     <path d="${fillBelow}" fill="rgba(22,22,22,0.5)"/>
     <line x1="0" y1="${MID}" x2="${W}" y2="${MID}" stroke="#1a2535" stroke-width="1"/>
-    <polyline points="${polyPts}" fill="none" stroke="#c8921e" stroke-width="1.5" stroke-linejoin="round"/>`;
+    <polyline points="${polyPts}" fill="none" stroke="${getComputedStyle(document.documentElement).getPropertyValue('--gold').trim() || '#c8921e'}" stroke-width="1.5" stroke-linejoin="round"/>`;
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────
@@ -1700,10 +3009,13 @@ function escHtml(s) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────
+applySettings();   // apply persisted settings before first render
+buildThemeSwatches();
 sizeBoard();
 connect();
 loadLeaderboard();
 loadHistory();
+loadTournamentHistory();
 setInterval(loadLeaderboard, 30000);
 
 // Auto-fetch models for all lmstudio slots on page load

@@ -128,6 +128,297 @@
 
     /* ── Loading spinner ── */
     .loading { padding: 20px; text-align: center; color: var(--text-dim); font-size: 9px; letter-spacing: 2px; }
+
+    /* ── Compare section ── */
+    .cmp-controls {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .cmp-controls select {
+      flex: 1; min-width: 140px;
+      background: var(--bg-input);
+      color: var(--text);
+      border: 1px solid var(--border-hi);
+      padding: 8px 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: .3px;
+      cursor: pointer;
+    }
+    .cmp-controls select:hover { border-color: var(--gold); }
+    .cmp-vs {
+      font-family: 'Cinzel', serif; font-size: 14px;
+      color: var(--gold); letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .cmp-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+    @media (max-width: 780px) {
+      .cmp-grid { grid-template-columns: 1fr; }
+      .cmp-side.b { border-left: none; border-top: 1px solid var(--border); }
+    }
+    .cmp-side {
+      padding: 18px 20px;
+    }
+    .cmp-side.b { border-left: 1px solid var(--border); }
+    .cmp-side.winner { background: linear-gradient(180deg, rgba(200,146,30,.07), transparent 60%); }
+
+    .cmp-name {
+      font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700;
+      color: var(--text); letter-spacing: .5px;
+    }
+    .cmp-modelid {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; color: var(--text-dim); letter-spacing: .4px;
+      word-break: break-all; margin-bottom: 8px;
+    }
+    .cmp-elo {
+      font-family: 'Cinzel', serif; font-size: 26px; font-weight: 700;
+      color: var(--gold); letter-spacing: 1px; line-height: 1;
+      margin: 10px 0 2px;
+    }
+    .cmp-elo .delta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; font-weight: 500; margin-left: 8px;
+    }
+    .cmp-elo .delta.up   { color: #56c45a; }
+    .cmp-elo .delta.down { color: var(--q-blunder); }
+    .cmp-record {
+      font-size: 10px; color: var(--text-mid); letter-spacing: 1px;
+    }
+    .cmp-section {
+      margin-top: 16px;
+      font-size: 8.5px; letter-spacing: 1.8px; text-transform: uppercase;
+      color: var(--gold-bright); font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .cmp-rates {
+      display: flex; flex-direction: column; gap: 7px;
+    }
+    .cmp-rate-row {
+      display: grid; grid-template-columns: 80px 1fr 38px;
+      align-items: center; gap: 10px;
+      font-size: 10px;
+    }
+    .cmp-rate-label { color: var(--text-mid); letter-spacing: .4px; }
+    .cmp-rate-track {
+      height: 5px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .cmp-rate-fill {
+      height: 100%;
+      background: var(--gold);
+      transition: width .25s;
+    }
+    .cmp-rate-fill.lead    { background: var(--gold-bright); }
+    .cmp-rate-fill.dim     { background: var(--border-hi); }
+    .cmp-rate-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--text); text-align: right;
+    }
+    .cmp-rate-val.lead { color: var(--gold-bright); font-weight: 600; }
+
+    .cmp-h2h {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-family: 'Cinzel', serif;
+      font-size: 12px; letter-spacing: 1px;
+      color: var(--text);
+    }
+    .cmp-h2h .score { font-size: 18px; color: var(--gold); margin: 0 10px; }
+    .cmp-h2h .none  { font-size: 10px; color: var(--text-dim); font-style: italic; }
+
+    .cmp-empty {
+      padding: 50px 20px; text-align: center;
+      color: var(--text-dim); font-size: 10px; letter-spacing: 1px;
+    }
+
+    /* ── Model card modal (shared with viewer.html) ── */
+    #modelModal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(7,9,12,.92); backdrop-filter: blur(12px);
+      z-index: 320; align-items: center; justify-content: center;
+    }
+    #modelModal.show { display: flex; }
+    .mc-card {
+      width: 520px; max-width: 92vw; max-height: 86vh; overflow-y: auto;
+      background: var(--bg-panel); border: 1px solid var(--border-hi);
+      box-shadow: 0 30px 80px rgba(0,0,0,.85);
+      padding: 22px 26px 24px; position: relative;
+    }
+    .mc-card::-webkit-scrollbar { width: 4px; }
+    .mc-card::-webkit-scrollbar-thumb { background: var(--border-hi); }
+    .mc-close {
+      position: absolute; top: 14px; right: 16px;
+      font-size: 10px; color: var(--text-mid); cursor: pointer;
+      letter-spacing: 1.5px; text-transform: uppercase;
+    }
+    .mc-close:hover { color: var(--gold); }
+    .mc-portrait {
+      width: 110px; height: 110px; border-radius: 50%;
+      object-fit: cover; object-position: top center;
+      border: 2px solid var(--border-hi);
+      display: block; margin: 0 auto 14px;
+      background: var(--bg-raised);
+    }
+    .mc-portrait-placeholder {
+      width: 110px; height: 110px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 42px; margin: 0 auto 14px;
+      background: var(--bg-raised); border: 2px solid var(--border);
+    }
+    .mc-portrait-generating {
+      width: 110px; height: 110px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 6px;
+      background: var(--bg-raised); border: 2px dashed var(--border-hi);
+      margin: 0 auto 14px; font-size: 9px; color: var(--text-dim);
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+    .mc-portrait-generating .spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid var(--border-hi); border-top-color: var(--gold);
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .mc-name {
+      font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700;
+      color: var(--text); letter-spacing: .8px; margin-bottom: 2px;
+    }
+    .mc-modelid {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; color: var(--text-dim); letter-spacing: .5px;
+      word-break: break-all;
+    }
+    .mc-row {
+      display: flex; gap: 22px; margin-top: 16px;
+      padding: 12px 0; border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .mc-stat-label { font-size: 8px; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px; }
+    .mc-stat-value { font-family: 'Cinzel', serif; font-size: 18px; color: var(--gold); font-weight: 600; }
+    .mc-stat-sub   { font-size: 9px; color: var(--text-mid); margin-top: 1px; }
+    .mc-section-head {
+      font-size: 9px; letter-spacing: 1.8px; text-transform: uppercase;
+      color: var(--gold-bright); margin: 18px 0 10px; font-weight: 600;
+    }
+    .mc-trait {
+      display: flex; gap: 10px; align-items: baseline;
+      padding: 7px 0; border-bottom: 1px dashed var(--border);
+    }
+    .mc-trait:last-child { border-bottom: none; }
+    .mc-trait-label {
+      font-family: 'Cinzel', serif; font-size: 12px;
+      color: var(--text); font-weight: 600; min-width: 130px;
+    }
+    .mc-trait-detail { font-size: 10px; color: var(--text-mid); flex: 1; }
+    .mc-no-traits { font-size: 10px; color: var(--text-dim); font-style: italic; }
+    .mc-qbar {
+      display: flex; height: 6px; width: 100%;
+      background: var(--bg-input); border: 1px solid var(--border); overflow: hidden;
+    }
+    .mc-qbar > span { display: block; height: 100%; }
+    .mc-qbar .q-best       { background: #56c45a; }
+    .mc-qbar .q-excellent  { background: #93c97e; }
+    .mc-qbar .q-good       { background: #c8b87a; }
+    .mc-qbar .q-inaccuracy { background: #d09a4a; }
+    .mc-qbar .q-mistake    { background: #c46d3a; }
+    .mc-qbar .q-blunder    { background: #b04a3a; }
+    .mc-qbar-legend {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      font-size: 9px; color: var(--text-mid); margin-top: 6px;
+    }
+    .mc-qbar-legend span::before {
+      content: ''; display: inline-block; width: 7px; height: 7px;
+      margin-right: 4px; vertical-align: middle;
+    }
+    .mc-qbar-legend .lb-best       ::before { background: #56c45a; }
+    .mc-qbar-legend .lb-excellent  ::before { background: #93c97e; }
+    .mc-qbar-legend .lb-good       ::before { background: #c8b87a; }
+    .mc-qbar-legend .lb-inaccuracy ::before { background: #d09a4a; }
+    .mc-qbar-legend .lb-mistake    ::before { background: #c46d3a; }
+    .mc-qbar-legend .lb-blunder    ::before { background: #b04a3a; }
+    .mc-profile {
+      font-size: 10px; color: var(--text-mid); line-height: 1.6;
+      padding: 8px 10px; background: var(--bg-raised);
+      border-left: 2px solid var(--gold); border-radius: 2px;
+      margin-bottom: 4px; white-space: pre-wrap;
+    }
+    .mc-lesson {
+      padding: 6px 0; border-bottom: 1px dashed var(--border);
+      font-size: 10px; color: var(--text-mid); line-height: 1.45;
+    }
+    .mc-lesson:last-child { border-bottom: none; }
+    .mc-lesson .tag {
+      display: inline-block; font-size: 8px; letter-spacing: 1.2px;
+      text-transform: uppercase; padding: 1px 5px; margin-right: 7px;
+      border: 1px solid currentColor; border-radius: 2px; vertical-align: 1px;
+    }
+    .mc-lesson .tag.improve  { color: #d09a4a; }
+    .mc-lesson .tag.strength { color: #93c97e; }
+
+    /* Clickable names hint */
+    .clickable-name { cursor: pointer; transition: color .15s; }
+    .clickable-name:hover { color: var(--gold-bright); }
+
+    /* Achievement badges (shared with viewer.html) */
+    .mc-badges { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+    .mc-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 9px 4px 7px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-hi);
+      border-left: 3px solid var(--gold);
+      font-family: 'Cinzel', serif;
+      font-size: 10px; font-weight: 600; letter-spacing: .6px;
+      color: var(--text); cursor: help;
+    }
+    .mc-badge.badge-flawless     { border-left-color: #56c45a; }
+    .mc-badge.badge-tactician    { border-left-color: #93c97e; }
+    .mc-badge.badge-crusher      { border-left-color: #c46d3a; }
+    .mc-badge.badge-grinder      { border-left-color: #c8921e; }
+    .mc-badge.badge-comeback     { border-left-color: #b070d0; }
+    .mc-badge.badge-giant_killer { border-left-color: #4b9fd5; }
+    .mc-badge.badge-iron_wall    { border-left-color: #6a8aaa; }
+    .mc-badge.badge-theorist     { border-left-color: #d09a4a; }
+    .mc-badge .b-times {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; color: var(--gold-bright); letter-spacing: 0;
+    }
+
+    .mc-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .mc-meta-chip {
+      display: inline-flex; align-items: baseline; gap: 4px;
+      padding: 3px 8px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      font-size: 9px; letter-spacing: .5px; color: var(--text-mid);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .mc-meta-chip .k { color: var(--text-dim); text-transform: uppercase; font-size: 8px; }
+    .mc-meta-chip .v { color: var(--gold-bright); font-weight: 500; }
+    .mc-meta-chip a { color: inherit; text-decoration: none; border-bottom: 1px dotted; }
+    .mc-meta-chip a:hover { color: var(--gold); }
+
+    /* ── Tournament history ─────────────────────────────────────── */
+    .th-row {
+      padding: 9px 14px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px; font-size: 10px;
+    }
+    .th-format { font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+                 color: var(--text-dim); min-width: 80px; }
+    .th-winner { color: var(--gold); font-weight: 500; flex: 1; }
+    .th-title  { color: var(--text-mid); font-size: 9px; font-style: italic; }
+    .th-players { color: var(--text-dim); font-size: 9px; }
+    .th-meta   { color: var(--text-dim); font-size: 9px; text-align: right; min-width: 50px; }
   </style>
 </head>
 <body>
@@ -138,6 +429,19 @@
 </header>
 
 <div class="page">
+
+  <!-- ── Compare Models ── -->
+  <div class="card" id="compareSection">
+    <div class="section-title">Compare Models</div>
+    <div class="cmp-controls">
+      <select id="cmpSelectA"></select>
+      <span class="cmp-vs">vs</span>
+      <select id="cmpSelectB"></select>
+    </div>
+    <div id="cmpBody">
+      <div class="cmp-empty">Pick two models above to compare.</div>
+    </div>
+  </div>
 
   <!-- ── ELO History ── -->
   <div class="card" id="eloSection">
@@ -159,6 +463,13 @@
       <div class="quality-legend-item"><div class="quality-legend-swatch" style="background:var(--q-mistake)"></div>Mistake (?)</div>
       <div class="quality-legend-item"><div class="quality-legend-swatch" style="background:var(--q-blunder)"></div>Blunder (??)</div>
     </div>
+  </div>
+
+  <!-- ── Tournament History ── -->
+  <div class="card" id="tournamentHistSection">
+    <div class="section-title">Tournament History</div>
+    <div class="loading" id="tournamentHistLoading">loading…</div>
+    <div id="tournamentHistBody" style="display:none"></div>
   </div>
 
   <div class="two-col">
@@ -240,7 +551,7 @@ async function loadEloCharts() {
   lb.forEach((r, i) => {
     const block = document.createElement('div');
     block.className = 'elo-chart-block';
-    block.innerHTML = `<div class="elo-chart-name">${escHtml(r.name)}</div>${buildEloSvg(histories[i], 260, 60)}`;
+    block.innerHTML = `<div class="elo-chart-name clickable-name" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g,"\\'")}')" title="Show model card">${escHtml(r.name)}</div>${buildEloSvg(histories[i], 260, 60)}`;
     wrap.appendChild(block);
   });
   document.getElementById('eloLoading').style.display = 'none';
@@ -276,7 +587,7 @@ async function loadQuality() {
     block.className = 'quality-row';
     block.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <div class="quality-row-name">${escHtml(r.name)}</div>
+        <div class="quality-row-name clickable-name" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g,"\\'")}')" title="Show model card">${escHtml(r.name)}</div>
         <div class="quality-meta">${total} moves · blunder ${blunderPct}% · best ${bestPct}% · avg rank ${avgRank}</div>
       </div>
       <div class="quality-bar-wrap">
@@ -305,7 +616,7 @@ async function loadColorStats() {
   rows.forEach(r => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="ct-name">${escHtml(r.name)}</td>
+      <td class="ct-name clickable-name" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g,"\\'")}')" title="Show model card">${escHtml(r.name)}</td>
       <td class="ct-white">${r.white_wins}/${r.white_draws}/${r.white_losses}</td>
       <td class="ct-black">${r.black_wins}/${r.black_draws}/${r.black_losses}</td>
       <td class="ct-rate">${winPct(r.white_wins, r.white_draws, r.white_losses)}</td>
@@ -321,27 +632,37 @@ async function loadH2H() {
   const rows = await fetch(`${API}/api/stats/h2h`).then(r => r.json()).catch(() => []);
   if (!rows.length) { document.getElementById('h2hLoading').textContent = 'No data yet.'; return; }
 
-  // Collapse symmetric pairs: (A vs B) and (B vs A) → one row
+  // Collapse symmetric pairs: (A vs B) and (B vs A) → one row.
+  // Key on model_id pair so name collisions can't merge unrelated players.
   const seen = new Map();
   rows.forEach(r => {
-    const key  = [r.white_name, r.black_name].sort().join('|');
-    const flip = r.white_name > r.black_name;
+    const key  = [r.white_model_id, r.black_model_id].sort().join('|');
+    const flip = r.white_model_id > r.black_model_id;
     if (!seen.has(key)) {
-      seen.set(key, { a: flip ? r.black_name : r.white_name,
-                      b: flip ? r.white_name : r.black_name,
-                      aW: 0, draws: 0, bW: 0 });
+      seen.set(key, {
+        aName: flip ? r.black_name     : r.white_name,
+        bName: flip ? r.white_name     : r.black_name,
+        aId:   flip ? r.black_model_id : r.white_model_id,
+        bId:   flip ? r.white_model_id : r.black_model_id,
+        aW: 0, draws: 0, bW: 0,
+      });
     }
     const e = seen.get(key);
     if (flip) { e.bW += r.white_wins; e.draws += r.draws; e.aW += r.black_wins; }
     else       { e.aW += r.white_wins; e.draws += r.draws; e.bW += r.black_wins; }
   });
 
+  const esc = s => escHtml(s).replace(/'/g, "\\'");
   const tbody = document.getElementById('h2hBody');
   seen.forEach(e => {
     const total = e.aW + e.draws + e.bW;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${escHtml(e.a)} <span style="color:var(--text-dim)">vs</span> ${escHtml(e.b)}</td>
+      <td>
+        <span class="clickable-name" onclick="openModelCard('${esc(e.aId)}')" title="Show model card">${escHtml(e.aName)}</span>
+        <span style="color:var(--text-dim)">vs</span>
+        <span class="clickable-name" onclick="openModelCard('${esc(e.bId)}')" title="Show model card">${escHtml(e.bName)}</span>
+      </td>
       <td class="h2h-score">${e.aW} – ${e.draws} – ${e.bW}</td>
       <td class="h2h-games">${total}</td>`;
     tbody.appendChild(tr);
@@ -354,8 +675,476 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Model card modal ──────────────────────────────────────────────────────
+function renderPortraitBlock(p) {
+  if (p.portrait_url) {
+    return `<img class="mc-portrait" src="${escHtml(p.portrait_url)}" alt="${escHtml(p.name || '')} portrait">`;
+  }
+  const family = (p.metadata && p.metadata.family) || '';
+  const icon = family ? family[0].toUpperCase() : '♟';
+  return `<div class="mc-portrait-placeholder">${icon}</div>`;
+}
+
+async function openModelCard(modelId) {
+  if (!modelId) return;
+  try {
+    const p = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/profile`)
+      .then(r => r.json());
+    renderModelCard(p);
+    document.getElementById('modelModal').classList.add('show');
+    if (!p.portrait_url) {
+      const portraitEl = document.getElementById('mcCard').querySelector('.mc-portrait-placeholder, .mc-portrait');
+      if (portraitEl) portraitEl.outerHTML = `<div class="mc-portrait-generating"><div class="spinner"></div>Painting…</div>`;
+      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' })
+        .then(r => r.json())
+        .then(j => {
+          if (j.portrait_url) {
+            const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+            if (gen) {
+              const img = document.createElement('img');
+              img.className = 'mc-portrait'; img.src = j.portrait_url;
+              img.alt = (p.name || '') + ' portrait';
+              gen.replaceWith(img);
+            }
+          } else {
+            const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+            if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+          }
+        })
+        .catch(() => {
+          const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+          if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+        });
+    }
+  } catch (e) { console.error('Model card load failed:', e); }
+}
+function closeModelCard() { document.getElementById('modelModal').classList.remove('show'); }
+
+function renderModelCard(p) {
+  const m = p.moves || {}, c = p.color || {}, g = p.games || {};
+  const total = m.total_moves || 0;
+  const wGames = (c.white_wins||0) + (c.white_draws||0) + (c.white_losses||0);
+  const bGames = (c.black_wins||0) + (c.black_draws||0) + (c.black_losses||0);
+  const wins   = (c.white_wins||0) + (c.black_wins||0);
+  const draws  = (c.white_draws||0) + (c.black_draws||0);
+  const losses = (c.white_losses||0) + (c.black_losses||0);
+
+  const qkeys = ['q_best','q_excellent','q_good','q_inaccuracy','q_mistake','q_blunder'];
+  const qcls  = { q_best:'q-best', q_excellent:'q-excellent', q_good:'q-good',
+                  q_inaccuracy:'q-inaccuracy', q_mistake:'q-mistake', q_blunder:'q-blunder' };
+  const qSum = qkeys.reduce((s,k) => s + (m[k]||0), 0);
+  const qBar = total && qSum
+    ? qkeys.map(k => {
+        const n = m[k] || 0;
+        if (!n) return '';
+        const pct = (n / qSum * 100).toFixed(2);
+        return `<span class="${qcls[k]}" style="width:${pct}%" title="${k.slice(2)}: ${n}"></span>`;
+      }).join('')
+    : '<span style="width:100%;background:var(--border)"></span>';
+
+  const traits = (p.traits && p.traits.length)
+    ? p.traits.map(t =>
+        `<div class="mc-trait">
+           <span class="mc-trait-label">${escHtml(t.label)}</span>
+           <span class="mc-trait-detail">${escHtml(t.detail)}</span>
+         </div>`).join('')
+    : `<div class="mc-no-traits">No personality signal yet — play more games.</div>`;
+
+  const lessons = (p.recent_lessons || []).map(l => {
+    const tag = l.lesson_type === 'strength' ? 'strength' : 'improve';
+    return `<div class="mc-lesson"><span class="tag ${tag}">${tag}</span>${escHtml(l.lesson)}</div>`;
+  }).join('') || `<div class="mc-no-traits">No lessons yet.</div>`;
+
+  const profileHtml = p.strategic_profile
+    ? `<div class="mc-profile">${escHtml(p.strategic_profile).replace(/\n/g,'<br>')}</div>`
+    : null;
+
+  const fmtScore = (w, d, t) => t ? `${(((w + 0.5*d)/t)*100).toFixed(0)}%` : '—';
+
+  document.getElementById('mcBody').innerHTML = `
+    ${renderPortraitBlock(p)}
+    <div class="mc-name">${escHtml(p.name || '—')}</div>
+    <div class="mc-modelid">${escHtml(p.model_id || '')} · ${escHtml(p.backend || '')}</div>
+    ${renderMetadata(p.metadata)}
+    <div class="mc-row">
+      <div><div class="mc-stat-label">ELO</div><div class="mc-stat-value">${p.elo ?? '—'}</div></div>
+      <div><div class="mc-stat-label">Record</div><div class="mc-stat-value">${wins}/${draws}/${losses}</div><div class="mc-stat-sub">${g.total_games || 0} games</div></div>
+      <div><div class="mc-stat-label">As White</div><div class="mc-stat-value">${fmtScore(c.white_wins||0, c.white_draws||0, wGames)}</div><div class="mc-stat-sub">${wGames} games</div></div>
+      <div><div class="mc-stat-label">As Black</div><div class="mc-stat-value">${fmtScore(c.black_wins||0, c.black_draws||0, bGames)}</div><div class="mc-stat-sub">${bGames} games</div></div>
+    </div>
+    <div class="mc-section-head">Move quality (${total} moves)</div>
+    <div class="mc-qbar">${qBar}</div>
+    <div class="mc-qbar-legend">
+      <span class="lb-best">best ${m.q_best || 0}</span>
+      <span class="lb-excellent">excellent ${m.q_excellent || 0}</span>
+      <span class="lb-good">good ${m.q_good || 0}</span>
+      <span class="lb-inaccuracy">inaccuracy ${m.q_inaccuracy || 0}</span>
+      <span class="lb-mistake">mistake ${m.q_mistake || 0}</span>
+      <span class="lb-blunder">blunder ${m.q_blunder || 0}</span>
+    </div>
+    <div class="mc-section-head">Achievements ${(p.achievements && p.achievements.length) ? '· ' + p.achievements.reduce((s,a)=>s+a.times, 0) : ''}</div>
+    ${renderBadges(p.achievements)}
+    <div class="mc-section-head">Personality</div>${traits}
+    ${profileHtml
+      ? `<div class="mc-section-head">Strategic profile</div>${profileHtml}
+         <div class="mc-section-head">Recent lessons</div>${lessons}`
+      : `<div class="mc-section-head">Coach notes</div>${lessons}`
+    }`;
+}
+
+function renderBadges(achievements) {
+  if (!achievements || !achievements.length) {
+    return `<div class="mc-no-traits">No achievements yet — keep playing.</div>`;
+  }
+  return `<div class="mc-badges">` + achievements.map(a => {
+    const times = a.times > 1 ? `<span class="b-times">×${a.times}</span>` : '';
+    return `<span class="mc-badge badge-${a.code}" title="${escHtml(a.desc)}">${escHtml(a.label)}${times}</span>`;
+  }).join('') + `</div>`;
+}
+
+function renderMetadata(meta) {
+  if (!meta) return '';
+  const chips = [];
+  const chip = (k, v, href) => {
+    const inner = href
+      ? `<a href="${href}" target="_blank" rel="noopener">${escHtml(v)}</a>`
+      : escHtml(v);
+    chips.push(`<span class="mc-meta-chip"><span class="k">${escHtml(k)}</span><span class="v">${inner}</span></span>`);
+  };
+  if (meta.family)          chip('Family',  meta.family);
+  if (meta.param_count) {
+    const ap = meta.active_params ? ` (${meta.active_params} active)` : '';
+    chip('Params',  meta.param_count + ap);
+  }
+  if (meta.quantization)    chip('Quant',   meta.quantization);
+  if (meta.architecture)    chip('Arch',    meta.architecture);
+  if (meta.context_length)  chip('Ctx',     meta.context_length.toLocaleString());
+  if (meta.file_size_label) chip('Size',    meta.file_size_label);
+  if (meta.license)         chip('License', meta.license);
+  if (meta.hf_url)          chip('HF',      'open ↗', meta.hf_url);
+  if (!chips.length) return '';
+  return `<div class="mc-meta">${chips.join('')}</div>`;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('modelModal').classList.contains('show')) closeModelCard();
+});
+
+// ── Compare Models ────────────────────────────────────────────────────────
+let _h2hRows = null;   // cached from /api/stats/h2h
+
+async function initCompare() {
+  // Populate both dropdowns from the leaderboard
+  const lb = await fetch(`${API}/api/leaderboard`).then(r => r.json()).catch(() => []);
+  if (!lb.length) {
+    document.getElementById('cmpBody').innerHTML =
+      `<div class="cmp-empty">No models yet. Play a game first.</div>`;
+    return;
+  }
+  const a = document.getElementById('cmpSelectA');
+  const b = document.getElementById('cmpSelectB');
+  const opts = lb.map(r =>
+    `<option value="${escHtml(r.model_id)}">${escHtml(r.name)} (${r.elo})</option>`
+  ).join('');
+  const blank = `<option value="">— pick a model —</option>`;
+  a.innerHTML = blank + opts;
+  b.innerHTML = blank + opts;
+
+  // Restore from URL params if present, otherwise pick top 2
+  const params = new URLSearchParams(location.search);
+  const initA = params.get('a') || (lb[0] && lb[0].model_id) || '';
+  const initB = params.get('b') || (lb[1] && lb[1].model_id) || '';
+  a.value = initA;
+  b.value = initB;
+
+  a.addEventListener('change', onCompareChange);
+  b.addEventListener('change', onCompareChange);
+
+  // Prefetch H2H rows so we don't refetch on every dropdown change
+  _h2hRows = await fetch(`${API}/api/stats/h2h`).then(r => r.json()).catch(() => []);
+
+  onCompareChange();
+}
+
+function onCompareChange() {
+  const a = document.getElementById('cmpSelectA').value;
+  const b = document.getElementById('cmpSelectB').value;
+
+  const url = new URL(location.href);
+  if (a) url.searchParams.set('a', a); else url.searchParams.delete('a');
+  if (b) url.searchParams.set('b', b); else url.searchParams.delete('b');
+  history.replaceState(null, '', url);
+
+  if (!a || !b) {
+    document.getElementById('cmpBody').innerHTML =
+      `<div class="cmp-empty">Pick two models above to compare.</div>`;
+    return;
+  }
+  if (a === b) {
+    document.getElementById('cmpBody').innerHTML =
+      `<div class="cmp-empty">Choose two different models.</div>`;
+    return;
+  }
+  loadCompare(a, b);
+}
+
+async function loadCompare(idA, idB) {
+  document.getElementById('cmpBody').innerHTML =
+    `<div class="cmp-empty">Loading…</div>`;
+  let [pA, pB] = await Promise.all([
+    fetch(`${API}/api/models/${encodeURIComponent(idA)}/profile`).then(r => r.json()),
+    fetch(`${API}/api/models/${encodeURIComponent(idB)}/profile`).then(r => r.json()),
+  ]);
+  renderCompare(pA, pB);
+}
+
+function _rate(num, denom) { return denom ? num / denom : 0; }
+
+function renderCompare(pA, pB) {
+  const winnerSide = (pA.elo || 0) > (pB.elo || 0) ? 'a'
+                  : (pB.elo || 0) > (pA.elo || 0) ? 'b' : null;
+
+  document.getElementById('cmpBody').innerHTML = `
+    <div class="cmp-grid">
+      ${renderCompareSide(pA, 'a', winnerSide === 'a')}
+      ${renderCompareSide(pB, 'b', winnerSide === 'b')}
+    </div>
+    ${renderRateBars(pA, pB)}
+    ${renderH2HRow(pA.model_id, pB.model_id, pA.name, pB.name)}
+  `;
+}
+
+function renderCompareSide(p, slot, winner) {
+  const m = p.moves || {}, c = p.color || {}, g = p.games || {};
+  const wins   = (c.white_wins||0) + (c.black_wins||0);
+  const draws  = (c.white_draws||0) + (c.black_draws||0);
+  const losses = (c.white_losses||0) + (c.black_losses||0);
+  const total  = m.total_moves || 0;
+
+  // Move-quality bar
+  const qkeys = ['q_best','q_excellent','q_good','q_inaccuracy','q_mistake','q_blunder'];
+  const qcls  = { q_best:'q-best', q_excellent:'q-excellent', q_good:'q-good',
+                  q_inaccuracy:'q-inaccuracy', q_mistake:'q-mistake', q_blunder:'q-blunder' };
+  const qSum = qkeys.reduce((s,k) => s + (m[k]||0), 0);
+  const qBar = qSum
+    ? qkeys.map(k => {
+        const n = m[k] || 0;
+        if (!n) return '';
+        const pct = (n / qSum * 100).toFixed(2);
+        return `<span class="${qcls[k]}" style="width:${pct}%" title="${k.slice(2)}: ${n}"></span>`;
+      }).join('')
+    : '<span style="width:100%;background:var(--border)"></span>';
+
+  const traits = (p.traits && p.traits.length)
+    ? p.traits.slice(0, 3).map(t =>
+        `<div class="mc-trait">
+           <span class="mc-trait-label">${escHtml(t.label)}</span>
+           <span class="mc-trait-detail">${escHtml(t.detail)}</span>
+         </div>`).join('')
+    : `<div class="mc-no-traits">No personality signal yet.</div>`;
+
+  const badges = (p.achievements && p.achievements.length)
+    ? `<div class="mc-badges">` + p.achievements.map(a => {
+        const x = a.times > 1 ? `<span class="b-times">×${a.times}</span>` : '';
+        return `<span class="mc-badge badge-${a.code}" title="${escHtml(a.desc)}">${escHtml(a.label)}${x}</span>`;
+      }).join('') + `</div>`
+    : `<div class="mc-no-traits" style="font-size:9px">No badges yet.</div>`;
+
+  const portraitHtml = p.portrait_url
+    ? `<img class="mc-portrait" src="${escHtml(p.portrait_url)}" alt="${escHtml(p.name)} portrait"
+        style="width:80px;height:80px;margin-bottom:8px">`
+    : `<div class="mc-portrait-placeholder" style="width:80px;height:80px;font-size:28px;margin-bottom:8px">${
+        ((p.metadata && p.metadata.family) || '')[0] || '♟'
+      }</div>`;
+
+  return `
+    <div class="cmp-side ${slot} ${winner ? 'winner' : ''}">
+      ${portraitHtml}
+      <div class="cmp-name">${escHtml(p.name)}</div>
+      <div class="cmp-modelid">${escHtml(p.model_id)}</div>
+      ${renderMetadata(p.metadata)}
+      <div class="cmp-elo">${p.elo ?? '—'}</div>
+      <div class="cmp-record">${wins}/${draws}/${losses} · ${g.total_games || 0} games</div>
+
+      <div class="cmp-section">Move quality (${total} moves)</div>
+      <div class="mc-qbar">${qBar}</div>
+
+      <div class="cmp-section">Personality</div>
+      ${traits}
+
+      <div class="cmp-section">Achievements ${(p.achievements && p.achievements.length) ? '· ' + p.achievements.reduce((s,a)=>s+a.times, 0) : ''}</div>
+      ${badges}
+    </div>
+  `;
+}
+
+function renderRateBars(pA, pB) {
+  const mA = pA.moves || {}, mB = pB.moves || {};
+  const cA = pA.color || {}, cB = pB.color || {};
+  const gA = pA.games || {}, gB = pB.games || {};
+
+  const wGA = (cA.white_wins||0)+(cA.white_draws||0)+(cA.white_losses||0);
+  const bGA = (cA.black_wins||0)+(cA.black_draws||0)+(cA.black_losses||0);
+  const wGB = (cB.white_wins||0)+(cB.white_draws||0)+(cB.white_losses||0);
+  const bGB = (cB.black_wins||0)+(cB.black_draws||0)+(cB.black_losses||0);
+
+  const rates = [
+    {
+      label: 'Best moves',
+      a: _rate(mA.q_best, mA.total_moves) * 100,
+      b: _rate(mB.q_best, mB.total_moves) * 100,
+      fmt: v => v.toFixed(1) + '%',
+      higher_is_better: true,
+    },
+    {
+      label: 'Blunders',
+      a: _rate(mA.q_blunder, mA.total_moves) * 100,
+      b: _rate(mB.q_blunder, mB.total_moves) * 100,
+      fmt: v => v.toFixed(2) + '%',
+      higher_is_better: false,
+    },
+    {
+      label: 'Captures',
+      a: _rate(mA.captures, mA.total_moves) * 100,
+      b: _rate(mB.captures, mB.total_moves) * 100,
+      fmt: v => v.toFixed(1) + '%',
+      higher_is_better: null,
+    },
+    {
+      label: 'Checks',
+      a: _rate(mA.checks, mA.total_moves) * 100,
+      b: _rate(mB.checks, mB.total_moves) * 100,
+      fmt: v => v.toFixed(1) + '%',
+      higher_is_better: null,
+    },
+    {
+      label: 'White win %',
+      a: wGA ? ((cA.white_wins||0) + 0.5*(cA.white_draws||0)) / wGA * 100 : 0,
+      b: wGB ? ((cB.white_wins||0) + 0.5*(cB.white_draws||0)) / wGB * 100 : 0,
+      fmt: v => v.toFixed(0) + '%',
+      higher_is_better: true,
+    },
+    {
+      label: 'Black win %',
+      a: bGA ? ((cA.black_wins||0) + 0.5*(cA.black_draws||0)) / bGA * 100 : 0,
+      b: bGB ? ((cB.black_wins||0) + 0.5*(cB.black_draws||0)) / bGB * 100 : 0,
+      fmt: v => v.toFixed(0) + '%',
+      higher_is_better: true,
+    },
+    {
+      label: 'Avg game len',
+      a: gA.avg_game_moves || 0,
+      b: gB.avg_game_moves || 0,
+      fmt: v => v ? Math.round(v) + ' moves' : '—',
+      higher_is_better: null,
+    },
+  ];
+
+  // Find the max value per row to normalize bar widths
+  const rows = rates.map(r => {
+    const max = Math.max(r.a, r.b, 1);
+    let leadA = false, leadB = false;
+    if (r.higher_is_better === true) {
+      leadA = r.a > r.b; leadB = r.b > r.a;
+    } else if (r.higher_is_better === false) {
+      leadA = r.a < r.b && r.a > 0 || (r.a === 0 && r.b > 0);
+      leadB = r.b < r.a && r.b > 0 || (r.b === 0 && r.a > 0);
+    }
+    const fillCls = (mine, theirs, lead) =>
+      mine === 0 ? 'dim' : (lead ? 'lead' : '');
+    const fillA = fillCls(r.a, r.b, leadA);
+    const fillB = fillCls(r.b, r.a, leadB);
+    return `
+      <div class="cmp-rate-row">
+        <div class="cmp-rate-val ${leadA ? 'lead' : ''}" style="text-align:left">${r.fmt(r.a)}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <div class="cmp-rate-track" style="flex:1;direction:rtl">
+            <div class="cmp-rate-fill ${fillA}" style="width:${(r.a/max*100).toFixed(1)}%"></div>
+          </div>
+          <div class="cmp-rate-label" style="text-align:center;min-width:80px">${r.label}</div>
+          <div class="cmp-rate-track" style="flex:1">
+            <div class="cmp-rate-fill ${fillB}" style="width:${(r.b/max*100).toFixed(1)}%"></div>
+          </div>
+        </div>
+        <div class="cmp-rate-val ${leadB ? 'lead' : ''}">${r.fmt(r.b)}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div style="padding:14px 20px 18px;border-top:1px solid var(--border)">
+      <div class="cmp-section" style="margin-top:0;text-align:center">Head-to-head rates</div>
+      <div class="cmp-rates">${rows}</div>
+    </div>
+  `;
+}
+
+function renderH2HRow(idA, idB, nameA, nameB) {
+  if (!_h2hRows) return '';
+  // Pull both directions from the cached h2h list and aggregate
+  let aWins = 0, draws = 0, bWins = 0;
+  _h2hRows.forEach(r => {
+    if (r.white_model_id === idA && r.black_model_id === idB) {
+      aWins += r.white_wins; draws += r.draws; bWins += r.black_wins;
+    } else if (r.white_model_id === idB && r.black_model_id === idA) {
+      bWins += r.white_wins; draws += r.draws; aWins += r.black_wins;
+    }
+  });
+  const total = aWins + draws + bWins;
+  if (!total) {
+    return `<div class="cmp-h2h"><span class="none">No direct games yet between these two.</span></div>`;
+  }
+  return `
+    <div class="cmp-h2h">
+      ${escHtml(nameA)}
+      <span class="score">${aWins} – ${draws} – ${bWins}</span>
+      ${escHtml(nameB)}
+      <span style="display:block;font-size:9px;color:var(--text-dim);margin-top:4px;letter-spacing:1.5px">${total} games played</span>
+    </div>
+  `;
+}
+
+// ── Tournament history ────────────────────────────────────────────────────
+async function loadTournamentHistory() {
+  const loading = document.getElementById('tournamentHistLoading');
+  const body    = document.getElementById('tournamentHistBody');
+  try {
+    const history = await fetch(`${API}/api/tournament/history`).then(r => r.json());
+    loading.style.display = 'none';
+    if (!history || !history.length) {
+      body.innerHTML = '<div class="cmp-empty">No tournaments played yet.</div>';
+      body.style.display = '';
+      return;
+    }
+    const fmtLabel = { round_robin: 'Round Robin', gauntlet: 'Gauntlet', match: 'Match' };
+    body.innerHTML = history.map(t => {
+      const date    = (t.finished_at || t.started_at || '').slice(0, 10);
+      const players = (t.player_names || []).join(', ');
+      const games   = t.total_games || '?';
+      return `<div class="th-row">
+        <span class="th-format">${fmtLabel[t.format] || t.format}</span>
+        <span class="th-winner">${escHtml(t.winner_name || '—')}</span>
+        ${t.title ? `<span class="th-title">"${escHtml(t.title)}"</span>` : ''}
+        <span class="th-players">${escHtml(players)}</span>
+        <span class="th-meta">${games}g · ${date}</span>
+      </div>`;
+    }).join('');
+    body.style.display = '';
+  } catch(e) {
+    loading.textContent = 'Failed to load tournament history';
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────
-Promise.all([loadEloCharts(), loadQuality(), loadColorStats(), loadH2H()]);
+Promise.all([initCompare(), loadEloCharts(), loadQuality(), loadColorStats(), loadH2H(), loadTournamentHistory()]);
 </script>
+
+<!-- ── Model card modal ───────────────────────────────────────────────── -->
+<div id="modelModal" onclick="if(event.target.id==='modelModal') closeModelCard()">
+  <div class="mc-card">
+    <div class="mc-close" onclick="closeModelCard()">Close ✕</div>
+    <div id="mcBody"></div>
+  </div>
+</div>
 </body>
 </html>

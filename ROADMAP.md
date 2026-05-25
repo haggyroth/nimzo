@@ -53,9 +53,10 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [x] **Annotated PGN export**: one-click download from the game-over overlay; reasoning as `{ }` comments, quality as `?/??/!/!!` glyphs — immediately openable in Lichess or any chess GUI
 - [x] **Game replay**: click any game in Recent Games to step through it move-by-move on the board; prev/next controls; reuses existing board renderer with FEN sequence from DB
 - [x] **ELO trajectory sparkline** per player row in the leaderboard panel (`get_elo_history()` already in db.py)
-- [ ] **"Best game" stat** per player: highest average move quality across all games, surfaced as a score in the leaderboard
+- [x] **"Best game" stat** per player: highest average move quality across all games, surfaced as a score in the leaderboard
+- [x] **Captured pieces graveyard**: display each side's captured material beside the board, sorted by piece value; show material imbalance score (+2♗ etc.) alongside the graveyard — gives a quick read on who's up in material without parsing the board
 - [x] **Opening detection in lessons**: pass ECO code (python-chess can derive from PGN) to the lesson prompt so the coach can reference the specific opening structure — "in the Sicilian Najdorf, your knight retreat on move 14 ignored the standard d5 break"
-- [ ] **Model personality profile**: per-model summary derived from move data — castling timing, material trade preferences, closed vs open position tendencies; displayed on model card and stats page
+- [x] **Model personality profile**: per-model summary derived from move data — castling timing, material trade preferences, closed vs open position tendencies; displayed on model card and stats page
 - [x] **Stats page** (`/stats`): head-to-head records, win rate by color, average move quality per model, ELO chart over time, blunder rate, candidate deviation rate
 
 ---
@@ -63,13 +64,13 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 ## Phase 5 — Model Cards & Achievements
 *Future*
 
-- [ ] **Model cards**: modal/panel that appears when a model is selected in the UI — displays name, ELO, W/D/L, games played, average move quality, personality summary, and metadata
-- [ ] **Model metadata strategy**: LM Studio's `/models` returns IDs but not specs; options are (a) parse from filename conventions (`qwen3-30b-a3b@q4_k_m` → 30B params, Q4_K_M quant), (b) HuggingFace API lookup by model ID, (c) manual entry in a `model_profiles.json` sidecar — likely a combination
-- [ ] **Metadata fields**: parameter count, architecture family, quantization, file size, context length, backend
-- [ ] **Achievement / badge system**: new `achievements` DB table; conditions computed post-game (e.g. "Flawless Game" — zero blunders, "Comeback King" — won from -5cp deficit, "Theorist" — 10+ book moves before first deviation)
-- [ ] **Trophy display**: badges shown on model cards, player strips during games, and leaderboard rows
-- [ ] **Model comparison view**: side-by-side stat comparison of any two models
-- [ ] **Model profile pictures**: generate a chess grandmaster portrait per model via Google AI Studio (Gemini Flash/Nano — free tier); prompt seeded deterministically from the model ID so the same model always gets the same image; stored as file + path in DB; displayed on model cards, leaderboard rows, and player strips during games — e.g. "Qwen3-30B is playing in the style of Mikhail Tal"
+- [x] **Model cards**: modal/panel that appears when a model is selected in the UI — displays name, ELO, W/D/L, games played, average move quality, personality summary, and metadata
+- [x] **Model metadata strategy**: LM Studio's `/models` returns IDs but not specs; options are (a) parse from filename conventions (`qwen3-30b-a3b@q4_k_m` → 30B params, Q4_K_M quant), (b) HuggingFace API lookup by model ID, (c) manual entry in a `model_profiles.json` sidecar — likely a combination
+- [x] **Metadata fields**: parameter count, architecture family, quantization, file size, context length, backend
+- [x] **Achievement / badge system**: new `achievements` DB table; conditions computed post-game (e.g. "Flawless Game" — zero blunders, "Comeback King" — won from -5cp deficit, "Theorist" — 10+ book moves before first deviation)
+- [x] **Trophy display**: badges shown on model cards, player strips during games, and leaderboard rows
+- [x] **Model comparison view**: side-by-side stat comparison of any two models
+- [x] **Model profile pictures**: generate a chess grandmaster portrait per model via Google AI Studio (Imagen 3); prompt seeded deterministically from the model ID so the same model always gets the same character; stored in `portraits/` + path in DB; displayed on model cards, comparison view, and player strip avatars during games — each model family gets a distinct illustrated character (Qwen → imperial strategist, Llama → armoured knight, Gemma → crystalline sorceress, Mistral → French musketeer, etc.)
 
 ### Achievement ideas
 | Badge | Condition |
@@ -86,16 +87,16 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 ---
 
 ## Phase 6 — Tournament Brackets
-*Future*
+*v6 release*
 
-- [ ] **Multi-player arena**: register N models; currently hardcoded 2-player — needs a player pool and scheduling logic
-- [ ] **Bracket formats**: single-elimination, round-robin (all vs all), Swiss (pair by standing each round), gauntlet (one champion vs all challengers)
-- [ ] **Bracket visualization**: bracket tree or standings table in the viewer; updates live as games complete
-- [ ] **Sequential scheduling**: games play one at a time (simpler, no parallel inference required); next pairing auto-queued
-- [ ] **Bracket state persistence**: tournament survives server restart; state saved to DB
+- [x] **Multi-player arena**: register N models; round-robin and gauntlet formats; PlayerSpec model; dynamic player list in UI
+- [x] **Bracket formats**: round-robin (all vs all) and gauntlet (champion vs all challengers); configurable games per pair
+- [x] **Bracket visualization**: live standings table in viewer sidebar; updates after every game
+- [x] **Sequential scheduling**: `generate_pairings()` produces ordered list; games play one at a time
+- [x] **Bracket state persistence**: `tournaments` + `tournament_games` DB tables; survives restart
+- [x] **Tournament titles**: 15 deterministic titles assigned from `hash(model_id + format)`; stored in DB
+- [x] **Tournament history**: `/api/tournament/history`; shown in viewer sidebar + stats page
 - [ ] **Seeding**: initial bracket seeding by current ELO; manual seed override option
-- [ ] **Tournament titles**: fun made-up titles awarded to bracket winners ("Grand Inquisitor", "Silicon Kasparov", "The Relentless") — stored in DB and displayed as trophies on model cards
-- [ ] **Tournament history**: past tournaments with winner, format, date, and final standings
 - [ ] **Best-of series**: track set scores within a matchup for a more dramatic narrative
 
 ---
@@ -103,24 +104,24 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 ## Phase 7 — Smarter Lessons
 *Future*
 
-- [ ] **Lesson compression / strategic profile**: every N games, tutor consolidates the raw lesson list into 5–8 distilled principles per model — prevents context bloat, stops the same lesson from appearing 6 different ways; profile evolves rather than accumulates
-- [ ] **Opening awareness**: ECO code + opening name passed to lesson prompt (prerequisite for Phase 4 opening detection item)
+- [x] **Lesson compression / strategic profile**: every 5 games once 10+ lessons are stored, tutor distils all raw lessons into a strategic profile (2–4 persistent weaknesses, 1–3 consistent strengths); profile replaces the raw list in the system prompt (+ 3 most recent lessons for recency); displayed in model card under "Strategic profile"
+- [x] **Opening awareness**: ECO code + opening name passed to lesson prompt — "In the Sicilian Najdorf, your knight retreat on move 14 ignored the standard d5 break"
 - [ ] **Lesson effectiveness tracking**: correlate lesson topics with subsequent quality improvements — did the coaching actually work?
-- [ ] **Draw lesson handling**: draws produce weaker coaching signal; lighter lesson prompt or skip entirely (open question)
+- [x] **Draw lesson handling**: draws with clean play (no blunders/mistakes) skip lesson generation entirely; draws with errors use a lighter single-bullet prompt
 
 ---
 
 ## Phase 8 — Customization & Themes
-*Future*
+*v8 release*
 
-- [ ] **Board themes**: preset color schemes (classic, green felt, blue ocean, high contrast) using CSS custom properties; `--sq-light` and `--sq-dark` already in use
-- [ ] **Custom colors**: color picker for board squares, highlights, and UI accent color
-- [ ] **Piece sets**: current Unicode pieces render inconsistently across OS/fonts; add SVG piece set options (e.g. Merida, Alpha, Neo)
-- [x] **Board orientation toggle**: flip board to show from Black's perspective; persists per session
-- [ ] **Font & typography controls**: font family selector (monospace vs sans-serif), font size slider; CSS custom properties make this straightforward; persisted in `localStorage`
-- [ ] **UI framework consideration**: current hand-crafted CSS is lean and custom; Tailwind or Bootstrap are options if maintenance becomes painful — worth evaluating when the component count grows rather than rewriting speculatively
-- [ ] **Settings persistence**: store theme/orientation/font preferences in `localStorage`
-- [ ] **Animated piece moves**: smooth CSS transitions when pieces move rather than instant re-render
+- [x] **Board themes**: 6 preset color schemes (Wood, Green, Blue, Walnut, Contrast, Midnight) using `--sq-light`/`--sq-dark` CSS custom properties; one-click swatch selection
+- [x] **Custom colors**: color picker for light squares, dark squares, and accent color; live preview
+- [x] **Piece sets**: Unicode (♔♕♖…) and Letters (K Q R…) variants; body-class-switched CSS for consistent cross-OS rendering
+- [x] **Board orientation toggle**: flip board; persists per session; also exposed in Appearance panel
+- [x] **Font & typography controls**: Mono (JetBrains Mono) / System (system-ui sans-serif) selector; `--ui-font` CSS variable propagates to all panel inputs and controls
+- [x] **Settings persistence**: all appearance prefs stored in `localStorage` under `nimzo_settings`; restored on load
+- [x] **Animated piece moves**: 180ms CSS keyframe `pieceArrive` slides the piece in from its source square on each `move` event; offset computed from UCI move coordinates
+- [ ] **UI framework consideration**: current hand-crafted CSS is lean and custom; evaluate if component count grows significantly
 
 ---
 

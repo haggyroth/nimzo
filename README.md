@@ -2,79 +2,172 @@
 
 AI chess tournament system where locally-hosted LLMs compete against each other. Uses **guided mode**: Stockfish generates ranked candidate moves and each model picks one with reasoning — so matches test strategic judgment, not move generation.
 
-Supports adaptive learning: after each game the losing model receives lessons generated from its mistakes, injected into its system prompt for the next game.
+Models learn from their games. After each match both players receive lessons generated from their mistakes and strengths; those lessons are injected into their system prompt for every subsequent game.
+
+![Nimzo viewer showing a live game between two LLMs](.github/screenshot.png)
+
+---
+
+## Quick start
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Install Stockfish
+brew install stockfish          # macOS
+sudo apt install stockfish      # Debian/Ubuntu
+
+# 3. (Optional) add API key for lesson generation
+echo "ANTHROPIC_API_KEY=sk-..." >> .env
+
+# 4. Start
+python3 arena.py
+# Browser opens automatically at http://localhost:8765
+```
+
+Select your models in the browser, hit **Start**, and watch.
+
+---
 
 ## How it works
 
 Each turn:
 1. Stockfish analyses the position and produces the top N candidate moves with centipawn scores
-2. The model receives the board (FEN), game history (PGN), candidate list, and any lessons from previous games
+2. The model receives the board (FEN), game history (PGN), candidate list, and lessons from previous games
 3. Model responds with a choice, the UCI move, and reasoning
-4. Move quality is evaluated (`best` → `blunder`) by comparing the chosen move's score to Stockfish's top pick
+4. Move quality is labelled (`best` `excellent` `good` `inaccuracy` `mistake` `blunder`) by comparing the chosen move's score against Stockfish's top pick
 
-## Setup
+---
+
+## Viewer features
+
+The browser UI at `http://localhost:8765` includes:
+
+- **Live board** with move highlighting and board-flip toggle
+- **Candidate moves panel** — Stockfish's ranked options with centipawn scores
+- **Reasoning display** — each model's explanation per move
+- **Live centipawn eval graph** — fills white/black advantage areas in real time
+- **ELO leaderboard** with per-player sparklines
+- **Move history** with quality glyphs (`!!` / `!` / `?!` / `?` / `??`)
+- **Game replay** — click any recent game to step through it move by move
+- **Annotated PGN export** — one-click download with reasoning as `{ }` comments and quality glyphs; opens directly in Lichess
+- **Lessons panel** — post-game coaching notes per model
+- **Tournament controls** — configure models, start / pause / resume / stop from the UI
+
+Stats page at `http://localhost:8765/stats`:
+- ELO trajectory chart per model
+- Move quality breakdown (stacked bar per model)
+- Win rate by colour
+- Head-to-head records
+
+---
+
+## Model setup
+
+Both players default to `http://localhost:1234/v1` — the standard LM Studio address. Load whichever models you want in LM Studio, then pick them by ID in the browser UI. No `.env` model config needed.
+
+If you need two large models that can't coexist in one LM Studio instance, start a second instance on port 1235 and point the Black player's URL there.
+
+Ollama and any other OpenAI-compatible endpoint also work — just paste the base URL into the URL field in the UI.
+
+---
+
+## CLI mode
+
+GUI mode is the recommended path. CLI mode is available for headless / scripted runs:
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Install Stockfish (macOS)
-brew install stockfish
-
-# Configure
-cp .env.example .env
-# Edit .env — set STOCKFISH_PATH, model IDs, and optionally ANTHROPIC_API_KEY
+python3 arena.py \
+  --white-name "Qwen3-30B" --white-model qwen3-30b-a3b \
+  --black-name "Gemma-3-4B" --black-model google/gemma-3-4b \
+  --games 5 --no-browser
 ```
 
-## Running a tournament
+Model IDs must be passed as flags — `.env` variables do **not** trigger CLI mode.
 
-```bash
-python3 arena.py --games 10
-```
-
-Models are configured in `.env`:
-
-```env
-WHITE_NAME=Qwen-v1
-WHITE_MODEL=qwen3.5-4b:v1
-
-BLACK_NAME=Gemma-4B
-BLACK_MODEL=google/gemma-4-e4b
-```
-
-Both players default to `LMSTUDIO_BASE_URL` — point it at any OpenAI-compatible endpoint (LM Studio, Ollama, etc.). Colors alternate each game automatically.
-
-### Options
+### All flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--games N` | 10 | Number of games to play |
-| `--thinking` | off | Enable extended thinking for Qwen3-style models |
-| `--white-url / --black-url` | `LMSTUDIO_BASE_URL` | Override endpoint per player |
+| `--white-name` | — | Display name for White |
+| `--white-model` | — | Model ID for White |
+| `--black-name` | — | Display name for Black |
+| `--black-model` | — | Model ID for Black |
+| `--games N` | `1` | Number of games to play |
+| `--white-url` | `http://localhost:1234/v1` | LM Studio / Ollama endpoint for White |
+| `--black-url` | `http://localhost:1234/v1` | LM Studio / Ollama endpoint for Black |
+| `--thinking` | off | Enable extended thinking (Qwen3-style models) |
+| `--no-browser` | off | Don't open the browser automatically |
+| `--port` | `8765` | Port for the web server |
 
-## Live viewer
-
-Open `viewer.html` in a browser while a tournament is running. It connects to the WebSocket at `ws://localhost:8765` and shows the board, candidate moves, move quality, and each model's reasoning in real time.
+---
 
 ## ELO & learning
 
-ELO is stored in `nimzo.db` (SQLite) and tied to the model ID — renaming a player in `.env` won't reset its score. Lessons accumulate across games and are injected into the system prompt (last 10).
+ELO is stored in `nimzo.db` (SQLite) and keyed by model ID — renaming a model in the UI won't reset its score. K-factor decays with experience (32 → 24 → 16) for stability as a model accumulates games.
 
-Lesson generation requires `ANTHROPIC_API_KEY`. Without it, games still run and ELO is tracked — lessons are silently skipped.
+Lesson generation requires `ANTHROPIC_API_KEY`. Without it, games run and ELO is tracked — lessons are silently skipped. A local Ollama model can be used as the tutor instead; configure it in the Tutor section of the UI.
+
+---
+
+## Environment variables
+
+Only infrastructure settings belong in `.env` — model selection happens in the UI.
+
+| Variable | Default | Description |
+|---|---|---|
+| `STOCKFISH_PATH` | `/usr/games/stockfish` | Path to the Stockfish binary |
+| `ANTHROPIC_API_KEY` | — | Required for Anthropic lesson generation |
+| `GOOGLE_API_KEY` | — | Google AI Studio key for model portrait generation (optional; portraits are skipped if absent) |
+
+---
 
 ## Architecture
 
 ```
-arena.py          — game loop, WebSocket broadcast, tournament runner
-engine.py         — Stockfish wrapper: candidate generation, move quality
-analysis.py       — ELO calculation, post-game lesson generation
-db.py             — SQLite persistence: games, moves, ELO, lessons
+arena.py          — FastAPI server, game loop, WebSocket broadcast, tournament runner
+engine.py         — Stockfish wrapper: candidate generation, move quality evaluation
+analysis.py       — ELO calculation, lesson generation, opening detection
+db.py             — SQLite persistence: players, games, moves, ELO history, lessons
+openings.json     — 3,700-entry ECO lookup table for opening detection in lessons
 models/
   base.py         — abstract ChessPlayer, prompt builder, lesson memory
-  lmstudio_player.py  — OpenAI-compatible client (LM Studio, Ollama)
+  lmstudio_player.py  — OpenAI-compatible client (LM Studio, Ollama, etc.)
   anthropic_player.py — Anthropic API client
-viewer.html       — WebSocket live visualizer
+viewer.html       — main SPA served at http://localhost:8765
+stats.html        — stats page served at http://localhost:8765/stats
 ```
+
+### WebSocket events
+
+The arena broadcasts JSON events to `ws://localhost:8765/ws`.
+
+| Event | Key fields |
+|---|---|
+| `game_start` | `white`, `black`, `white_elo`, `black_elo`, `fen` |
+| `thinking` | `player`, `color`, `fen`, `candidates[]` |
+| `move` | `san`, `uci`, `quality`, `candidate_rank`, `reasoning`, `fen`, `score_cp` |
+| `game_over` | `result`, `termination`, `white_elo_after`, `black_elo_after`, `game_id` |
+| `tournament_status` | `status`, `game_number`, `total_games` |
+
+### REST endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/status` | Current tournament state |
+| `GET` | `/api/leaderboard` | All players sorted by ELO |
+| `GET` | `/api/games` | Recent games |
+| `GET` | `/api/games/{id}/moves` | Move list for a game |
+| `GET` | `/api/games/{id}/pgn` | Annotated PGN download |
+| `GET` | `/api/elo-history/{model_id}` | ELO over time |
+| `GET` | `/api/models` | Available models from an LM Studio endpoint |
+| `POST` | `/api/start` | Start a tournament |
+| `POST` | `/api/pause` | Pause between games |
+| `POST` | `/api/resume` | Resume a paused tournament |
+| `POST` | `/api/stop` | Stop after current game |
+
+---
 
 ## Adding a backend
 

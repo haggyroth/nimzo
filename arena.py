@@ -31,6 +31,7 @@ load_dotenv()
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 
@@ -38,8 +39,25 @@ from engine import StockfishEngine
 from models.base import ChessPlayer, PlayerConfig
 from models.anthropic_player import AnthropicPlayer
 from models.lmstudio_player import LMStudioPlayer
-from analysis import TutorConfig, calculate_elos, generate_lessons, build_quality_summary, detect_opening
+from analysis import (
+    TutorConfig,
+    calculate_elos,
+    generate_lessons,
+    compress_lessons,
+    build_quality_summary,
+    detect_opening,
+    detect_opening_depth,
+    derive_personality_traits,
+    evaluate_achievements,
+    ACHIEVEMENT_CATALOGUE,
+)
+from models.metadata import get_model_metadata
+from models.portraits import generate_portrait
 import db as database
+
+# ── Portraits directory ───────────────────────────────────────────────────
+_PORTRAITS_DIR = Path("portraits")
+_PORTRAITS_DIR.mkdir(exist_ok=True)
 
 
 # ── Global tournament state ───────────────────────────────────────────────
@@ -58,6 +76,10 @@ _state: dict = {
     "black": None,
     "white_elo": None,
     "black_elo": None,
+    # Tournament-mode fields (None in 2-player match mode)
+    "format": None,           # "round_robin" | "gauntlet" | "match"
+    "standings": None,        # list[dict] or None
+    "tournament_id": None,
 }
 
 # Set from CLI args before server start; triggers auto-start in lifespan
@@ -72,14 +94,81 @@ class TournamentAborted(Exception):
 
 # ── FastAPI app ───────────────────────────────────────────────────────────
 
+def backfill_achievements() -> int:
+    """One-time pass to evaluate achievements for games that predate the feature."""
+    n_total = 0
+    for g in database.games_for_backfill():
+        moves = database.get_game_moves(g["id"])
+        if not moves:
+            continue
+        score_history = [m.get("score_cp") for m in moves]
+        # move_number is per-ply; odd = White, even = Black
+        white_quals = [(m["move_san"], m["quality"]) for m in moves if m["move_number"] % 2 == 1]
+        black_quals = [(m["move_san"], m["quality"]) for m in moves if m["move_number"] % 2 == 0]
+
+        opening_deep = detect_opening_depth(g["pgn"]) if g.get("pgn") else None
+        opening_ply  = opening_deep[2] if opening_deep else None
+
+        for color, quals, elo_b, opp_b, model_id in [
+            ("white", white_quals, g["white_elo_before"], g["black_elo_before"], g["white_model_id"]),
+            ("black", black_quals, g["black_elo_before"], g["white_elo_before"], g["black_model_id"]),
+        ]:
+            codes = evaluate_achievements(
+                color=color,
+                result=g["result"],
+                total_moves=g["total_moves"] or 0,
+                move_qualities=quals,
+                score_history_white=score_history,
+                player_elo_before=elo_b or 1200.0,
+                opp_elo_before=opp_b   or 1200.0,
+                opening_ply=opening_ply,
+            )
+            if codes:
+                database.record_achievements(model_id, g["id"], codes)
+                n_total += len(codes)
+    return n_total
+
+
+async def _pregenerate_portraits():
+    """
+    Background task: generate portraits for any known player that doesn't
+    have one yet.  Runs once at startup, fully non-blocking.
+    """
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        return
+    players = database.get_all_players()
+    missing = [p for p in players if not p.get("portrait_path")]
+    if not missing:
+        return
+    print(f"[portraits] Pre-generating portraits for {len(missing)} model(s)…")
+    loop = asyncio.get_event_loop()
+    for p in missing:
+        mid = p["model_id"]
+        path = await loop.run_in_executor(
+            None, generate_portrait, mid, api_key, _PORTRAITS_DIR
+        )
+        if path:
+            database.set_portrait_path(mid, path)
+            print(f"[portraits] ✓ {mid}")
+    print("[portraits] Pre-generation complete.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     database.init_db()
+    if not database.has_any_achievements():
+        n = backfill_achievements()
+        if n:
+            print(f"🏅 Backfilled {n} achievements from existing games.")
+    # Pre-generate portraits for all known players in the background
+    asyncio.create_task(_pregenerate_portraits())
     if _cli_config is not None:
         asyncio.create_task(_auto_start(_cli_config))
     yield
 
 app = FastAPI(title="Nimzo", lifespan=lifespan)
+app.mount("/portraits", StaticFiles(directory=str(_PORTRAITS_DIR)), name="portraits")
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────
@@ -162,6 +251,75 @@ _QUALITY_GLYPH = {
     "mistake":    "?",
     "blunder":    "??",
 }
+
+@app.get("/api/models/{model_id:path}/profile")
+async def api_model_profile(model_id: str):
+    profile = database.get_model_profile(model_id)
+    if not profile:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Model not found")
+    profile["traits"] = derive_personality_traits(profile)
+    profile["achievements"] = [
+        {
+            "code":  a["code"],
+            "times": a["times"],
+            **ACHIEVEMENT_CATALOGUE.get(a["code"], {"label": a["code"], "desc": ""}),
+        }
+        for a in database.get_player_achievements(model_id)
+    ]
+    # Run HF fetch off the event loop so a slow HF response can't stall the UI.
+    loop = asyncio.get_event_loop()
+    profile["metadata"] = await loop.run_in_executor(
+        None, get_model_metadata, model_id,
+    )
+    # Include portrait URL if already generated
+    portrait_path = database.get_portrait_path(model_id)
+    profile["portrait_url"] = f"/{portrait_path}" if portrait_path else None
+    return profile
+
+
+@app.post("/api/models/{model_id:path}/portrait")
+async def api_generate_portrait(model_id: str):
+    """
+    Generate (or retrieve cached) portrait for a model.
+
+    Returns ``{portrait_url: "/portraits/abc.png"}`` on success,
+    ``{portrait_url: null}`` if no API key or generation fails.
+    Runs the blocking Imagen call in a thread-pool executor.
+    """
+    # Return cached path without regenerating
+    existing = database.get_portrait_path(model_id)
+    if existing and Path(existing).exists():
+        return {"portrait_url": f"/{existing}"}
+
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        return {"portrait_url": None}
+
+    loop = asyncio.get_event_loop()
+    path = await loop.run_in_executor(
+        None, generate_portrait, model_id, api_key, _PORTRAITS_DIR
+    )
+
+    if path:
+        database.set_portrait_path(model_id, path)
+
+    return {"portrait_url": f"/{path}" if path else None}
+
+
+@app.get("/api/achievements/catalogue")
+async def api_achievement_catalogue():
+    return ACHIEVEMENT_CATALOGUE
+
+
+@app.get("/api/games/{game_id}")
+async def api_game(game_id: int):
+    row = database.get_game(game_id)
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Game not found")
+    return row
+
 
 @app.get("/api/games/{game_id}/moves")
 async def api_game_moves(game_id: int):
@@ -249,6 +407,14 @@ async def api_models(url: str = "http://localhost:1234/v1"):
         return {"data": [], "error": str(exc)}
 
 
+class PlayerSpec(BaseModel):
+    backend: str = "lmstudio"
+    name: str = ""
+    model_id: str = ""
+    url: str = "http://localhost:1234/v1"
+    thinking: bool = False
+
+
 class TournamentStartConfig(BaseModel):
     white_backend: str = "lmstudio"
     white_name: str = "White"
@@ -264,6 +430,111 @@ class TournamentStartConfig(BaseModel):
     tutor_model: str = ""
     tutor_url: str = "http://localhost:1234/v1"
     games: int = 10
+    # Multi-player tournament fields (len >= 2 activates bracket mode)
+    players: list[PlayerSpec] = []
+    format: str = "round_robin"   # "round_robin" | "gauntlet"
+    games_per_pair: int = 2       # games per head-to-head matchup
+
+
+# ── Tournament title pool ─────────────────────────────────────────────────
+
+_WINNER_TITLES = [
+    "The Relentless",
+    "Silicon Kasparov",
+    "The Inevitable",
+    "Iron Crown",
+    "The Grand Inquisitor",
+    "Digital Tal",
+    "The Patient King",
+    "Last Model Standing",
+    "The Unbreakable",
+    "The Silicon Sultan",
+    "The Eternal Engine",
+    "Chess Machine Prime",
+    "The Cold Logician",
+    "The Iron Strategist",
+    "Checkmate Incarnate",
+]
+
+
+def pick_title(model_id: str, fmt: str) -> str:
+    import hashlib
+    seed = hashlib.md5(f"{model_id}:{fmt}".encode()).digest()
+    idx = int.from_bytes(seed[:4], "big") % len(_WINNER_TITLES)
+    return _WINNER_TITLES[idx]
+
+
+# ── Multi-player bracket scheduling ──────────────────────────────────────
+
+def generate_pairings(player_specs: list[PlayerSpec], fmt: str, games_per_pair: int) -> list[tuple[PlayerSpec, PlayerSpec]]:
+    """
+    Returns an ordered list of (white, black) spec pairs for the tournament.
+
+    round_robin: every pair plays `games_per_pair` games, alternating colours.
+    gauntlet:    player[0] is the champion; everyone else challenges them,
+                 `games_per_pair` games per challenger, alternating colours.
+    """
+    pairings: list[tuple[PlayerSpec, PlayerSpec]] = []
+    if fmt == "gauntlet":
+        champion = player_specs[0]
+        challengers = player_specs[1:]
+        for ch in challengers:
+            for g in range(games_per_pair):
+                if g % 2 == 0:
+                    pairings.append((champion, ch))
+                else:
+                    pairings.append((ch, champion))
+    else:  # round_robin
+        n = len(player_specs)
+        pairs = [(player_specs[i], player_specs[j]) for i in range(n) for j in range(i + 1, n)]
+        for g in range(games_per_pair):
+            for (a, b) in pairs:
+                if g % 2 == 0:
+                    pairings.append((a, b))
+                else:
+                    pairings.append((b, a))
+    return pairings
+
+
+def compute_standings(player_specs: list[PlayerSpec], results: list[dict]) -> list[dict]:
+    """
+    Given finished game results, compute per-player standings.
+    results items: {white_model_id, black_model_id, result}
+    Returns list of dicts sorted by points desc.
+    """
+    standings: dict[str, dict] = {}
+    for ps in player_specs:
+        standings[ps.model_id] = {
+            "model_id": ps.model_id,
+            "name": ps.name,
+            "points": 0.0,
+            "wins": 0,
+            "draws": 0,
+            "losses": 0,
+            "games_played": 0,
+        }
+    for r in results:
+        w = r.get("white_model_id")
+        b = r.get("black_model_id")
+        res = r.get("result", "*")
+        if w not in standings or b not in standings:
+            continue
+        standings[w]["games_played"] += 1
+        standings[b]["games_played"] += 1
+        if res == "1-0":
+            standings[w]["wins"] += 1
+            standings[w]["points"] += 1.0
+            standings[b]["losses"] += 1
+        elif res == "0-1":
+            standings[b]["wins"] += 1
+            standings[b]["points"] += 1.0
+            standings[w]["losses"] += 1
+        elif res == "1/2-1/2":
+            standings[w]["draws"] += 1
+            standings[w]["points"] += 0.5
+            standings[b]["draws"] += 1
+            standings[b]["points"] += 0.5
+    return sorted(standings.values(), key=lambda s: (-s["points"], -s["wins"]))
 
 
 @app.post("/api/tournament/start")
@@ -275,18 +546,73 @@ async def api_start(config: TournamentStartConfig):
     _stop_requested = False
     _pause_event.set()
 
+    tutor = TutorConfig(backend=config.tutor_backend, model_id=config.tutor_model, base_url=config.tutor_url)
+
+    # ── Multi-player tournament mode ──────────────────────────────────
+    if len(config.players) >= 2:
+        players = [
+            build_player(ps.backend, ps.name or ps.model_id.split("/")[-1].split("@")[0], ps.model_id, ps.url, ps.thinking)
+            for ps in config.players
+        ]
+        pairings = generate_pairings(config.players, config.format, config.games_per_pair)
+        total_games = len(pairings)
+        standings = compute_standings(config.players, [])
+
+        _state.update({
+            "status":        "running",
+            "game_number":   0,
+            "total_games":   total_games,
+            "white":         None,
+            "black":         None,
+            "white_elo":     None,
+            "black_elo":     None,
+            "format":        config.format,
+            "standings":     standings,
+            "tournament_id": None,
+        })
+        await broadcast({"type": "tournament_status", **_state})
+
+        player_map = {ps.model_id: pl for ps, pl in zip(config.players, players)}
+
+        async def _run_bracket_and_catch():
+            try:
+                await run_bracket_tournament(
+                    player_specs=config.players,
+                    player_map=player_map,
+                    pairings=pairings,
+                    fmt=config.format,
+                    tutor=tutor,
+                )
+            except Exception as exc:
+                print(f"\n  Tournament ended: {type(exc).__name__}")
+            finally:
+                global _stop_requested
+                _stop_requested = False
+                _pause_event.set()
+                _state["status"] = "idle"
+                try:
+                    await broadcast({"type": "tournament_status", **_state})
+                except Exception:
+                    pass
+
+        _tournament_task = asyncio.create_task(_run_bracket_and_catch())
+        return {"ok": True}
+
+    # ── Classic 2-player match mode ───────────────────────────────────
     white  = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking)
     black  = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking)
-    tutor  = TutorConfig(backend=config.tutor_backend, model_id=config.tutor_model, base_url=config.tutor_url)
 
     _state.update({
-        "status": "running",
-        "game_number": 0,
-        "total_games": config.games,
-        "white": config.white_name,
-        "black": config.black_name,
-        "white_elo": round(white.elo),
-        "black_elo": round(black.elo),
+        "status":        "running",
+        "game_number":   0,
+        "total_games":   config.games,
+        "white":         config.white_name,
+        "black":         config.black_name,
+        "white_elo":     round(white.elo),
+        "black_elo":     round(black.elo),
+        "format":        "match",
+        "standings":     None,
+        "tournament_id": None,
     })
     await broadcast({"type": "tournament_status", **_state})
 
@@ -294,13 +620,28 @@ async def api_start(config: TournamentStartConfig):
         try:
             await run_tournament(white, black, config.games, tutor)
         except Exception as exc:
-            # Absorb any stray exceptions (e.g. engine death on Ctrl+C)
-            # so the task doesn't surface as "exception was never retrieved".
-            _state["status"] = "idle"
+            # Absorb any stray exceptions (e.g. engine death on Ctrl+C,
+            # a model timeout, etc) so the task doesn't surface as
+            # "exception was never retrieved". Reset the state machine
+            # and broadcast so the UI exits the running/stopping state.
             print(f"\n  Tournament ended: {type(exc).__name__}")
+        finally:
+            global _stop_requested
+            _stop_requested = False
+            _pause_event.set()
+            _state["status"] = "idle"
+            try:
+                await broadcast({"type": "tournament_status", **_state})
+            except Exception:
+                pass
 
     _tournament_task = asyncio.create_task(_run_and_catch())
     return {"ok": True}
+
+
+@app.get("/api/tournament/history")
+async def api_tournament_history(limit: int = 20):
+    return database.get_tournament_history(limit)
 
 
 @app.post("/api/tournament/pause")
@@ -356,6 +697,8 @@ async def play_game(
         "black": black.config.name,
         "white_elo": round(white.elo),
         "black_elo": round(black.elo),
+        "white_model_id": white.config.model_id,
+        "black_model_id": black.config.model_id,
         "fen": board.fen(),
     })
 
@@ -485,8 +828,10 @@ async def play_game(
     game.headers["Result"] = result
     pgn_string = str(game)
 
-    # Opening detection
-    opening = detect_opening(pgn_string)   # (eco_code, name) or None
+    # Opening detection — keep both forms (with ply depth + classic 2-tuple)
+    opening_deep = detect_opening_depth(pgn_string)   # (eco, name, ply) or None
+    opening = (opening_deep[0], opening_deep[1]) if opening_deep else None
+    opening_ply = opening_deep[2] if opening_deep else None
 
     # ELO — use game count for dynamic K
     w_count = database.get_player_game_count(white.config.model_id)
@@ -527,6 +872,28 @@ async def play_game(
             fen_after=rec["fen_after"],
         )
 
+    # ── Achievements ───────────────────────────────────────────────────
+    score_history_white = [rec["score_cp"] for rec in move_records]
+    awards: dict[str, list[str]] = {}
+    for player, color, qualities, elo_b, opp_elo_b in [
+        (white, "white", move_qualities_white, w_elo_before, b_elo_before),
+        (black, "black", move_qualities_black, b_elo_before, w_elo_before),
+    ]:
+        codes = evaluate_achievements(
+            color=color,
+            result=result,
+            total_moves=move_number,
+            move_qualities=qualities,
+            score_history_white=score_history_white,
+            player_elo_before=elo_b,
+            opp_elo_before=opp_elo_b,
+            opening_ply=opening_ply,
+        )
+        if codes:
+            database.record_achievements(player.config.model_id, game_id, codes)
+            awards[player.config.model_id] = codes
+            print(f"  🏅 {player.config.name}: {', '.join(codes)}")
+
     await broadcast({
         "type":            "game_over",
         "game_id":         game_id,
@@ -538,9 +905,20 @@ async def play_game(
         "pgn":             pgn_string,
         "opening_eco":     opening[0] if opening else None,
         "opening_name":    opening[1] if opening else None,
+        "achievements":    {
+            "white": [
+                {"code": c, **ACHIEVEMENT_CATALOGUE.get(c, {"label": c, "desc": ""})}
+                for c in awards.get(white.config.model_id, [])
+            ],
+            "black": [
+                {"code": c, **ACHIEVEMENT_CATALOGUE.get(c, {"label": c, "desc": ""})}
+                for c in awards.get(black.config.model_id, [])
+            ],
+        },
     })
 
     # ── Lessons for both players ───────────────────────────────────────
+    is_draw = result == "1/2-1/2"
     for player, color, qualities in [
         (white, "White", move_qualities_white),
         (black, "Black", move_qualities_black),
@@ -555,6 +933,7 @@ async def play_game(
             quality_summary=quality_summary,
             tutor=tutor,
             opening=opening,
+            is_draw=is_draw,
         )
 
         if lessons["improve"] or lessons["strength"]:
@@ -580,6 +959,21 @@ async def play_game(
             for l in lessons["strength"]:
                 print(f"    ★ strength: {l}")
 
+        # ── Lesson compression: every 5 games once threshold is reached ──
+        # Trigger: game count divisible by 5, and at least 10 lessons stored.
+        # Runs in executor to avoid blocking the event loop.
+        game_count = database.get_player_game_count(player.config.model_id)
+        lesson_count = database.get_lesson_count(player.config.model_id)
+        if tutor and tutor.model_id and game_count >= 5 and game_count % 5 == 0 and lesson_count >= 10:
+            print(f"  🗜  Compressing {lesson_count} lessons for {player.config.name} (game #{game_count})…")
+            all_lessons = database.get_all_raw_lessons(player.config.model_id)
+            profile = await loop.run_in_executor(
+                None, compress_lessons, all_lessons, player.config.name, game_count, tutor
+            )
+            if profile:
+                database.set_strategic_profile(player.config.model_id, profile)
+                player.config.strategic_profile = profile
+
     return {
         "game_id":     game_id,
         "result":      result,
@@ -588,7 +982,103 @@ async def play_game(
     }
 
 
-# ── Tournament runner ─────────────────────────────────────────────────────
+# ── Multi-player bracket runner ───────────────────────────────────────────
+
+async def run_bracket_tournament(
+    player_specs: list[PlayerSpec],
+    player_map: dict[str, ChessPlayer],
+    pairings: list[tuple[PlayerSpec, PlayerSpec]],
+    fmt: str,
+    tutor: TutorConfig | None = None,
+):
+    total = len(pairings)
+    game_results: list[dict] = []
+
+    tournament_id = database.create_tournament(
+        fmt=fmt,
+        player_ids=[ps.model_id for ps in player_specs],
+        total_games=total,
+    )
+    _state["tournament_id"] = tournament_id
+
+    with StockfishEngine() as stockfish:
+        for idx, (white_spec, black_spec) in enumerate(pairings, start=1):
+            await _pause_event.wait()
+            if _stop_requested:
+                break
+
+            white = player_map[white_spec.model_id]
+            black = player_map[black_spec.model_id]
+
+            # Refresh ELOs from DB before each game
+            white.elo = database.get_player_elo(white.config.model_id)
+            black.elo = database.get_player_elo(black.config.model_id)
+
+            _state.update({
+                "game_number": idx,
+                "white":       white.config.name,
+                "black":       black.config.name,
+                "white_elo":   round(white.elo),
+                "black_elo":   round(black.elo),
+            })
+            await broadcast({"type": "tournament_status", **_state})
+
+            print(f"\n♟  Game {idx}/{total}: {white.config.name} (W) vs {black.config.name} (B)")
+            try:
+                summary = await play_game(white, black, stockfish, idx, tutor)
+            except TournamentAborted:
+                print("\n  Tournament stopped by user.")
+                database.abort_tournament(tournament_id)
+                break
+
+            game_results.append({
+                "white_model_id": white.config.model_id,
+                "black_model_id": black.config.model_id,
+                "result": summary["result"],
+            })
+            database.record_tournament_game(tournament_id, summary["game_id"], idx,
+                                            white.config.model_id, black.config.model_id)
+
+            standings = compute_standings(player_specs, game_results)
+            _state["standings"] = standings
+            await broadcast({
+                "type":       "standings_update",
+                "standings":  standings,
+                "game_index": idx,
+                "total":      total,
+            })
+
+            print(
+                f"   Result: {summary['result']} in {summary['moves']} moves "
+                f"({summary['termination']})"
+            )
+            await asyncio.sleep(2)
+
+    # ── Final standings + title ───────────────────────────────────────
+    if game_results:
+        final = compute_standings(player_specs, game_results)
+        winner_id = final[0]["model_id"] if final else None
+        title = pick_title(winner_id, fmt) if winner_id else None
+        database.finish_tournament(tournament_id, winner_id, title)
+        _state.update({
+            "status":    "idle",
+            "standings": final,
+        })
+        await broadcast({
+            "type":      "tournament_complete",
+            "standings": final,
+            "winner":    final[0] if final else None,
+            "title":     title,
+        })
+        if final:
+            print(f'\n\U0001f3c6 Tournament complete!  Winner: {final[0]["name"]} — "{title}"')
+    else:
+        _state["status"] = "idle"
+
+    await broadcast({"type": "tournament_status", **_state})
+
+
+# ── 2-player match runner ─────────────────────────────────────────────────
 
 async def run_tournament(
     white: ChessPlayer,
@@ -648,6 +1138,7 @@ def build_player(
         base_url=base_url,
         enable_thinking=enable_thinking,
         lesson_memory=database.get_player_lessons(model_id) if db_exists else [],
+        strategic_profile=database.get_strategic_profile(model_id) if db_exists else None,
     )
     if backend == "anthropic":
         player = AnthropicPlayer(config)

@@ -11,10 +11,15 @@ from .base import ChessPlayer, PlayerConfig, MoveDecision
 
 
 class AnthropicPlayer(ChessPlayer):
+    # Same upper bound as LMStudioPlayer — prevents the UI from hanging
+    # if the API stalls.
+    DEFAULT_TIMEOUT_S = 120.0
+
     def __init__(self, config: PlayerConfig):
         super().__init__(config)
         self.client = anthropic.Anthropic(
-            api_key=config.api_key or os.environ["ANTHROPIC_API_KEY"]
+            api_key=config.api_key or os.environ["ANTHROPIC_API_KEY"],
+            timeout=self.DEFAULT_TIMEOUT_S,
         )
 
     def choose_move(

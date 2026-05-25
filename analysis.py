@@ -79,6 +79,18 @@ def detect_opening(pgn_string: str) -> tuple[str, str] | None:
     Replay the game and return the deepest ECO match as (code, name).
     Returns None if no opening is recognised or openings.json is absent.
     """
+    deep = detect_opening_depth(pgn_string)
+    if deep is None:
+        return None
+    eco, name, _ = deep
+    return (eco, name)
+
+
+def detect_opening_depth(pgn_string: str) -> tuple[str, str, int] | None:
+    """
+    Like detect_opening but also returns the ply count at which theory was
+    last matched. Useful for awarding 'Theorist' achievements.
+    """
     import chess
     import chess.pgn
     import io
@@ -92,13 +104,13 @@ def detect_opening(pgn_string: str) -> tuple[str, str] | None:
         if game is None:
             return None
         board = game.board()
-        last_match: tuple[str, str] | None = None
-        for move in game.mainline_moves():
+        last_match: tuple[str, str, int] | None = None
+        for ply, move in enumerate(game.mainline_moves(), start=1):
             board.push(move)
             epd = board.epd()
             entry = openings.get(epd)
             if entry:
-                last_match = (entry["eco"], entry["name"])
+                last_match = (entry["eco"], entry["name"], ply)
         return last_match
     except Exception:
         return None
@@ -141,6 +153,51 @@ STRENGTH:
 - <second strength if clearly supported>
 
 Be concrete. One line per bullet. Do not write more than two bullets per section."""
+
+# Lighter prompt for draws — still useful signal but lower stakes
+_DRAW_LESSON_TEMPLATE = """Game result: Draw ({termination})
+Player: {player_name} ({player_color})
+{opening_line}
+Move quality summary:
+{quality_summary}
+
+Write ONE coaching note for {player_name} in EXACTLY this format (no preamble):
+
+IMPROVE:
+- <the single most important moment to improve — reference the move>
+
+STRENGTH:
+- <one thing done well>
+
+One bullet each. Be specific."""
+
+# Compression prompt — consolidates many raw lessons into a strategic profile
+_COMPRESSION_TEMPLATE = """You are reviewing {player_name}'s coaching history across {game_count} chess games.
+
+All lessons recorded so far:
+
+AREAS TO IMPROVE:
+{improve_lessons}
+
+CONSISTENT STRENGTHS:
+{strength_lessons}
+
+Distill these into a concise strategic profile. Remove duplicates and contradictions. \
+Identify the 2–4 most persistent weaknesses and 1–3 most reliable strengths.
+
+Write in EXACTLY this format (no preamble):
+
+WEAKNESSES:
+- <core persistent weakness #1>
+- <core persistent weakness #2>
+(up to 4 — only include if clearly recurring)
+
+STRENGTHS:
+- <core consistent strength #1>
+(up to 3 — only include if clearly recurring)
+
+Each bullet must be a concrete, actionable chess principle, not vague praise. \
+Do not include one-off observations that appeared in only one game."""
 
 
 # ── Backend callers ───────────────────────────────────────────────────────
@@ -231,13 +288,26 @@ def generate_lessons(
     quality_summary: str,
     tutor: Optional[TutorConfig] = None,
     opening: Optional[tuple[str, str]] = None,   # (eco_code, name) or None
+    is_draw: bool = False,
+    skip_if_clean_draw: bool = True,
 ) -> dict[str, list[str]]:
     """
     Generate lessons for one player from a completed game.
-    Returns {"improve": [...], "strength": [...]} — empty lists if no tutor configured.
+
+    Draws use a shorter single-bullet prompt. A draw with no blunders or
+    mistakes produces very weak coaching signal — ``skip_if_clean_draw=True``
+    (the default) returns empty lists rather than generating noise.
+
+    Returns {"improve": [...], "strength": [...]} — empty lists if no tutor
+    configured or if the game is a clean draw.
     """
     if tutor is None or not tutor.model_id:
         return {"improve": [], "strength": []}
+
+    # Skip lesson generation for draws with clean play — no useful signal
+    if is_draw and skip_if_clean_draw:
+        if "blunder" not in quality_summary and "mistake" not in quality_summary:
+            return {"improve": [], "strength": []}
 
     if result == "1-0":
         outcome = "won" if player_color == "White" else "lost"
@@ -251,7 +321,9 @@ def generate_lessons(
         if opening else ""
     )
 
-    prompt = _LESSON_TEMPLATE.format(
+    # Draws with some mistakes get a lighter prompt; decisive games get the full one
+    template = _DRAW_LESSON_TEMPLATE if is_draw else _LESSON_TEMPLATE
+    prompt = template.format(
         result=result,
         termination=termination,
         player_name=player_name,
@@ -267,13 +339,252 @@ def generate_lessons(
             raw = _call_anthropic(tutor, prompt)
         else:
             raw = _call_lmstudio(tutor, prompt)
-        result = _parse_lessons(raw)
-        if not result["improve"] and not result["strength"]:
+        lessons = _parse_lessons(raw)
+        if not lessons["improve"] and not lessons["strength"]:
             print(f"  ⚠  Tutor returned no parseable lessons. Raw response:\n{raw[:600]}")
-        return result
+        return lessons
     except Exception as e:
         print(f"  ⚠  Lesson generation failed ({tutor.backend}/{tutor.model_id}): {e}")
         return {"improve": [], "strength": []}
+
+
+def compress_lessons(
+    all_lessons: list[dict],   # [{"lesson": str, "lesson_type": "improve"|"strength"}, ...]
+    player_name: str,
+    game_count: int,
+    tutor: Optional[TutorConfig] = None,
+) -> Optional[str]:
+    """
+    Ask the tutor to distil all recorded lessons into a strategic profile.
+
+    Returns the raw profile text on success, None if no tutor or the call fails.
+    The profile is stored in the DB and injected into the player's system prompt
+    instead of the raw lesson list, preventing context bloat.
+    """
+    if tutor is None or not tutor.model_id:
+        return None
+    if not all_lessons:
+        return None
+
+    improve = [l["lesson"] for l in all_lessons if l.get("lesson_type") == "improve"]
+    strength = [l["lesson"] for l in all_lessons if l.get("lesson_type") == "strength"]
+
+    if not improve and not strength:
+        return None
+
+    improve_text  = "\n".join(f"- {l}" for l in improve)  or "(none recorded)"
+    strength_text = "\n".join(f"- {l}" for l in strength) or "(none recorded)"
+
+    prompt = _COMPRESSION_TEMPLATE.format(
+        player_name=player_name,
+        game_count=game_count,
+        improve_lessons=improve_text,
+        strength_lessons=strength_text,
+    )
+
+    try:
+        if tutor.backend == "anthropic":
+            raw = _call_anthropic(tutor, prompt)
+        else:
+            raw = _call_lmstudio(tutor, prompt)
+        raw = raw.strip()
+        if raw:
+            print(f"  🗜  Compressed {len(all_lessons)} lessons → strategic profile for {player_name}")
+        return raw or None
+    except Exception as e:
+        print(f"  ⚠  Lesson compression failed ({tutor.backend}/{tutor.model_id}): {e}")
+        return None
+
+
+ACHIEVEMENT_CATALOGUE: dict[str, dict] = {
+    "flawless":     {"label": "Flawless",     "desc": "Played a game with no blunders or mistakes."},
+    "comeback":     {"label": "Comeback",     "desc": "Won from a position 3+ pawns behind."},
+    "crusher":      {"label": "Crusher",      "desc": "Won the game in 25 moves or fewer."},
+    "grinder":      {"label": "Grinder",      "desc": "Won a game that lasted 70+ moves."},
+    "tactician":    {"label": "Tactician",    "desc": "Played 5+ best moves in a row."},
+    "iron_wall":    {"label": "Iron Wall",    "desc": "Held a draw against an opponent rated 100+ ELO above."},
+    "giant_killer": {"label": "Giant Killer", "desc": "Beat an opponent rated 100+ ELO above."},
+    "theorist":     {"label": "Theorist",     "desc": "Stayed in opening theory for 12+ ply."},
+}
+
+
+def evaluate_achievements(
+    *,
+    color: str,                                  # 'white' | 'black'
+    result: str,                                 # '1-0' | '0-1' | '1/2-1/2'
+    total_moves: int,
+    move_qualities: list[tuple[str, str]],       # (san, quality)
+    score_history_white: list[float | None],     # per-move score_cp from White's POV
+    player_elo_before: float,
+    opp_elo_before: float,
+    opening_ply: int | None = None,
+) -> list[str]:
+    """
+    Returns a list of achievement codes earned by `color` in this game.
+    All inputs are derived from data already collected during the game.
+    """
+    earned: list[str] = []
+
+    won  = (color == "white" and result == "1-0") or (color == "black" and result == "0-1")
+    drew = result == "1/2-1/2"
+
+    # Flawless — no blunders or mistakes anywhere in the player's moves
+    qualities = [q for _, q in move_qualities]
+    has_blunder = any(q in ("blunder", "mistake") for q in qualities)
+    if qualities and not has_blunder:
+        earned.append("flawless")
+
+    # Tactician — 5 best moves in a row
+    streak = best_streak = 0
+    for q in qualities:
+        if q == "best":
+            streak += 1
+            best_streak = max(best_streak, streak)
+        else:
+            streak = 0
+    if best_streak >= 5:
+        earned.append("tactician")
+
+    # Crusher / Grinder — only on wins
+    if won and total_moves <= 25:
+        earned.append("crusher")
+    if won and total_moves >= 70:
+        earned.append("grinder")
+
+    # Comeback — player was ≤ -300cp from their POV at some point, then won
+    if won and score_history_white:
+        # Convert White-POV scores to this player's POV
+        sign = 1 if color == "white" else -1
+        worst = min(
+            (sign * cp for cp in score_history_white if cp is not None),
+            default=None,
+        )
+        if worst is not None and worst <= -300:
+            earned.append("comeback")
+
+    # Upset achievements vs higher-rated opponent
+    elo_diff = opp_elo_before - player_elo_before
+    if elo_diff >= 100:
+        if won:
+            earned.append("giant_killer")
+        elif drew:
+            earned.append("iron_wall")
+
+    # Theorist — opening theory matched for 12+ ply
+    if opening_ply and opening_ply >= 12:
+        earned.append("theorist")
+
+    return earned
+
+
+def derive_personality_traits(profile: dict) -> list[dict]:
+    """
+    Turn a model profile dict (from db.get_model_profile) into a short list of
+    descriptive traits, each {label, detail}. Pure heuristic — no LLM call.
+    """
+    if not profile:
+        return []
+    moves    = profile.get("moves")    or {}
+    castling = profile.get("castling") or {}
+    color    = profile.get("color")    or {}
+    games    = profile.get("games")    or {}
+
+    total_moves = moves.get("total_moves") or 0
+    if total_moves < 10:
+        return [{"label": "New face", "detail": "Not enough games yet to read a style."}]
+
+    traits: list[dict] = []
+
+    # Stockfish alignment — how often does this model pick candidate #1?
+    top_rate = (moves.get("picked_top") or 0) / total_moves
+    avg_rank = moves.get("avg_rank")
+    if top_rate >= 0.80:
+        traits.append({
+            "label":  "Stockfish loyalist",
+            "detail": f"picks the top candidate {top_rate * 100:.0f}% of moves",
+        })
+    elif top_rate <= 0.45:
+        traits.append({
+            "label":  "Free spirit",
+            "detail": f"deviates from Stockfish's pick {(1 - top_rate) * 100:.0f}% of moves"
+                      + (f" (avg rank {avg_rank})" if avg_rank else ""),
+        })
+
+    # Tactical aggression — capture rate
+    cap_rate = (moves.get("captures") or 0) / total_moves
+    if cap_rate >= 0.22:
+        traits.append({
+            "label":  "Trade-happy",
+            "detail": f"captures on {cap_rate * 100:.0f}% of moves",
+        })
+    elif cap_rate <= 0.10 and total_moves >= 50:
+        traits.append({
+            "label":  "Positional",
+            "detail": f"captures on only {cap_rate * 100:.0f}% of moves",
+        })
+
+    # Check rate — attacking style
+    chk_rate = (moves.get("checks") or 0) / total_moves
+    if chk_rate >= 0.12:
+        traits.append({
+            "label":  "Attacker",
+            "detail": f"delivers check on {chk_rate * 100:.0f}% of moves",
+        })
+
+    # Castling profile
+    games_castled = castling.get("games_castled") or 0
+    total_games   = games.get("total_games") or 0
+    if total_games and games_castled / total_games < 0.4:
+        traits.append({
+            "label":  "King in the open",
+            "detail": f"castles in only {games_castled}/{total_games} games",
+        })
+    elif castling.get("queenside", 0) >= castling.get("kingside", 0) and games_castled >= 2:
+        traits.append({
+            "label":  "Queenside",
+            "detail": f"prefers O-O-O ({castling['queenside']} of {games_castled})",
+        })
+    else:
+        avg_cm = castling.get("avg_castle_move")
+        if avg_cm and avg_cm <= 10 and games_castled >= 2:
+            traits.append({
+                "label":  "Fast castler",
+                "detail": f"castles by move {avg_cm} on average",
+            })
+
+    # Colour bias
+    w_games  = (color.get("white_wins") or 0) + (color.get("white_draws") or 0) + (color.get("white_losses") or 0)
+    b_games  = (color.get("black_wins") or 0) + (color.get("black_draws") or 0) + (color.get("black_losses") or 0)
+    if w_games >= 3 and b_games >= 3:
+        w_score = (color.get("white_wins") or 0) + 0.5 * (color.get("white_draws") or 0)
+        b_score = (color.get("black_wins") or 0) + 0.5 * (color.get("black_draws") or 0)
+        w_rate = w_score / w_games
+        b_rate = b_score / b_games
+        if w_rate - b_rate >= 0.2:
+            traits.append({
+                "label":  "White-favoured",
+                "detail": f"{w_rate * 100:.0f}% as White vs {b_rate * 100:.0f}% as Black",
+            })
+        elif b_rate - w_rate >= 0.2:
+            traits.append({
+                "label":  "Black-favoured",
+                "detail": f"{b_rate * 100:.0f}% as Black vs {w_rate * 100:.0f}% as White",
+            })
+
+    # Blunder rate
+    bl_rate = (moves.get("q_blunder") or 0) / total_moves
+    if bl_rate >= 0.05:
+        traits.append({
+            "label":  "Streaky",
+            "detail": f"blunders on {bl_rate * 100:.1f}% of moves",
+        })
+    elif bl_rate == 0 and total_moves >= 50:
+        traits.append({
+            "label":  "Blunder-free",
+            "detail": f"no blunders across {total_moves} moves",
+        })
+
+    return traits[:5]   # cap at 5 traits for the card
 
 
 def build_quality_summary(move_qualities: list[tuple[str, str]]) -> str:

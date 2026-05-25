@@ -22,6 +22,7 @@ class PlayerConfig:
     enable_thinking: bool = False      # Extended thinking (Qwen3, etc.)
     system_prompt: str = ""            # Optional override (rarely needed)
     lesson_memory: list[str] = field(default_factory=list)
+    strategic_profile: Optional[str] = None   # Compressed multi-game coaching profile
 
 
 @dataclass
@@ -52,15 +53,30 @@ class ChessPlayer(ABC):
         game_history_pgn: str,
     ) -> str:
         color = "White" if board.turn == chess.WHITE else "Black"
+        is_white = board.turn == chess.WHITE
         fen = board.fen()
 
         candidate_lines = []
         for i, (move, score_cp) in enumerate(candidates, 1):
             san = board.san(move)
-            score_str = f"{score_cp/100:+.2f}" if score_cp is not None else "?"
-            candidate_lines.append(f"  {i}. {san} (UCI: {move.uci()}) — eval: {score_str} pawns")
+            if score_cp is not None:
+                # Always show eval from White's perspective — standard chess convention
+                # (candidates arrive from current-player POV, so negate for Black)
+                white_cp = score_cp if is_white else -score_cp
+                score_str = f"{white_cp / 100:+.2f}"
+            else:
+                score_str = "?"
+            label = "  ← Stockfish's top pick" if i == 1 else ""
+            candidate_lines.append(
+                f"  {i}. {san} (UCI: {move.uci()}) — eval: {score_str}{label}"
+            )
 
         candidates_block = "\n".join(candidate_lines)
+
+        if is_white:
+            score_note = "higher eval = better for you"
+        else:
+            score_note = "lower eval = better for you; you want to minimise White's advantage"
 
         return f"""You are playing chess as {color}.
 
@@ -69,7 +85,7 @@ Current position (FEN): {fen}
 Game so far (PGN):
 {game_history_pgn or '(game just started)'}
 
-Stockfish's top {len(candidates)} candidate moves for this position:
+Stockfish's top {len(candidates)} candidates, ranked best to worst for {color} ({score_note}):
 {candidates_block}
 
 Choose ONE of the numbered candidates. Respond in this exact format:
@@ -89,10 +105,38 @@ Do not suggest any move not in the list above."""
         if self.config.system_prompt:
             base = f"{base}\n\n{self.config.system_prompt}"
 
+        # ── Strategic profile (compressed) ───────────────────────────────
+        # When a tutor-compressed profile exists, use it as the primary
+        # coaching context.  Append the 3 most-recent raw lessons alongside
+        # for recency so very-recent feedback isn't buried.
+        if self.config.strategic_profile:
+            profile_block = (
+                "Your strategic profile (distilled from all your games):\n"
+                + self.config.strategic_profile
+            )
+
+            # Grab the 3 most recent individual lessons for recency context
+            recent: list[str] = []
+            for entry in reversed(self.config.lesson_memory[-6:]):
+                if entry.startswith("[improve]"):
+                    recent.append("↑ " + entry[len("[improve]"):].strip())
+                elif entry.startswith("[strength]"):
+                    recent.append("★ " + entry[len("[strength]"):].strip())
+                if len(recent) >= 3:
+                    break
+
+            if recent:
+                recent_block = (
+                    "Recent game notes:\n"
+                    + "\n".join(f"- {l}" for l in reversed(recent))
+                )
+                return f"{base}\n\n{profile_block}\n\n{recent_block}"
+            return f"{base}\n\n{profile_block}"
+
+        # ── Raw lesson list (no profile yet) ─────────────────────────────
         if not self.config.lesson_memory:
             return base
 
-        # Separate lessons by type (prefixed by loader in db.py)
         improve = []
         strength = []
         for entry in self.config.lesson_memory[-10:]:
