@@ -164,7 +164,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [x] **Batch / headless mode**: run games without real-time broadcast for fast benchmarking; results written to DB only
 - [x] **Tournament config file** (`tournament.toml`): define players, backends, format, and tutor in one file; coexists with `.env` defaults; makes named matchups replayable
 - [x] **Time control simulation**: per-move timeout; models exceeding budget fall back to top Stockfish candidate and are flagged "timeout" in stats
-- [ ] **PGN collection export**: bulk export all games as a single annotated PGN file for external analysis
+- [x] **PGN collection export**: bulk export all games as a single annotated PGN file for external analysis
 
 ---
 
