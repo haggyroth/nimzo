@@ -71,6 +71,27 @@ CREATE TABLE IF NOT EXISTS achievements (
     awarded_at  TEXT DEFAULT (datetime('now')),
     UNIQUE(player_id, game_id, code)
 );
+
+CREATE TABLE IF NOT EXISTS tournaments (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    format          TEXT NOT NULL,   -- 'round_robin' | 'gauntlet' | 'match'
+    status          TEXT DEFAULT 'running',  -- 'running' | 'finished' | 'aborted'
+    player_ids      TEXT,            -- JSON list of model_ids in seeding order
+    total_games     INTEGER DEFAULT 0,
+    winner_model_id TEXT,
+    title           TEXT,            -- fun winner title
+    started_at      TEXT DEFAULT (datetime('now')),
+    finished_at     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tournament_games (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id   INTEGER REFERENCES tournaments(id),
+    game_id         INTEGER REFERENCES games(id),
+    game_index      INTEGER,         -- 1-based position in schedule
+    white_model_id  TEXT,
+    black_model_id  TEXT
+);
 """
 
 
@@ -108,6 +129,29 @@ def _migrate(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE players ADD COLUMN strategic_profile TEXT")
     except sqlite3.OperationalError:
         pass  # already exists
+    # Create tournament tables for existing DBs (CREATE TABLE IF NOT EXISTS is idempotent
+    # in the schema, but the schema only runs once so we ensure them here too)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS tournaments (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            format          TEXT NOT NULL,
+            status          TEXT DEFAULT 'running',
+            player_ids      TEXT,
+            total_games     INTEGER DEFAULT 0,
+            winner_model_id TEXT,
+            title           TEXT,
+            started_at      TEXT DEFAULT (datetime('now')),
+            finished_at     TEXT
+        );
+        CREATE TABLE IF NOT EXISTS tournament_games (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            tournament_id   INTEGER REFERENCES tournaments(id),
+            game_id         INTEGER REFERENCES games(id),
+            game_index      INTEGER,
+            white_model_id  TEXT,
+            black_model_id  TEXT
+        );
+    """)
 
 
 # ── Players ──────────────────────────────────────────────────────────────
@@ -763,3 +807,104 @@ def has_any_achievements() -> bool:
     with get_conn() as conn:
         row = conn.execute("SELECT 1 FROM achievements LIMIT 1").fetchone()
     return row is not None
+
+
+# ── Tournaments ───────────────────────────────────────────────────────────
+
+def create_tournament(
+    format: str,
+    player_ids: list[str],
+    total_games: int,
+) -> int:
+    """Create a new tournament record; returns the new tournament id."""
+    import json
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO tournaments (format, player_ids, total_games, status)
+            VALUES (?, ?, ?, 'running')
+            """,
+            (format, json.dumps(player_ids), total_games),
+        )
+        row = conn.execute("SELECT last_insert_rowid() AS id").fetchone()
+        return row["id"]
+
+
+def finish_tournament(
+    tournament_id: int,
+    winner_model_id: Optional[str],
+    title: Optional[str],
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE tournaments
+            SET status = 'finished', winner_model_id = ?, title = ?,
+                finished_at = datetime('now')
+            WHERE id = ?
+            """,
+            (winner_model_id, title, tournament_id),
+        )
+
+
+def abort_tournament(tournament_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE tournaments SET status = 'aborted', finished_at = datetime('now') WHERE id = ?",
+            (tournament_id,),
+        )
+
+
+def record_tournament_game(
+    tournament_id: int,
+    game_id: int,
+    game_index: int,
+    white_model_id: str,
+    black_model_id: str,
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO tournament_games
+                (tournament_id, game_id, game_index, white_model_id, black_model_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (tournament_id, game_id, game_index, white_model_id, black_model_id),
+        )
+
+
+def get_tournament_history(limit: int = 20) -> list[dict]:
+    """Return recent finished/aborted tournaments with player names and results."""
+    import json
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT t.id, t.format, t.status, t.player_ids, t.total_games,
+                   t.winner_model_id, t.title, t.started_at, t.finished_at,
+                   wp.name AS winner_name
+            FROM tournaments t
+            LEFT JOIN players wp ON t.winner_model_id = wp.model_id
+            ORDER BY t.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+        result = []
+        for r in rows:
+            rec = dict(r)
+            # Resolve player names from model_id list
+            ids = json.loads(rec.get("player_ids") or "[]")
+            names = []
+            for mid in ids:
+                p = conn.execute(
+                    "SELECT name FROM players WHERE model_id = ?", (mid,)
+                ).fetchone()
+                names.append(p["name"] if p else mid)
+            rec["player_names"] = names
+            rec["game_count"] = conn.execute(
+                "SELECT COUNT(*) AS n FROM tournament_games WHERE tournament_id = ?",
+                (r["id"],),
+            ).fetchone()["n"]
+            result.append(rec)
+        return result

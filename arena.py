@@ -76,6 +76,10 @@ _state: dict = {
     "black": None,
     "white_elo": None,
     "black_elo": None,
+    # Tournament-mode fields (None in 2-player match mode)
+    "format": None,           # "round_robin" | "gauntlet" | "match"
+    "standings": None,        # list[dict] or None
+    "tournament_id": None,
 }
 
 # Set from CLI args before server start; triggers auto-start in lifespan
@@ -403,6 +407,14 @@ async def api_models(url: str = "http://localhost:1234/v1"):
         return {"data": [], "error": str(exc)}
 
 
+class PlayerSpec(BaseModel):
+    backend: str = "lmstudio"
+    name: str = ""
+    model_id: str = ""
+    url: str = "http://localhost:1234/v1"
+    thinking: bool = False
+
+
 class TournamentStartConfig(BaseModel):
     white_backend: str = "lmstudio"
     white_name: str = "White"
@@ -418,6 +430,111 @@ class TournamentStartConfig(BaseModel):
     tutor_model: str = ""
     tutor_url: str = "http://localhost:1234/v1"
     games: int = 10
+    # Multi-player tournament fields (len >= 2 activates bracket mode)
+    players: list[PlayerSpec] = []
+    format: str = "round_robin"   # "round_robin" | "gauntlet"
+    games_per_pair: int = 2       # games per head-to-head matchup
+
+
+# ── Tournament title pool ─────────────────────────────────────────────────
+
+_WINNER_TITLES = [
+    "The Relentless",
+    "Silicon Kasparov",
+    "The Inevitable",
+    "Iron Crown",
+    "The Grand Inquisitor",
+    "Digital Tal",
+    "The Patient King",
+    "Last Model Standing",
+    "The Unbreakable",
+    "The Silicon Sultan",
+    "The Eternal Engine",
+    "Chess Machine Prime",
+    "The Cold Logician",
+    "The Iron Strategist",
+    "Checkmate Incarnate",
+]
+
+
+def pick_title(model_id: str, fmt: str) -> str:
+    import hashlib
+    seed = hashlib.md5(f"{model_id}:{fmt}".encode()).digest()
+    idx = int.from_bytes(seed[:4], "big") % len(_WINNER_TITLES)
+    return _WINNER_TITLES[idx]
+
+
+# ── Multi-player bracket scheduling ──────────────────────────────────────
+
+def generate_pairings(player_specs: list[PlayerSpec], fmt: str, games_per_pair: int) -> list[tuple[PlayerSpec, PlayerSpec]]:
+    """
+    Returns an ordered list of (white, black) spec pairs for the tournament.
+
+    round_robin: every pair plays `games_per_pair` games, alternating colours.
+    gauntlet:    player[0] is the champion; everyone else challenges them,
+                 `games_per_pair` games per challenger, alternating colours.
+    """
+    pairings: list[tuple[PlayerSpec, PlayerSpec]] = []
+    if fmt == "gauntlet":
+        champion = player_specs[0]
+        challengers = player_specs[1:]
+        for ch in challengers:
+            for g in range(games_per_pair):
+                if g % 2 == 0:
+                    pairings.append((champion, ch))
+                else:
+                    pairings.append((ch, champion))
+    else:  # round_robin
+        n = len(player_specs)
+        pairs = [(player_specs[i], player_specs[j]) for i in range(n) for j in range(i + 1, n)]
+        for g in range(games_per_pair):
+            for (a, b) in pairs:
+                if g % 2 == 0:
+                    pairings.append((a, b))
+                else:
+                    pairings.append((b, a))
+    return pairings
+
+
+def compute_standings(player_specs: list[PlayerSpec], results: list[dict]) -> list[dict]:
+    """
+    Given finished game results, compute per-player standings.
+    results items: {white_model_id, black_model_id, result}
+    Returns list of dicts sorted by points desc.
+    """
+    standings: dict[str, dict] = {}
+    for ps in player_specs:
+        standings[ps.model_id] = {
+            "model_id": ps.model_id,
+            "name": ps.name,
+            "points": 0.0,
+            "wins": 0,
+            "draws": 0,
+            "losses": 0,
+            "games_played": 0,
+        }
+    for r in results:
+        w = r.get("white_model_id")
+        b = r.get("black_model_id")
+        res = r.get("result", "*")
+        if w not in standings or b not in standings:
+            continue
+        standings[w]["games_played"] += 1
+        standings[b]["games_played"] += 1
+        if res == "1-0":
+            standings[w]["wins"] += 1
+            standings[w]["points"] += 1.0
+            standings[b]["losses"] += 1
+        elif res == "0-1":
+            standings[b]["wins"] += 1
+            standings[b]["points"] += 1.0
+            standings[w]["losses"] += 1
+        elif res == "1/2-1/2":
+            standings[w]["draws"] += 1
+            standings[w]["points"] += 0.5
+            standings[b]["draws"] += 1
+            standings[b]["points"] += 0.5
+    return sorted(standings.values(), key=lambda s: (-s["points"], -s["wins"]))
 
 
 @app.post("/api/tournament/start")
@@ -429,18 +546,73 @@ async def api_start(config: TournamentStartConfig):
     _stop_requested = False
     _pause_event.set()
 
+    tutor = TutorConfig(backend=config.tutor_backend, model_id=config.tutor_model, base_url=config.tutor_url)
+
+    # ── Multi-player tournament mode ──────────────────────────────────
+    if len(config.players) >= 2:
+        players = [
+            build_player(ps.backend, ps.name or ps.model_id.split("/")[-1].split("@")[0], ps.model_id, ps.url, ps.thinking)
+            for ps in config.players
+        ]
+        pairings = generate_pairings(config.players, config.format, config.games_per_pair)
+        total_games = len(pairings)
+        standings = compute_standings(config.players, [])
+
+        _state.update({
+            "status":        "running",
+            "game_number":   0,
+            "total_games":   total_games,
+            "white":         None,
+            "black":         None,
+            "white_elo":     None,
+            "black_elo":     None,
+            "format":        config.format,
+            "standings":     standings,
+            "tournament_id": None,
+        })
+        await broadcast({"type": "tournament_status", **_state})
+
+        player_map = {ps.model_id: pl for ps, pl in zip(config.players, players)}
+
+        async def _run_bracket_and_catch():
+            try:
+                await run_bracket_tournament(
+                    player_specs=config.players,
+                    player_map=player_map,
+                    pairings=pairings,
+                    fmt=config.format,
+                    tutor=tutor,
+                )
+            except Exception as exc:
+                print(f"\n  Tournament ended: {type(exc).__name__}")
+            finally:
+                global _stop_requested
+                _stop_requested = False
+                _pause_event.set()
+                _state["status"] = "idle"
+                try:
+                    await broadcast({"type": "tournament_status", **_state})
+                except Exception:
+                    pass
+
+        _tournament_task = asyncio.create_task(_run_bracket_and_catch())
+        return {"ok": True}
+
+    # ── Classic 2-player match mode ───────────────────────────────────
     white  = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking)
     black  = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking)
-    tutor  = TutorConfig(backend=config.tutor_backend, model_id=config.tutor_model, base_url=config.tutor_url)
 
     _state.update({
-        "status": "running",
-        "game_number": 0,
-        "total_games": config.games,
-        "white": config.white_name,
-        "black": config.black_name,
-        "white_elo": round(white.elo),
-        "black_elo": round(black.elo),
+        "status":        "running",
+        "game_number":   0,
+        "total_games":   config.games,
+        "white":         config.white_name,
+        "black":         config.black_name,
+        "white_elo":     round(white.elo),
+        "black_elo":     round(black.elo),
+        "format":        "match",
+        "standings":     None,
+        "tournament_id": None,
     })
     await broadcast({"type": "tournament_status", **_state})
 
@@ -465,6 +637,11 @@ async def api_start(config: TournamentStartConfig):
 
     _tournament_task = asyncio.create_task(_run_and_catch())
     return {"ok": True}
+
+
+@app.get("/api/tournament/history")
+async def api_tournament_history(limit: int = 20):
+    return database.get_tournament_history(limit)
 
 
 @app.post("/api/tournament/pause")
@@ -805,7 +982,103 @@ async def play_game(
     }
 
 
-# ── Tournament runner ─────────────────────────────────────────────────────
+# ── Multi-player bracket runner ───────────────────────────────────────────
+
+async def run_bracket_tournament(
+    player_specs: list[PlayerSpec],
+    player_map: dict[str, ChessPlayer],
+    pairings: list[tuple[PlayerSpec, PlayerSpec]],
+    fmt: str,
+    tutor: TutorConfig | None = None,
+):
+    total = len(pairings)
+    game_results: list[dict] = []
+
+    tournament_id = database.create_tournament(
+        fmt=fmt,
+        player_ids=[ps.model_id for ps in player_specs],
+        total_games=total,
+    )
+    _state["tournament_id"] = tournament_id
+
+    with StockfishEngine() as stockfish:
+        for idx, (white_spec, black_spec) in enumerate(pairings, start=1):
+            await _pause_event.wait()
+            if _stop_requested:
+                break
+
+            white = player_map[white_spec.model_id]
+            black = player_map[black_spec.model_id]
+
+            # Refresh ELOs from DB before each game
+            white.elo = database.get_player_elo(white.config.model_id)
+            black.elo = database.get_player_elo(black.config.model_id)
+
+            _state.update({
+                "game_number": idx,
+                "white":       white.config.name,
+                "black":       black.config.name,
+                "white_elo":   round(white.elo),
+                "black_elo":   round(black.elo),
+            })
+            await broadcast({"type": "tournament_status", **_state})
+
+            print(f"\n♟  Game {idx}/{total}: {white.config.name} (W) vs {black.config.name} (B)")
+            try:
+                summary = await play_game(white, black, stockfish, idx, tutor)
+            except TournamentAborted:
+                print("\n  Tournament stopped by user.")
+                database.abort_tournament(tournament_id)
+                break
+
+            game_results.append({
+                "white_model_id": white.config.model_id,
+                "black_model_id": black.config.model_id,
+                "result": summary["result"],
+            })
+            database.record_tournament_game(tournament_id, summary["game_id"], idx,
+                                            white.config.model_id, black.config.model_id)
+
+            standings = compute_standings(player_specs, game_results)
+            _state["standings"] = standings
+            await broadcast({
+                "type":       "standings_update",
+                "standings":  standings,
+                "game_index": idx,
+                "total":      total,
+            })
+
+            print(
+                f"   Result: {summary['result']} in {summary['moves']} moves "
+                f"({summary['termination']})"
+            )
+            await asyncio.sleep(2)
+
+    # ── Final standings + title ───────────────────────────────────────
+    if game_results:
+        final = compute_standings(player_specs, game_results)
+        winner_id = final[0]["model_id"] if final else None
+        title = pick_title(winner_id, fmt) if winner_id else None
+        database.finish_tournament(tournament_id, winner_id, title)
+        _state.update({
+            "status":    "idle",
+            "standings": final,
+        })
+        await broadcast({
+            "type":      "tournament_complete",
+            "standings": final,
+            "winner":    final[0] if final else None,
+            "title":     title,
+        })
+        if final:
+            print(f'\n\U0001f3c6 Tournament complete!  Winner: {final[0]["name"]} — "{title}"')
+    else:
+        _state["status"] = "idle"
+
+    await broadcast({"type": "tournament_status", **_state})
+
+
+# ── 2-player match runner ─────────────────────────────────────────────────
 
 async def run_tournament(
     white: ChessPlayer,

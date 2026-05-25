@@ -407,6 +407,18 @@
     .mc-meta-chip .v { color: var(--gold-bright); font-weight: 500; }
     .mc-meta-chip a { color: inherit; text-decoration: none; border-bottom: 1px dotted; }
     .mc-meta-chip a:hover { color: var(--gold); }
+
+    /* ── Tournament history ─────────────────────────────────────── */
+    .th-row {
+      padding: 9px 14px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px; font-size: 10px;
+    }
+    .th-format { font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+                 color: var(--text-dim); min-width: 80px; }
+    .th-winner { color: var(--gold); font-weight: 500; flex: 1; }
+    .th-title  { color: var(--text-mid); font-size: 9px; font-style: italic; }
+    .th-players { color: var(--text-dim); font-size: 9px; }
+    .th-meta   { color: var(--text-dim); font-size: 9px; text-align: right; min-width: 50px; }
   </style>
 </head>
 <body>
@@ -451,6 +463,13 @@
       <div class="quality-legend-item"><div class="quality-legend-swatch" style="background:var(--q-mistake)"></div>Mistake (?)</div>
       <div class="quality-legend-item"><div class="quality-legend-swatch" style="background:var(--q-blunder)"></div>Blunder (??)</div>
     </div>
+  </div>
+
+  <!-- ── Tournament History ── -->
+  <div class="card" id="tournamentHistSection">
+    <div class="section-title">Tournament History</div>
+    <div class="loading" id="tournamentHistLoading">loading…</div>
+    <div id="tournamentHistBody" style="display:none"></div>
   </div>
 
   <div class="two-col">
@@ -1085,8 +1104,39 @@ function renderH2HRow(idA, idB, nameA, nameB) {
   `;
 }
 
+// ── Tournament history ────────────────────────────────────────────────────
+async function loadTournamentHistory() {
+  const loading = document.getElementById('tournamentHistLoading');
+  const body    = document.getElementById('tournamentHistBody');
+  try {
+    const history = await fetch(`${API}/api/tournament/history`).then(r => r.json());
+    loading.style.display = 'none';
+    if (!history || !history.length) {
+      body.innerHTML = '<div class="cmp-empty">No tournaments played yet.</div>';
+      body.style.display = '';
+      return;
+    }
+    const fmtLabel = { round_robin: 'Round Robin', gauntlet: 'Gauntlet', match: 'Match' };
+    body.innerHTML = history.map(t => {
+      const date    = (t.finished_at || t.started_at || '').slice(0, 10);
+      const players = (t.player_names || []).join(', ');
+      const games   = t.total_games || '?';
+      return `<div class="th-row">
+        <span class="th-format">${fmtLabel[t.format] || t.format}</span>
+        <span class="th-winner">${escHtml(t.winner_name || '—')}</span>
+        ${t.title ? `<span class="th-title">"${escHtml(t.title)}"</span>` : ''}
+        <span class="th-players">${escHtml(players)}</span>
+        <span class="th-meta">${games}g · ${date}</span>
+      </div>`;
+    }).join('');
+    body.style.display = '';
+  } catch(e) {
+    loading.textContent = 'Failed to load tournament history';
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────
-Promise.all([initCompare(), loadEloCharts(), loadQuality(), loadColorStats(), loadH2H()]);
+Promise.all([initCompare(), loadEloCharts(), loadQuality(), loadColorStats(), loadH2H(), loadTournamentHistory()]);
 </script>
 
 <!-- ── Model card modal ───────────────────────────────────────────────── -->
