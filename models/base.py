@@ -27,10 +27,11 @@ class PlayerConfig:
 
 @dataclass
 class MoveDecision:
-    move_uci: str           # Chosen move in UCI format (e.g. "e2e4")
-    reasoning: str          # Model's explanation
-    candidate_rank: int     # Which candidate was chosen (1 = Stockfish's top pick)
-    raw_response: str       # Full model output for logging
+    move_uci: str                  # Chosen move in UCI format (e.g. "e2e4")
+    reasoning: str                 # Model's explanation
+    candidate_rank: int            # Which candidate was chosen (1 = Stockfish's top pick)
+    raw_response: str              # Full model output for logging
+    thinking_content: str = ""     # Extracted <think>…</think> block, if any
 
 
 class ChessPlayer(ABC):

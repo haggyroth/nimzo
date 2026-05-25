@@ -138,13 +138,13 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 ---
 
 ## Phase 10 — Qwen & Model-Specific Handling
-*Research needed*
+*v10 release*
 
-- [ ] **Deep Qwen thinking audit**: determine whether LM Studio actually honours `enable_thinking: false` in `extra_body`, or whether the model still thinks regardless; instrument with response timing and token counts
-- [ ] **`/no_think` token injection**: Qwen3's documented method to disable thinking is prepending `/no_think` as the first token of the system prompt — implement as a fallback if `enable_thinking: false` is insufficient
-- [ ] **Per-model configuration profiles**: a `model_profiles.json` or DB table storing model-specific flags (e.g. `force_no_think: true`, `thinking_budget_tokens: 800`, `max_tokens_override: 2048`) — applied automatically when a matching model ID is detected
-- [ ] **Thinking budget control**: when thinking IS enabled, expose a `budget_tokens` setting rather than just a boolean toggle; avoids models spending 10k tokens reasoning about a straightforward recapture
-- [ ] **Reasoning extraction**: for models that output `<think>…</think>` blocks, surface the thinking content in the viewer as an expandable section per move rather than discarding it
+- [x] **Deep Qwen thinking audit**: instrument API calls with elapsed time + token counts; warn to console when `<think>` blocks appear or timing/token heuristics suggest thinking is active despite `enable_thinking=false`
+- [x] **`/no_think` token injection**: belt-and-suspenders approach — prepend `/no_think\n` to the system prompt when `no_think_prefix: true` in the model profile and thinking is disabled
+- [x] **Per-model configuration profiles**: `model_profiles.json` at project root with match-based profiles (Qwen, DeepSeek, Llama); loaded via `models/model_profiles.py`; controls `no_think_prefix`, `thinking_budget_tokens`, `max_tokens_thinking`, `max_tokens_default`
+- [x] **Thinking budget control**: when thinking IS enabled and profile specifies `thinking_budget_tokens`, passed as `thinking_budget` in `extra_body` (LM Studio) or `budget_tokens` in the `thinking` dict (Anthropic)
+- [x] **Reasoning extraction**: `<think>…</think>` blocks extracted from raw output, stored in `moves.thinking_content` DB column, broadcast in `move` WS event, and surfaced in viewer as a collapsible "🧠 thinking" section per move card
 
 ---
 
