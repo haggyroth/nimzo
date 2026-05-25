@@ -788,6 +788,12 @@
     .mc-qbar-legend .lb-mistake    ::before { background: #c46d3a; }
     .mc-qbar-legend .lb-blunder    ::before { background: #b04a3a; }
 
+    .mc-profile {
+      font-size: 10px; color: var(--text-mid); line-height: 1.6;
+      padding: 8px 10px; background: var(--bg-raised);
+      border-left: 2px solid var(--gold); border-radius: 2px;
+      margin-bottom: 4px; white-space: pre-wrap;
+    }
     .mc-lesson {
       padding: 6px 0; border-bottom: 1px dashed var(--border);
       font-size: 10px; color: var(--text-mid); line-height: 1.45;
@@ -2029,6 +2035,11 @@ function renderModelCard(p) {
             </div>`;
   }).join('') || `<div class="mc-no-traits">No lessons yet.</div>`;
 
+  // Strategic profile — rendered as formatted text if present
+  const profileHtml = p.strategic_profile
+    ? `<div class="mc-profile">${escHtml(p.strategic_profile).replace(/\n/g,'<br>')}</div>`
+    : null;
+
   const fmtScore = (w, d, t) => t ? `${(((w + 0.5*d)/t)*100).toFixed(0)}%` : '—';
 
   document.getElementById('mcBody').innerHTML = `
@@ -2076,8 +2087,11 @@ function renderModelCard(p) {
     <div class="mc-section-head">Personality</div>
     ${traits}
 
-    <div class="mc-section-head">Recent lessons</div>
-    ${lessons}
+    ${profileHtml
+      ? `<div class="mc-section-head">Strategic profile</div>${profileHtml}
+         <div class="mc-section-head">Recent lessons</div>${lessons}`
+      : `<div class="mc-section-head">Coach notes</div>${lessons}`
+    }
   `;
 }
 

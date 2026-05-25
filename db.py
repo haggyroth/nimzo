@@ -103,6 +103,11 @@ def _migrate(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE players ADD COLUMN portrait_path TEXT")
     except sqlite3.OperationalError:
         pass  # already exists
+    # Add strategic_profile column if missing (lesson compression)
+    try:
+        conn.execute("ALTER TABLE players ADD COLUMN strategic_profile TEXT")
+    except sqlite3.OperationalError:
+        pass  # already exists
 
 
 # ── Players ──────────────────────────────────────────────────────────────
@@ -169,6 +174,54 @@ def set_portrait_path(model_id: str, path: str) -> None:
             "UPDATE players SET portrait_path = ? WHERE model_id = ?",
             (path, model_id),
         )
+
+
+def get_strategic_profile(model_id: str) -> Optional[str]:
+    """Return the compressed strategic profile for a player, or None."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT strategic_profile FROM players WHERE model_id = ?", (model_id,)
+        ).fetchone()
+        return row["strategic_profile"] if row else None
+
+
+def set_strategic_profile(model_id: str, profile: str) -> None:
+    """Persist a tutor-compressed strategic profile for a player."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE players SET strategic_profile = ? WHERE model_id = ?",
+            (profile, model_id),
+        )
+
+
+def get_all_raw_lessons(model_id: str) -> list[dict]:
+    """Return every recorded lesson for a player, oldest-first."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT l.lesson, COALESCE(l.lesson_type, 'improve') AS lesson_type
+            FROM lessons l
+            JOIN players p ON l.player_id = p.id
+            WHERE p.model_id = ?
+            ORDER BY l.id ASC
+            """,
+            (model_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_lesson_count(model_id: str) -> int:
+    """Total lessons ever recorded for a player."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt FROM lessons l
+            JOIN players p ON l.player_id = p.id
+            WHERE p.model_id = ?
+            """,
+            (model_id,),
+        ).fetchone()
+        return row["cnt"] if row else 0
 
 
 # ── Games ────────────────────────────────────────────────────────────────
@@ -609,9 +662,12 @@ def get_model_profile(model_id: str) -> dict | None:
                 "kingside":  sum(1 for r in castle_rows if r["move_san"] == "O-O"),
                 "queenside": sum(1 for r in castle_rows if r["move_san"] == "O-O-O"),
             },
-            "color":          dict(color)        if color        else {},
-            "games":          dict(game_summary) if game_summary else {},
-            "recent_lessons": [dict(r) for r in recent_lessons],
+            "color":            dict(color)        if color        else {},
+            "games":            dict(game_summary) if game_summary else {},
+            "recent_lessons":   [dict(r) for r in recent_lessons],
+            "strategic_profile": conn.execute(
+                "SELECT strategic_profile FROM players WHERE id = ?", (pid,)
+            ).fetchone()["strategic_profile"],
         }
 
 

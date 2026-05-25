@@ -154,6 +154,51 @@ STRENGTH:
 
 Be concrete. One line per bullet. Do not write more than two bullets per section."""
 
+# Lighter prompt for draws — still useful signal but lower stakes
+_DRAW_LESSON_TEMPLATE = """Game result: Draw ({termination})
+Player: {player_name} ({player_color})
+{opening_line}
+Move quality summary:
+{quality_summary}
+
+Write ONE coaching note for {player_name} in EXACTLY this format (no preamble):
+
+IMPROVE:
+- <the single most important moment to improve — reference the move>
+
+STRENGTH:
+- <one thing done well>
+
+One bullet each. Be specific."""
+
+# Compression prompt — consolidates many raw lessons into a strategic profile
+_COMPRESSION_TEMPLATE = """You are reviewing {player_name}'s coaching history across {game_count} chess games.
+
+All lessons recorded so far:
+
+AREAS TO IMPROVE:
+{improve_lessons}
+
+CONSISTENT STRENGTHS:
+{strength_lessons}
+
+Distill these into a concise strategic profile. Remove duplicates and contradictions. \
+Identify the 2–4 most persistent weaknesses and 1–3 most reliable strengths.
+
+Write in EXACTLY this format (no preamble):
+
+WEAKNESSES:
+- <core persistent weakness #1>
+- <core persistent weakness #2>
+(up to 4 — only include if clearly recurring)
+
+STRENGTHS:
+- <core consistent strength #1>
+(up to 3 — only include if clearly recurring)
+
+Each bullet must be a concrete, actionable chess principle, not vague praise. \
+Do not include one-off observations that appeared in only one game."""
+
 
 # ── Backend callers ───────────────────────────────────────────────────────
 
@@ -243,13 +288,26 @@ def generate_lessons(
     quality_summary: str,
     tutor: Optional[TutorConfig] = None,
     opening: Optional[tuple[str, str]] = None,   # (eco_code, name) or None
+    is_draw: bool = False,
+    skip_if_clean_draw: bool = True,
 ) -> dict[str, list[str]]:
     """
     Generate lessons for one player from a completed game.
-    Returns {"improve": [...], "strength": [...]} — empty lists if no tutor configured.
+
+    Draws use a shorter single-bullet prompt. A draw with no blunders or
+    mistakes produces very weak coaching signal — ``skip_if_clean_draw=True``
+    (the default) returns empty lists rather than generating noise.
+
+    Returns {"improve": [...], "strength": [...]} — empty lists if no tutor
+    configured or if the game is a clean draw.
     """
     if tutor is None or not tutor.model_id:
         return {"improve": [], "strength": []}
+
+    # Skip lesson generation for draws with clean play — no useful signal
+    if is_draw and skip_if_clean_draw:
+        if "blunder" not in quality_summary and "mistake" not in quality_summary:
+            return {"improve": [], "strength": []}
 
     if result == "1-0":
         outcome = "won" if player_color == "White" else "lost"
@@ -263,7 +321,9 @@ def generate_lessons(
         if opening else ""
     )
 
-    prompt = _LESSON_TEMPLATE.format(
+    # Draws with some mistakes get a lighter prompt; decisive games get the full one
+    template = _DRAW_LESSON_TEMPLATE if is_draw else _LESSON_TEMPLATE
+    prompt = template.format(
         result=result,
         termination=termination,
         player_name=player_name,
@@ -279,13 +339,61 @@ def generate_lessons(
             raw = _call_anthropic(tutor, prompt)
         else:
             raw = _call_lmstudio(tutor, prompt)
-        result = _parse_lessons(raw)
-        if not result["improve"] and not result["strength"]:
+        lessons = _parse_lessons(raw)
+        if not lessons["improve"] and not lessons["strength"]:
             print(f"  ⚠  Tutor returned no parseable lessons. Raw response:\n{raw[:600]}")
-        return result
+        return lessons
     except Exception as e:
         print(f"  ⚠  Lesson generation failed ({tutor.backend}/{tutor.model_id}): {e}")
         return {"improve": [], "strength": []}
+
+
+def compress_lessons(
+    all_lessons: list[dict],   # [{"lesson": str, "lesson_type": "improve"|"strength"}, ...]
+    player_name: str,
+    game_count: int,
+    tutor: Optional[TutorConfig] = None,
+) -> Optional[str]:
+    """
+    Ask the tutor to distil all recorded lessons into a strategic profile.
+
+    Returns the raw profile text on success, None if no tutor or the call fails.
+    The profile is stored in the DB and injected into the player's system prompt
+    instead of the raw lesson list, preventing context bloat.
+    """
+    if tutor is None or not tutor.model_id:
+        return None
+    if not all_lessons:
+        return None
+
+    improve = [l["lesson"] for l in all_lessons if l.get("lesson_type") == "improve"]
+    strength = [l["lesson"] for l in all_lessons if l.get("lesson_type") == "strength"]
+
+    if not improve and not strength:
+        return None
+
+    improve_text  = "\n".join(f"- {l}" for l in improve)  or "(none recorded)"
+    strength_text = "\n".join(f"- {l}" for l in strength) or "(none recorded)"
+
+    prompt = _COMPRESSION_TEMPLATE.format(
+        player_name=player_name,
+        game_count=game_count,
+        improve_lessons=improve_text,
+        strength_lessons=strength_text,
+    )
+
+    try:
+        if tutor.backend == "anthropic":
+            raw = _call_anthropic(tutor, prompt)
+        else:
+            raw = _call_lmstudio(tutor, prompt)
+        raw = raw.strip()
+        if raw:
+            print(f"  🗜  Compressed {len(all_lessons)} lessons → strategic profile for {player_name}")
+        return raw or None
+    except Exception as e:
+        print(f"  ⚠  Lesson compression failed ({tutor.backend}/{tutor.model_id}): {e}")
+        return None
 
 
 ACHIEVEMENT_CATALOGUE: dict[str, dict] = {

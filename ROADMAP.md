@@ -104,10 +104,10 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 ## Phase 7 — Smarter Lessons
 *Future*
 
-- [ ] **Lesson compression / strategic profile**: every N games, tutor consolidates the raw lesson list into 5–8 distilled principles per model — prevents context bloat, stops the same lesson from appearing 6 different ways; profile evolves rather than accumulates
-- [ ] **Opening awareness**: ECO code + opening name passed to lesson prompt (prerequisite for Phase 4 opening detection item)
+- [x] **Lesson compression / strategic profile**: every 5 games once 10+ lessons are stored, tutor distils all raw lessons into a strategic profile (2–4 persistent weaknesses, 1–3 consistent strengths); profile replaces the raw list in the system prompt (+ 3 most recent lessons for recency); displayed in model card under "Strategic profile"
+- [x] **Opening awareness**: ECO code + opening name passed to lesson prompt — "In the Sicilian Najdorf, your knight retreat on move 14 ignored the standard d5 break"
 - [ ] **Lesson effectiveness tracking**: correlate lesson topics with subsequent quality improvements — did the coaching actually work?
-- [ ] **Draw lesson handling**: draws produce weaker coaching signal; lighter lesson prompt or skip entirely (open question)
+- [x] **Draw lesson handling**: draws with clean play (no blunders/mistakes) skip lesson generation entirely; draws with errors use a lighter single-bullet prompt
 
 ---
 

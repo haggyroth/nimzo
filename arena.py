@@ -43,6 +43,7 @@ from analysis import (
     TutorConfig,
     calculate_elos,
     generate_lessons,
+    compress_lessons,
     build_quality_summary,
     detect_opening,
     detect_opening_depth,
@@ -740,6 +741,7 @@ async def play_game(
     })
 
     # ── Lessons for both players ───────────────────────────────────────
+    is_draw = result == "1/2-1/2"
     for player, color, qualities in [
         (white, "White", move_qualities_white),
         (black, "Black", move_qualities_black),
@@ -754,6 +756,7 @@ async def play_game(
             quality_summary=quality_summary,
             tutor=tutor,
             opening=opening,
+            is_draw=is_draw,
         )
 
         if lessons["improve"] or lessons["strength"]:
@@ -778,6 +781,21 @@ async def play_game(
                 print(f"    ↑ improve: {l}")
             for l in lessons["strength"]:
                 print(f"    ★ strength: {l}")
+
+        # ── Lesson compression: every 5 games once threshold is reached ──
+        # Trigger: game count divisible by 5, and at least 10 lessons stored.
+        # Runs in executor to avoid blocking the event loop.
+        game_count = database.get_player_game_count(player.config.model_id)
+        lesson_count = database.get_lesson_count(player.config.model_id)
+        if tutor and tutor.model_id and game_count >= 5 and game_count % 5 == 0 and lesson_count >= 10:
+            print(f"  🗜  Compressing {lesson_count} lessons for {player.config.name} (game #{game_count})…")
+            all_lessons = database.get_all_raw_lessons(player.config.model_id)
+            profile = await loop.run_in_executor(
+                None, compress_lessons, all_lessons, player.config.name, game_count, tutor
+            )
+            if profile:
+                database.set_strategic_profile(player.config.model_id, profile)
+                player.config.strategic_profile = profile
 
     return {
         "game_id":     game_id,
@@ -847,6 +865,7 @@ def build_player(
         base_url=base_url,
         enable_thinking=enable_thinking,
         lesson_memory=database.get_player_lessons(model_id) if db_exists else [],
+        strategic_profile=database.get_strategic_profile(model_id) if db_exists else None,
     )
     if backend == "anthropic":
         player = AnthropicPlayer(config)

@@ -22,6 +22,7 @@ class PlayerConfig:
     enable_thinking: bool = False      # Extended thinking (Qwen3, etc.)
     system_prompt: str = ""            # Optional override (rarely needed)
     lesson_memory: list[str] = field(default_factory=list)
+    strategic_profile: Optional[str] = None   # Compressed multi-game coaching profile
 
 
 @dataclass
@@ -104,10 +105,38 @@ Do not suggest any move not in the list above."""
         if self.config.system_prompt:
             base = f"{base}\n\n{self.config.system_prompt}"
 
+        # ── Strategic profile (compressed) ───────────────────────────────
+        # When a tutor-compressed profile exists, use it as the primary
+        # coaching context.  Append the 3 most-recent raw lessons alongside
+        # for recency so very-recent feedback isn't buried.
+        if self.config.strategic_profile:
+            profile_block = (
+                "Your strategic profile (distilled from all your games):\n"
+                + self.config.strategic_profile
+            )
+
+            # Grab the 3 most recent individual lessons for recency context
+            recent: list[str] = []
+            for entry in reversed(self.config.lesson_memory[-6:]):
+                if entry.startswith("[improve]"):
+                    recent.append("↑ " + entry[len("[improve]"):].strip())
+                elif entry.startswith("[strength]"):
+                    recent.append("★ " + entry[len("[strength]"):].strip())
+                if len(recent) >= 3:
+                    break
+
+            if recent:
+                recent_block = (
+                    "Recent game notes:\n"
+                    + "\n".join(f"- {l}" for l in reversed(recent))
+                )
+                return f"{base}\n\n{profile_block}\n\n{recent_block}"
+            return f"{base}\n\n{profile_block}"
+
+        # ── Raw lesson list (no profile yet) ─────────────────────────────
         if not self.config.lesson_memory:
             return base
 
-        # Separate lessons by type (prefixed by loader in db.py)
         improve = []
         strength = []
         for entry in self.config.lesson_memory[-10:]:
