@@ -25,6 +25,20 @@ jobs:
       - name: Run ruff
         run: ruff check .
 
+  js-test:
+    name: JS unit tests (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run JS tests
+        run: node --test tests/test_viewer.js
+
   test:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest

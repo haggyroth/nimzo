@@ -129,7 +129,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 *v9 release*
 
 - [x] **Unit test suite** (`pytest`): 142 tests across ELO, dynamic K-factor, `_parse_lessons`, response parsing in both player backends, `build_quality_summary`, achievements, model profiles, metadata parsing, and DB operations
-- [ ] **JS unit tests**: `extractModelName`, `parseFen`, `uciToSquares`, `renderEvalGraph` — candidate for Vitest or a simple node test script
+- [x] **JS unit tests**: `extractModelName`, `parseFen`, `uciToSquares`, `buildSparkline`, `computeCaptures`, `escHtml` — 45 tests using Node's built-in `node:test` runner (zero npm dependencies); pure functions extracted to `js/viewer_utils.js`; JS test job added to CI
 - [x] **Mock clients**: `unittest.mock` + `pytest-mock` for LM Studio and Anthropic player tests; zero real API calls in CI
 - [x] **Test fixture library**: `tests/fixtures/pgns.py` (Scholar's mate, Fool's mate, stalemate, midgame resign, opening starts) and `tests/fixtures/positions.py` (FEN strings, candidate builders)
 - [x] **GitHub Actions CI**: `.github/workflows/ci.yml` — runs pytest + coverage on every push/PR to main; blocks merge on failure
