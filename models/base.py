@@ -29,6 +29,7 @@ class PlayerConfig:
     system_prompt: str = ""            # Optional override (rarely needed)
     move_timeout: int = 0              # Seconds per move, 0 = no limit
     style: str = ""                    # Play style: "aggressive" | "positional" | "defensive" | ""
+    blind_opening_moves: int = 0       # Withhold Stockfish candidates for this many full moves
     lesson_memory: list[str] = field(default_factory=list)
     strategic_profile: Optional[str] = None   # Compressed multi-game coaching profile
 
@@ -75,6 +76,19 @@ class ChessPlayer(ABC):
         color = "White" if board.turn == chess.WHITE else "Black"
         is_white = board.turn == chess.WHITE
         fen = board.fen()
+
+        # ── Blind mode: no candidates provided ───────────────────────────────
+        if not candidates:
+            return (
+                f"You are playing chess as {color}.\n\n"
+                f"Current position (FEN): {fen}\n\n"
+                f"Game so far (PGN):\n{game_history_pgn or '(game just started)'}\n\n"
+                "You are in the opening phase. No Stockfish candidates are provided — "
+                "play your best move from your chess knowledge.\n\n"
+                "Respond in this exact format:\n"
+                "MOVE: <UCI notation, e.g. e2e4>\n"
+                "REASONING: <1-2 sentences on why this move fits your opening plan>"
+            )
 
         candidate_lines = []
         for i, (move, score_cp) in enumerate(candidates, 1):

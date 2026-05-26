@@ -7,6 +7,7 @@ the viewer can show it in the move card.
 """
 
 import os
+import random
 import re
 import chess
 import anthropic
@@ -116,7 +117,12 @@ class AnthropicPlayer(ChessPlayer):
             except ValueError:
                 continue
 
-        # 4. Fallback
+        # 4. Fallback: random legal move in blind mode; Stockfish's top otherwise
+        if not candidates:
+            move = random.choice(list(board.legal_moves))
+            return MoveDecision(
+                move.uci(), "(parse failed — random legal move, blind mode)", 0, raw, thinking_content
+            )
         move, _ = candidates[0]
         return MoveDecision(
             move.uci(), "(parse failed — defaulted to top candidate)", 1, raw, thinking_content

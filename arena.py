@@ -678,6 +678,7 @@ class PlayerSpec(BaseModel):
     thinking: bool = False
     candidate_count: Optional[int] = None   # override default 5; None = use default
     style: str = ""                         # "aggressive" | "positional" | "defensive" | ""
+    blind_opening_moves: int = 0            # withhold Stockfish candidates for first N full moves
 
 
 # ── Active human player registry ─────────────────────────────────────────
@@ -718,6 +719,11 @@ class TournamentStartConfig(BaseModel):
     # Personality styles for 2-player mode
     white_style: str = ""          # "aggressive" | "positional" | "defensive" | ""
     black_style: str = ""
+    # Opening blind mode: withhold Stockfish candidates for first N full moves
+    white_blind_opening_moves: int = 0
+    black_blind_opening_moves: int = 0
+    # Turn cap: declare draw after this many half-moves (plies); 0 = no limit
+    max_moves: int = 0
     # Multi-player tournament fields (len >= 2 activates bracket mode)
     players: list[PlayerSpec] = []
     format: str = "round_robin"   # "round_robin" | "gauntlet"
@@ -765,7 +771,7 @@ async def api_start(config: TournamentStartConfig):
         players = [
             build_player(ps.backend, ps.name or ps.model_id.split("/")[-1].split("@")[0],
                          ps.model_id, ps.url, ps.thinking, move_timeout=config.move_timeout,
-                         style=ps.style)
+                         style=ps.style, blind_opening_moves=ps.blind_opening_moves)
             for ps in seeded
         ]
         pairings = generate_pairings(seeded, config.format, config.games_per_pair)
@@ -798,6 +804,7 @@ async def api_start(config: TournamentStartConfig):
                     tutor=tutor,
                     judge=judge,
                     adaptive_difficulty=config.adaptive_difficulty,
+                    max_moves=config.max_moves,
                 )
             except Exception as exc:
                 print(f"\n  Tournament ended: {type(exc).__name__}")
@@ -815,8 +822,8 @@ async def api_start(config: TournamentStartConfig):
         return {"ok": True}
 
     # ── Classic 2-player match mode ───────────────────────────────────
-    white = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking, move_timeout=config.move_timeout, style=config.white_style)
-    black = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking, move_timeout=config.move_timeout, style=config.black_style)
+    white = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking, move_timeout=config.move_timeout, style=config.white_style, blind_opening_moves=config.white_blind_opening_moves)
+    black = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking, move_timeout=config.move_timeout, style=config.black_style, blind_opening_moves=config.black_blind_opening_moves)
 
     # Register any human players so /api/human-move can reach them.
     _active_human_players.clear()
@@ -844,7 +851,7 @@ async def api_start(config: TournamentStartConfig):
 
     async def _run_and_catch():
         try:
-            await run_tournament(white, black, config.games, tutor, judge, adaptive_difficulty=config.adaptive_difficulty)
+            await run_tournament(white, black, config.games, tutor, judge, adaptive_difficulty=config.adaptive_difficulty, max_moves=config.max_moves)
         except Exception as exc:
             # Absorb any stray exceptions (e.g. engine death on Ctrl+C,
             # a model timeout, etc) so the task doesn't surface as

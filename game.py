@@ -17,6 +17,7 @@ from __future__ import annotations  # PEP 563 — all annotations are strings at
 
 import asyncio
 import itertools
+import random
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -184,6 +185,7 @@ async def play_game(
     tutor: TutorConfig | None = None,
     judge: JudgeConfig | None = None,
     adaptive_difficulty: bool = False,
+    max_moves: int = 500,
 ) -> dict:
     """
     Run a single game between two players and return a result dict.
@@ -191,6 +193,14 @@ async def play_game(
     Broadcasts ``thinking``, ``move``, and ``game_over`` WebSocket events
     during play.  After the game, optionally generates tutor lessons for the
     loser and coherence scores for each move via the judge model.
+
+    ``max_moves`` caps the game at that many half-moves (plies); the game is
+    declared a draw with termination ``"move limit reached"`` if exceeded.
+
+    Players with ``config.blind_opening_moves > 0`` have Stockfish candidates
+    withheld for the first N full moves; the model must choose freely from its
+    chess knowledge and the fallback on parse failure is a random legal move.
+
     Returns a dict with keys: result, termination, pgn, white_elo_before/after,
     black_elo_before/after, and per-move quality/coherence data.
     """
@@ -223,7 +233,15 @@ async def play_game(
 
     loop = asyncio.get_running_loop()
 
+    # Sentinel so the post-loop code knows *why* we exited
+    move_limit_hit = False
+
     while not board.is_game_over():
+        # ── Turn cap ──────────────────────────────────────────────────────
+        if board.ply() >= max_moves:
+            move_limit_hit = True
+            break
+
         # Pause / stop checks
         await _arena._pause_event.wait()
         if _arena._stop_requested:
@@ -231,7 +249,16 @@ async def play_game(
 
         current_player = white if board.turn == chess.WHITE else black
 
-        # Run blocking Stockfish call in thread pool so event loop stays free
+        # ── Blind-opening detection ───────────────────────────────────────
+        # board.fullmove_number counts full moves (1 after 1.e4, 2 after 1.e4 e5, etc.)
+        is_blind = (
+            current_player.config.blind_opening_moves > 0
+            and board.fullmove_number <= current_player.config.blind_opening_moves
+        )
+
+        # Run blocking Stockfish call in thread pool so event loop stays free.
+        # We always fetch candidates so move-quality evaluation still works even in
+        # blind mode; the list is simply withheld from the model prompt.
         try:
             candidates = await loop.run_in_executor(
                 None, stockfish.get_candidates, board, current_player.config.candidate_count
@@ -253,42 +280,50 @@ async def play_game(
             "player": current_player.config.name,
             "color": "white" if board.turn == chess.WHITE else "black",
             "fen": board.fen(),
-            "candidates": [
+            # In blind mode the viewer gets an empty candidate list so arrows/
+            # ranked moves are not shown — matching the model's information.
+            "candidates": [] if is_blind else [
                 {"uci": m.uci(), "san": board.san(m), "score_cp": s}
                 for m, s in candidates
             ],
             "is_human_turn": is_human,
+            "is_blind_move": is_blind,
             "legal_uci": current_player.get_legal_uci_moves() if is_human else [],
         })
+
+        # Model receives empty candidate list in blind mode
+        model_candidates = [] if is_blind else candidates
 
         # Run blocking model API call in thread pool — this is the main blocker
         timed_out = False
         timeout_secs = current_player.config.move_timeout or None
         try:
             coro = loop.run_in_executor(
-                None, current_player.choose_move, board, candidates, pgn_so_far
+                None, current_player.choose_move, board, model_candidates, pgn_so_far
             )
             decision = await asyncio.wait_for(coro, timeout=timeout_secs)
         except asyncio.TimeoutError:
-            print(f"  ⏱  {current_player.config.name} timed out after {timeout_secs}s — top candidate used")
+            print(f"  ⏱  {current_player.config.name} timed out after {timeout_secs}s — {'random (blind)' if is_blind else 'top candidate used'}")
+            fallback_move = random.choice(list(board.legal_moves)) if is_blind else candidates[0][0]
             decision = MoveDecision(
-                move_uci=candidates[0][0].uci(),
-                reasoning=f"(timed out after {timeout_secs}s — fell back to top candidate)",
-                candidate_rank=1,
+                move_uci=fallback_move.uci(),
+                reasoning=f"(timed out after {timeout_secs}s — fell back to {'random move' if is_blind else 'top candidate'})",
+                candidate_rank=0 if is_blind else 1,
                 raw_response="",
             )
             timed_out = True
         except Exception as exc:
             # Model was unloaded, connection dropped, or API error mid-inference.
-            # If a stop was requested, honour it cleanly; otherwise fall back to
-            # Stockfish's top candidate so the game can continue.
+            # If a stop was requested, honour it cleanly; otherwise fall back so
+            # the game can continue.
             if _arena._stop_requested:
                 raise _arena.TournamentAborted()
-            print(f"  ⚠  {current_player.config.name} API error ({type(exc).__name__}): {exc} — falling back to top candidate")
+            fallback_move = random.choice(list(board.legal_moves)) if is_blind else candidates[0][0]
+            print(f"  ⚠  {current_player.config.name} API error ({type(exc).__name__}): {exc} — falling back to {'random move' if is_blind else 'top candidate'}")
             decision = MoveDecision(
-                move_uci=candidates[0][0].uci(),
-                reasoning="(API error — fell back to top candidate)",
-                candidate_rank=1,
+                move_uci=fallback_move.uci(),
+                reasoning=f"(API error — fell back to {'random move' if is_blind else 'top candidate'})",
+                candidate_rank=0 if is_blind else 1,
                 raw_response="",
             )
 
@@ -297,7 +332,8 @@ async def play_game(
 
         chosen_move  = chess.Move.from_uci(decision.move_uci)
         if chosen_move not in board.legal_moves:
-            chosen_move = candidates[0][0]
+            # Fallback of last resort — should be rare; mirrors the blind/guided logic
+            chosen_move = random.choice(list(board.legal_moves)) if is_blind else candidates[0][0]
 
         quality  = stockfish.evaluate_move_quality(board, chosen_move, candidates)
         san      = board.san(chosen_move)
@@ -347,6 +383,7 @@ async def play_game(
             "fen_after":      board.fen(),
             "coherence_score": coherence_score,
             "timed_out":      timed_out,
+            "is_blind_move":  is_blind,
         })
 
         await _arena.broadcast({
@@ -362,6 +399,7 @@ async def play_game(
             "thinking_content": decision.thinking_content,
             "coherence_score": coherence_score,
             "timed_out":      timed_out,
+            "is_blind_move":  is_blind,
             "score_cp_white": score_cp_white,
             "fen":            board.fen(),
         })
@@ -370,12 +408,16 @@ async def play_game(
             await asyncio.sleep(0.05)   # pacing for live viewer
 
     # ── Game over ──────────────────────────────────────────────────────
-    result      = board.result()
-    termination = (
-        "checkmate" if board.is_checkmate()
-        else "stalemate" if board.is_stalemate()
-        else "draw"
-    )
+    if move_limit_hit:
+        result      = "1/2-1/2"
+        termination = "move limit reached"
+    else:
+        result      = board.result()
+        termination = (
+            "checkmate" if board.is_checkmate()
+            else "stalemate" if board.is_stalemate()
+            else "draw"
+        )
 
     game.headers["Result"] = result
     pgn_string = str(game)
@@ -592,6 +634,7 @@ async def run_bracket_tournament(
     tutor: TutorConfig | None = None,
     judge: JudgeConfig | None = None,
     adaptive_difficulty: bool = False,
+    max_moves: int = 0,
 ):
     """
     Drive a multi-player round-robin or gauntlet tournament.
@@ -653,7 +696,7 @@ async def run_bracket_tournament(
 
             print(f"\n♟  Game {actual_idx}/{total}: {white.config.name} (W) vs {black.config.name} (B)")
             try:
-                summary = await play_game(white, black, stockfish, actual_idx, tutor, judge, adaptive_difficulty=adaptive_difficulty)
+                summary = await play_game(white, black, stockfish, actual_idx, tutor, judge, adaptive_difficulty=adaptive_difficulty, max_moves=max_moves or 500)
             except _arena.TournamentAborted:
                 print("\n  Tournament stopped by user.")
                 database.abort_tournament(tournament_id)
@@ -748,6 +791,7 @@ async def run_tournament(
     tutor: TutorConfig | None = None,
     judge: JudgeConfig | None = None,
     adaptive_difficulty: bool = False,
+    max_moves: int = 0,
 ):
     """
     Drive a 2-player match of ``n_games`` games, alternating colours each game.
@@ -767,7 +811,7 @@ async def run_tournament(
 
             print(f"\n♟  Game {i}/{n_games}: {white.config.name} (W) vs {black.config.name} (B)")
             try:
-                summary = await play_game(white, black, stockfish, i, tutor, judge, adaptive_difficulty=adaptive_difficulty)
+                summary = await play_game(white, black, stockfish, i, tutor, judge, adaptive_difficulty=adaptive_difficulty, max_moves=max_moves or 500)
             except _arena.TournamentAborted:
                 print("\n  Tournament stopped by user.")
                 break
@@ -801,6 +845,7 @@ def build_player(
     candidate_count: int | None = None,
     move_timeout: int = 0,
     style: str = "",
+    blind_opening_moves: int = 0,
 ) -> ChessPlayer:
     """
     Construct the correct ``ChessPlayer`` subclass for the given backend.
@@ -820,6 +865,7 @@ def build_player(
         candidate_count=candidate_count if candidate_count is not None else 5,
         move_timeout=move_timeout,
         style=style,
+        blind_opening_moves=blind_opening_moves,
         lesson_memory=database.get_player_lessons(model_id) if db_exists else [],
         strategic_profile=database.get_strategic_profile(model_id) if db_exists else None,
     )

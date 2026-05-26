@@ -1424,3 +1424,25 @@
       flex: 1;
       accent-color: var(--border-hi);
     }
+
+    /* ── Blind-mode indicators (Phase 20) ────────────────────────── */
+    /* Badge on the .p-think row while the model is in blind opening */
+    .blind-badge {
+      font-size: 7px;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      padding: 1px 4px;
+      border-radius: 2px;
+      background: rgba(180,100,200,.2);
+      color: #c87de8;
+      border: 1px solid rgba(180,100,200,.35);
+      margin-left: 5px;
+    }
+    /* Chip in the move history card */
+    .move-blind {
+      font-size: 8px;
+      letter-spacing: .6px;
+      color: #c87de8;
+      opacity: .8;
+      margin-left: 4px;
+    }

@@ -10,6 +10,7 @@ Model-specific behaviour is controlled by model_profiles.json:
 """
 
 import os
+import random
 import re
 import time
 import chess
@@ -171,7 +172,12 @@ class LMStudioPlayer(ChessPlayer):
             except ValueError:
                 continue
 
-        # 4. Fallback to Stockfish's top candidate
+        # 4. Fallback: random legal move in blind mode; Stockfish's top otherwise
+        if not candidates:
+            move = random.choice(list(board.legal_moves))
+            return MoveDecision(
+                move.uci(), "(parse failed — random legal move, blind mode)", 0, raw, thinking_content
+            )
         move, _ = candidates[0]
         return MoveDecision(
             move.uci(), "(parse failed — defaulted to top candidate)", 1, raw, thinking_content

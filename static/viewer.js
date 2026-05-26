@@ -705,6 +705,7 @@ function addMoveCard(data) {
     coherenceHtml = `<span class="move-coherence ${cls}" title="Reasoning coherence score">🎯 ${cs}/10</span>`;
   }
   const timeoutHtml = data.timed_out ? `<span class="move-timeout" title="Model timed out">⏱ timeout</span>` : '';
+  const blindHtml   = data.is_blind_move ? `<span class="move-blind" title="Opening blind move — no Stockfish candidates provided">🎭 blind</span>` : '';
 
   const card = document.createElement('div');
   card.className = `move-card ${q}`;
@@ -713,9 +714,9 @@ function addMoveCard(data) {
       <span class="move-num-label">${label}</span>
       <span class="move-san-text">${escHtml(data.san)}</span>
       <span class="move-badge ${q}">${q}</span>
-      ${coherenceHtml}${timeoutHtml}
+      ${coherenceHtml}${timeoutHtml}${blindHtml}
     </div>
-    ${rankStr ? `<div class="move-rank-text">${rankStr}</div>` : ''}
+    ${rankStr && !data.is_blind_move ? `<div class="move-rank-text">${rankStr}</div>` : ''}
     ${showReason ? `<div class="move-reason">${escHtml(data.reasoning)}</div>` : ''}
     ${showThink ? `<span class="move-think-toggle">🧠 thinking</span><div class="move-think-body">${escHtml(data.thinking_content.trim())}</div>` : ''}`;
 
@@ -1003,9 +1004,12 @@ async function startTournament() {
     tutor_backend:   tutorBackend==='none' ? 'lmstudio' : tutorBackend,
     tutor_model:     tutorModel,
     tutor_url:       tutorUrl || DEFAULT_LMSTUDIO_URL,
-    games:           parseInt(document.getElementById('gamesCount').value) || 10,
-    human_assisted:  document.getElementById('humanAssisted') ? document.getElementById('humanAssisted').checked : true,
-    adaptive_difficulty: document.getElementById('adaptiveDifficulty') ? document.getElementById('adaptiveDifficulty').checked : false,
+    games:                    parseInt(document.getElementById('gamesCount').value) || 10,
+    human_assisted:           document.getElementById('humanAssisted') ? document.getElementById('humanAssisted').checked : true,
+    adaptive_difficulty:      document.getElementById('adaptiveDifficulty') ? document.getElementById('adaptiveDifficulty').checked : false,
+    white_blind_opening_moves: parseInt(document.getElementById('whiteBlindMoves')?.value) || 0,
+    black_blind_opening_moves: parseInt(document.getElementById('blackBlindMoves')?.value) || 0,
+    max_moves:                parseInt(document.getElementById('maxMoves')?.value) || 0,
   };
 
   const res = await fetch(`${API}/api/tournament/start`, {
@@ -1309,6 +1313,7 @@ function onThinking(d) {
   gameState.fen        = d.fen || gameState.fen;
   gameState.thinking   = d.color;
   gameState.candidates = d.candidates || [];
+  gameState.isBlindMove = !!d.is_blind_move;
   if (d.color==='white' && d.player) gameState.white.name = d.player;
   if (d.color==='black' && d.player) gameState.black.name = d.player;
 
@@ -1321,16 +1326,29 @@ function onThinking(d) {
   const banner = document.getElementById('humanTurnBanner');
   if (banner) banner.classList.toggle('show', gameState.isHumanTurn);
 
-  // Draw candidate arrows (clear old ones first)
+  // Show/hide blind-mode indicator on the active player's thinking row
+  const thinkEl = document.getElementById(d.color === 'white' ? 'thinkWhite' : 'thinkBlack');
+  if (thinkEl) {
+    const badge = thinkEl.querySelector('.blind-badge');
+    if (d.is_blind_move) {
+      if (!badge) thinkEl.insertAdjacentHTML('beforeend', '<span class="blind-badge">BLIND</span>');
+    } else {
+      if (badge) badge.remove();
+    }
+  }
+
+  // Draw candidate arrows (clear old ones first; skip in blind mode — no arrows)
   if (_cmcb.ready && _cmcb.board) {
     _cmcb.board.removeArrows();
-    (gameState.candidates || []).forEach((cand, i) => {
-      const uci = cand.uci || cand.move || '';
-      if (uci.length >= 4) {
-        const from = uci.slice(0, 2), to = uci.slice(2, 4);
-        _cmcb.board.addArrow(i === 0 ? _cmcb.ARROW_TYPE.default : _cmcb.ARROW_TYPE.secondary, from, to);
-      }
-    });
+    if (!d.is_blind_move) {
+      (gameState.candidates || []).forEach((cand, i) => {
+        const uci = cand.uci || cand.move || '';
+        if (uci.length >= 4) {
+          const from = uci.slice(0, 2), to = uci.slice(2, 4);
+          _cmcb.board.addArrow(i === 0 ? _cmcb.ARROW_TYPE.default : _cmcb.ARROW_TYPE.secondary, from, to);
+        }
+      });
+    }
   }
 
   updatePlayers(); updateAnalysis(); _cmcbRender(false);
