@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import time
+from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
@@ -99,7 +100,7 @@ async def api_generate_portrait(model_id: str):
 
     # Return cached path without regenerating
     existing = database.get_portrait_path(model_id)
-    if existing and (from_path := __import__("pathlib").Path(existing)).exists():
+    if existing and Path(existing).exists():
         return {"portrait_url": f"/{existing}"}
 
     api_key = os.environ.get("GOOGLE_API_KEY", "")

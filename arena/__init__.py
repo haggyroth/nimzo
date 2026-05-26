@@ -13,23 +13,24 @@ Import order is critical for the arena ↔ game.py circular import:
 from __future__ import annotations
 
 # ── 1. State symbols — must come before anything that imports game.py ─────
+# `name as name` syntax marks these as intentional re-exports (suppresses F401)
 from arena.state import (          # noqa: E402
-    broadcast,
-    _state,
-    _pause_event,
-    _stop_requested,
-    TournamentAborted,
-    _active_human_players,
-    _headless,
-    _connected_clients,
-    _tournament_task,
-    _cli_config,
-    _DEFAULT_PORT,
-    _DEFAULT_LMSTUDIO_URL,
-    _DEFAULT_LMSTUDIO_URL_2,
-    _PORTRAIT_COOLDOWN_S,
-    _PORTRAITS_DIR,
-    _portrait_last_generated,
+    broadcast as broadcast,
+    _state as _state,
+    _pause_event as _pause_event,
+    _stop_requested as _stop_requested,
+    TournamentAborted as TournamentAborted,
+    _active_human_players as _active_human_players,
+    _headless as _headless,
+    _connected_clients as _connected_clients,
+    _tournament_task as _tournament_task,
+    _cli_config as _cli_config,
+    _DEFAULT_PORT as _DEFAULT_PORT,
+    _DEFAULT_LMSTUDIO_URL as _DEFAULT_LMSTUDIO_URL,
+    _DEFAULT_LMSTUDIO_URL_2 as _DEFAULT_LMSTUDIO_URL_2,
+    _PORTRAIT_COOLDOWN_S as _PORTRAIT_COOLDOWN_S,
+    _PORTRAITS_DIR as _PORTRAITS_DIR,
+    _portrait_last_generated as _portrait_last_generated,
 )
 
 # ── 2. App object (no game.py dep) ────────────────────────────────────────

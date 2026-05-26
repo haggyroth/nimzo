@@ -34,7 +34,6 @@ def _free_port(port: int) -> bool:
 def main():
     import argparse
     import asyncio as _asyncio
-    import sys
 
     logging.basicConfig(
         level=logging.INFO,

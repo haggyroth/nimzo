@@ -16,14 +16,13 @@ from fastapi.staticfiles import StaticFiles
 import db as database
 from analysis import detect_opening_depth, evaluate_achievements
 from models.portraits import generate_portrait
-from arena.state import _PORTRAITS_DIR, _cli_config
+from arena.state import _PORTRAITS_DIR
 
 logger = logging.getLogger(__name__)
 
 
 def backfill_achievements() -> int:
     """One-time pass to evaluate achievements for games that predate the feature."""
-    from analysis import ACHIEVEMENT_CATALOGUE
     n_total = 0
     for g in database.games_for_backfill():
         moves = database.get_game_moves(g["id"])
@@ -62,8 +61,6 @@ async def _pregenerate_portraits():
     Background task: generate portraits for any known player that doesn't
     have one yet.  Runs once at startup, fully non-blocking.
     """
-    import models.portraits as _portraits_module
-
     api_key = os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
         return
