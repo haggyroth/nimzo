@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 
-DB_PATH = Path("nimzo.db")
+DB_PATH = Path(__file__).parent / "nimzo.db"
 
 
 _SCHEMA = """
