@@ -312,10 +312,9 @@ def score_reasoning_coherence(
     )
 
     try:
-        if judge.backend == "anthropic":
-            raw = _call_tutor_like(judge, prompt, system=_JUDGE_SYSTEM, max_tokens=8)
-        else:
-            raw = _call_tutor_like(judge, prompt, system=_JUDGE_SYSTEM, max_tokens=8)
+        # Thinking-capable models need more tokens to emit the think block before
+        # producing the final integer; 600 is safe for all backends.
+        raw = _call_tutor_like(judge, prompt, system=_JUDGE_SYSTEM, max_tokens=600)
         # Strip think blocks, then extract first integer 0–10
         raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE).strip()
         m = re.search(r"\b(10|[0-9])\b", raw)

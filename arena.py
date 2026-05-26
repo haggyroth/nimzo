@@ -738,6 +738,7 @@ async def api_start(config: TournamentStartConfig):
                     fmt=config.format,
                     tutor=tutor,
                     judge=judge,
+                    adaptive_difficulty=config.adaptive_difficulty,
                 )
             except Exception as exc:
                 print(f"\n  Tournament ended: {type(exc).__name__}")
@@ -1231,12 +1232,13 @@ async def run_bracket_tournament(
     fmt: str,
     tutor: TutorConfig | None = None,
     judge: "JudgeConfig | None" = None,
+    adaptive_difficulty: bool = False,
 ):
     total = len(pairings)
     game_results: list[dict] = []
 
     tournament_id = database.create_tournament(
-        fmt=fmt,
+        format=fmt,
         player_ids=[ps.model_id for ps in player_specs],
         total_games=total,
     )
@@ -1285,7 +1287,7 @@ async def run_bracket_tournament(
 
             print(f"\n♟  Game {actual_idx}/{total}: {white.config.name} (W) vs {black.config.name} (B)")
             try:
-                summary = await play_game(white, black, stockfish, actual_idx, tutor, judge)
+                summary = await play_game(white, black, stockfish, actual_idx, tutor, judge, adaptive_difficulty=adaptive_difficulty)
             except TournamentAborted:
                 print("\n  Tournament stopped by user.")
                 database.abort_tournament(tournament_id)
@@ -1433,7 +1435,7 @@ def build_player(
     move_timeout: int = 0,
     style: str = "",
 ) -> ChessPlayer:
-    db_exists = Path("nimzo.db").exists()
+    db_exists = (Path(__file__).parent / "nimzo.db").exists()
     config = PlayerConfig(
         name=name,
         model_id=model_id,
