@@ -1270,6 +1270,15 @@ function onGameStart(d) {
   document.getElementById('evalPane').style.display = 'none';
   document.getElementById('historyPane').innerHTML = '';
   document.getElementById('overlay').classList.remove('show');
+  // Reset stat cards — close and clear cached data
+  for (const color of ['white', 'black']) {
+    _statCardCache[color] = null;
+    const cap = color[0].toUpperCase() + color.slice(1);
+    const card = document.getElementById(`statCard${cap}`);
+    const chev = document.getElementById(`chevron${cap}`);
+    if (card) { card.classList.remove('open'); card.innerHTML = ''; }
+    if (chev) chev.classList.remove('open');
+  }
   // Reset avatars
   ['White','Black'].forEach(c => {
     const el = document.getElementById(`avatar${c}`);
@@ -1282,9 +1291,11 @@ function onGameStart(d) {
 }
 
 async function fetchPortrait(modelId, color) {
+  if (_portraitQuotaExhausted) return;
   try {
     const r = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' });
     const j = await r.json();
+    if (j.quota_exhausted) _portraitQuotaExhausted = true;
     if (j.portrait_url) {
       gameState[color.toLowerCase()].portrait_url = j.portrait_url;
       const el = document.getElementById(`avatar${color}`);
@@ -1385,6 +1396,12 @@ function onGameOver(d) {
   updatePlayers();
   loadLeaderboard();
   loadHistory();
+  // Refresh any open stat cards to show updated ELO
+  for (const color of ['white', 'black']) {
+    const cap  = color[0].toUpperCase() + color.slice(1);
+    const card = document.getElementById(`statCard${cap}`);
+    if (card && card.classList.contains('open')) loadStatCard(color);
+  }
 }
 
 function onLessons(d) {
@@ -1524,6 +1541,123 @@ function onInitialState(d) {
   loadTournamentHistory();
 }
 
+// ── Inline stat cards ─────────────────────────────────────────────────────
+// Cache: { white: {open, profile, eloHist} | null, black: ... }
+const _statCardCache = { white: null, black: null };
+
+function toggleStatCard(color) {
+  const card = document.getElementById(`statCard${color[0].toUpperCase() + color.slice(1)}`);
+  const chevron = document.getElementById(`chevron${color[0].toUpperCase() + color.slice(1)}`);
+  if (!card) return;
+  const opening = !card.classList.contains('open');
+  card.classList.toggle('open', opening);
+  if (chevron) chevron.classList.toggle('open', opening);
+  if (opening) loadStatCard(color);
+}
+
+async function loadStatCard(color) {
+  const cap    = color[0].toUpperCase() + color.slice(1);
+  const player = gameState[color];
+  const card   = document.getElementById(`statCard${cap}`);
+  if (!card || !player.model_id) {
+    if (card) card.innerHTML = '<div class="sc-row" style="padding:4px 0;color:var(--text-dim);font-size:9px">No model active</div>';
+    return;
+  }
+  card.innerHTML = '<div class="sc-row" style="padding:4px 0;color:var(--text-dim);font-size:9px">Loading…</div>';
+  try {
+    const oppColor  = color === 'white' ? 'black' : 'white';
+    const oppId     = gameState[oppColor].model_id;
+    const [profile, eloHist, h2h] = await Promise.all([
+      fetch(`${API}/api/models/${encodeURIComponent(player.model_id)}/profile`).then(r => r.json()),
+      fetch(`${API}/api/elo-history/${encodeURIComponent(player.model_id)}`).then(r => r.json()).catch(() => []),
+      oppId
+        ? fetch(`${API}/api/models/${encodeURIComponent(player.model_id)}/h2h/${encodeURIComponent(oppId)}`).then(r => r.json()).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    _statCardCache[color] = { profile, eloHist, h2h };
+    renderStatCard(color, profile, eloHist, h2h);
+  } catch(e) {
+    if (card) card.innerHTML = '<div class="sc-row" style="padding:4px 0;color:var(--text-dim);font-size:9px">Failed to load</div>';
+  }
+}
+
+function renderStatCard(color, p, eloHist, h2h) {
+  const cap  = color[0].toUpperCase() + color.slice(1);
+  const card = document.getElementById(`statCard${cap}`);
+  if (!card) return;
+
+  const m = p.moves || {};
+  const c = p.color || {};
+  const g = p.games || {};
+  const total   = m.total_moves || 0;
+  const wins    = (c.white_wins||0)  + (c.black_wins||0);
+  const draws   = (c.white_draws||0) + (c.black_draws||0);
+  const losses  = (c.white_losses||0)+ (c.black_losses||0);
+  const blRate  = total ? ((m.q_blunder||0)/total*100).toFixed(1)+'%' : '—';
+  const avgRank = m.avg_rank ? m.avg_rank.toFixed(1) : '—';
+
+  // Mini sparkline from ELO history (last 10 data points)
+  const hist10 = (eloHist || []).slice(-10).map(e => e.elo || e);
+  const spark  = hist10.length >= 2
+    ? `<div class="sc-sparkline">${buildSparkline(hist10, 68, 18, 'var(--gold)')}</div>`
+    : '';
+
+  // H2H vs current opponent
+  let h2hHtml = '';
+  if (h2h && h2h.total > 0) {
+    h2hHtml = `<div class="sc-stat">
+      <span class="sc-val">${h2h.wins}-${h2h.draws}-${h2h.losses}</span>
+      <span class="sc-lbl">vs opp</span>
+    </div>`;
+  }
+
+  // Tournament standing if bracket running
+  let tournHtml = '';
+  if (tournamentStatus === 'running' && gameState.standings) {
+    const row = gameState.standings.find(s => s.model_id === p.model_id);
+    if (row) {
+      const pts = typeof row.points !== 'undefined' ? row.points : '—';
+      tournHtml = `<div class="sc-stat">
+        <span class="sc-val">${pts}</span>
+        <span class="sc-lbl">pts</span>
+      </div>`;
+    }
+  }
+
+  // Style badge
+  const style  = p.style || '';
+  const badge  = style ? `<span class="sc-badge">${escHtml(style)}</span>` : '';
+
+  card.innerHTML = `
+    <div class="sc-row">
+      <div class="sc-stat">
+        <span class="sc-val">${p.elo ?? '—'}</span>
+        <span class="sc-lbl">ELO</span>
+      </div>
+      ${spark ? `<div class="sc-stat">${spark}<span class="sc-lbl">trend</span></div>` : ''}
+      <div class="sc-stat">
+        <span class="sc-val">${wins}/${draws}/${losses}</span>
+        <span class="sc-lbl">W/D/L</span>
+      </div>
+      <div class="sc-stat">
+        <span class="sc-val">${blRate}</span>
+        <span class="sc-lbl">blunders</span>
+      </div>
+      <div class="sc-stat">
+        <span class="sc-val">${avgRank}</span>
+        <span class="sc-lbl">avg cand</span>
+      </div>
+      ${h2hHtml}
+      ${tournHtml}
+      ${badge ? `<div class="sc-stat" style="border:none">${badge}</div>` : ''}
+      <div class="sc-stat" style="border:none;cursor:pointer;color:var(--text-mid)"
+           onclick="openModelCard('${escHtml(p.model_id || '').replace(/'/g,"\\'")}')">
+        <span class="sc-val" style="font-size:9px">↗</span>
+        <span class="sc-lbl">full card</span>
+      </div>
+    </div>`;
+}
+
 function dispatch(msg) {
   try {
     const d = JSON.parse(msg);
@@ -1640,17 +1774,92 @@ function closeReplay() {
 }
 
 // ── Model card modal ──────────────────────────────────────────────────────
+
+// Store current model card's model_id so upload handler can reference it
+let _mcCurrentModelId = null;
+// Session flag: true once server reports quota exhausted
+let _portraitQuotaExhausted = false;
+
 function renderPortraitBlock(p) {
+  const mid    = escHtml(p.model_id || '');
+  const midJs  = (p.model_id || '').replace(/\\/g,'\\\\').replace(/'/g, "\\'");
+  const upBtn  = `<button class="mc-portrait-btn" onclick="triggerPortraitUpload('${midJs}')">📷 Upload photo</button>`;
+  const regenBtn = (p.user_provided_portrait || _portraitQuotaExhausted) ? '' :
+    `<button class="mc-portrait-btn" onclick="regenPortrait('${midJs}')">↺ Regenerate AI</button>`;
+  const quotaNote = _portraitQuotaExhausted
+    ? `<div class="mc-quota-notice">Portrait generation unavailable (API quota)</div>` : '';
+
+  const actions = `<div class="mc-portrait-actions">${upBtn}${regenBtn}</div>${quotaNote}`;
+
   if (p.portrait_url) {
-    return `<img class="mc-portrait" src="${escHtml(p.portrait_url)}" alt="${escHtml(p.name || '')} portrait">`;
+    return `<img class="mc-portrait" src="${escHtml(p.portrait_url)}" alt="${escHtml(p.name || '')} portrait">${actions}`;
   }
-  // Placeholder with model family initial or chess piece
   const family = (p.metadata && p.metadata.family) || '';
   const icon = family ? family[0].toUpperCase() : '♟';
-  return `<div class="mc-portrait-placeholder">${icon}</div>`;
+  return `<div class="mc-portrait-placeholder">${icon}</div>${actions}`;
+}
+
+function triggerPortraitUpload(modelId) {
+  _mcCurrentModelId = modelId;
+  document.getElementById('portraitUploadInput').value = '';
+  document.getElementById('portraitUploadInput').click();
+}
+
+async function handlePortraitUpload(event) {
+  const file = event.target.files[0];
+  if (!file || !_mcCurrentModelId) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch(`${API}/api/models/${encodeURIComponent(_mcCurrentModelId)}/portrait/upload`, {
+      method: 'POST', body: fd,
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      alert(`Upload failed: ${err.detail || r.status}`);
+      return;
+    }
+    const j = await r.json();
+    if (j.portrait_url) {
+      // Refresh the model card
+      openModelCard(_mcCurrentModelId);
+      // Update in-game avatar if this is an active player
+      for (const color of ['white','black']) {
+        if (gameState[color].model_id === _mcCurrentModelId) {
+          const el = document.getElementById(`avatar${color[0].toUpperCase() + color.slice(1)}`);
+          el.onload = () => { el.style.display = 'block'; };
+          el.src = j.portrait_url;
+          gameState[color].portrait_url = j.portrait_url;
+        }
+      }
+    }
+  } catch(e) { console.error('Portrait upload failed:', e); }
+}
+
+async function regenPortrait(modelId) {
+  // Swap portrait area to spinner while generating
+  const placeholder = document.getElementById('mcCard').querySelector('.mc-portrait, .mc-portrait-placeholder');
+  if (placeholder) placeholder.outerHTML = `<div class="mc-portrait-generating"><div class="spinner"></div>Painting…</div>`;
+  try {
+    const r = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' });
+    const j = await r.json();
+    if (j.quota_exhausted) {
+      _portraitQuotaExhausted = true;
+    }
+    if (j.portrait_url) {
+      openModelCard(modelId);
+    } else {
+      const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+      if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+    }
+  } catch(e) {
+    const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
+    if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+  }
 }
 
 async function openModelCard(modelId) {
+  _mcCurrentModelId = modelId;
   try {
     const [p, effectiveness] = await Promise.all([
       fetch(`${API}/api/models/${encodeURIComponent(modelId)}/profile`).then(r => r.json()),
@@ -1659,8 +1868,8 @@ async function openModelCard(modelId) {
     p._effectiveness = effectiveness;
     renderModelCard(p);
     document.getElementById('modelModal').classList.add('show');
-    // If no portrait yet, generate one and update the card when done
-    if (!p.portrait_url) {
+    // If no portrait yet and quota not exhausted, try to generate one
+    if (!p.portrait_url && !_portraitQuotaExhausted) {
       const portraitEl = document.getElementById('mcCard').querySelector('.mc-portrait-placeholder, .mc-portrait');
       if (portraitEl) {
         portraitEl.outerHTML = `<div class="mc-portrait-generating"><div class="spinner"></div>Painting…</div>`;
@@ -1668,6 +1877,7 @@ async function openModelCard(modelId) {
       fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' })
         .then(r => r.json())
         .then(j => {
+          if (j.quota_exhausted) _portraitQuotaExhausted = true;
           if (j.portrait_url) {
             p.portrait_url = j.portrait_url;
             const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
@@ -1681,6 +1891,10 @@ async function openModelCard(modelId) {
           } else {
             const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
             if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
+            if (_portraitQuotaExhausted) {
+              // Refresh to show quota notice
+              renderModelCard(p);
+            }
           }
         })
         .catch(() => {

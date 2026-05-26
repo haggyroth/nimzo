@@ -235,17 +235,16 @@ Give users meaningful control over the page layout and let them bring in their o
 
 ---
 
-## Phase 19 — Model Identity & Cards
-*Future*
+## Phase 19 — Model Identity & Cards ✅
 
 ### Goals
 Rich per-model stat cards surfaced inline during games and in the leaderboard; smarter metadata from HuggingFace; user-controlled portrait images.
 
-- [ ] **Toggleable model stat cards**: collapsible panel above each player strip (toggle with a ▲/▼ chevron or click on the player name). Card shows: ELO + sparkline, W/D/L record, blunder rate, avg move quality, avg candidate deviation, personality style badge, current series score vs opponent, all-time head-to-head vs this specific opponent. "Sports chyron" aesthetic — dense horizontal stat row, no scrolling.
-- [ ] **Current-tournament stats injection**: while a bracket tournament is running, the card also shows the model's position in the standings, points, and games remaining — updated via `game_over` WS events.
-- [ ] **HuggingFace metadata integration**: `GET https://huggingface.co/api/models/{model_id}` for models that look like HF paths (contain `/`); parse `safetensors.total` for size, `cardData.language` / `tags` for family confirmation; cache results in the existing `hf_metadata_cache.json` with a 24h TTL. Falls back to filename-parse for non-HF IDs.
-- [ ] **User photo upload for model portraits**: file input (accepts PNG/JPEG/WebP, max 2 MB) in the model card or portrait area; uploaded to `POST /api/models/{id}/portrait/upload` (multipart); server saves to `portraits/` with the same `portrait_filename()` hash path; marks record as `user_provided=True` in DB so it isn't overwritten by Gemini auto-generation. UI shows a "📷 Upload photo" button and a "↺ Regenerate AI portrait" button.
-- [ ] **Portrait quota-exhaustion handling**: once all Gemini models return 429 with free-tier limit exhausted, set a session-level flag and display a "Portrait generation unavailable (API quota)" notice in the UI rather than silent repeated failures in the console.
+- [x] **Toggleable model stat cards**: collapsible panel above each player strip (toggle with a ▲/▼ chevron or click on the player name). Card shows: ELO + sparkline, W/D/L record, blunder rate, avg move quality, avg candidate deviation, personality style badge, current series score vs opponent, all-time head-to-head vs this specific opponent. "Sports chyron" aesthetic — dense horizontal stat row, no scrolling.
+- [x] **Current-tournament stats injection**: while a bracket tournament is running, the card also shows the model's position in the standings, points, and games remaining — updated via `game_over` WS events.
+- [x] **HuggingFace metadata integration**: `GET https://huggingface.co/api/models/{model_id}` for models that look like HF paths (contain `/`); parse `safetensors.total` for size, `cardData.language` / `tags` for family confirmation; cache results in the existing `hf_metadata_cache.json` with a 24h TTL. Falls back to filename-parse for non-HF IDs.
+- [x] **User photo upload for model portraits**: file input (accepts PNG/JPEG/WebP, max 2 MB) in the model card or portrait area; uploaded to `POST /api/models/{id}/portrait/upload` (multipart); server saves to `portraits/` with the same `portrait_filename()` hash path; marks record as `user_provided=True` in DB so it isn't overwritten by Gemini auto-generation. UI shows a "📷 Upload photo" button and a "↺ Regenerate AI portrait" button.
+- [x] **Portrait quota-exhaustion handling**: once all Gemini models return 429 with free-tier limit exhausted, set a session-level flag and display a "Portrait generation unavailable (API quota)" notice in the UI rather than silent repeated failures in the console.
 
 ### Implementation notes
 - HuggingFace API calls run in `asyncio.to_thread()` and are cached locally; no key required for public models.
