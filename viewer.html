@@ -1441,9 +1441,10 @@
             </div>
           </div>
 
-          <!-- Piece set -->
+          <!-- Piece set — board uses cm-chessboard SVG sprites (Wikimedia CC BY-SA 3.0).
+               Toggle still controls the captured-piece graveyard glyphs. -->
           <div class="setting-group">
-            <div class="setting-label">Piece Set</div>
+            <div class="setting-label">Captured Pieces</div>
             <div class="piece-set-opts">
               <button class="piece-set-btn active" id="psUnicode" onclick="setPieceSet('unicode')">♔ Unicode</button>
               <button class="piece-set-btn"         id="psLetters" onclick="setPieceSet('letters')">K Letters</button>
@@ -1690,8 +1691,9 @@ function onCustomColor() {
 }
 
 function setPieceSet(id) {
-  // cm-chessboard uses SVG sprites only — piece set buttons are kept in the UI
-  // for layout continuity but switching between "unicode" and "letters" has no effect.
+  // Controls the glyph style used in the captured-piece graveyard only.
+  // The main board uses cm-chessboard SVG sprites (Wikimedia CC BY-SA 3.0)
+  // and is not affected by this setting.
   _settings.pieceSet = id;
   saveSettings();
   syncSettingsUI();

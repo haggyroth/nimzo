@@ -27,8 +27,13 @@ def _extract_thinking(raw: str) -> tuple[str, str]:
     """
     Split raw model output into (thinking_content, clean_text).
 
-    thinking_content — everything inside the first <think>…</think> block.
-    clean_text       — raw with all <think>…</think> blocks stripped and
+    thinking_content — everything inside the FIRST <think>…</think> block
+                       only.  If the model emits multiple think blocks,
+                       subsequent ones are silently stripped (they appear
+                       in clean_text as gaps, not as separate captures).
+                       This is intentional: we surface one consolidated
+                       think trace to the viewer rather than a list.
+    clean_text       — raw with ALL <think>…</think> blocks stripped and
                        leading/trailing whitespace removed.
     """
     match = _THINK_RE.search(raw)
@@ -70,7 +75,16 @@ class LMStudioPlayer(ChessPlayer):
             system_prompt = "/no_think\n" + system_prompt
 
         # ── extra_body ───────────────────────────────────────────────
-        extra_body: dict = {"enable_thinking": thinking}
+        # Only send thinking-control fields when the profile indicates the model
+        # supports them (Qwen3, DeepSeek-R1, etc.).  Sending unknown extra_body
+        # keys to plain models is harmless via LM Studio but adds noise to logs.
+        extra_body: dict = {}
+        if profile and profile.no_think_prefix is not None:
+            # Profile explicitly opts in — send the flag for both on and off
+            extra_body["enable_thinking"] = thinking
+        elif thinking:
+            # Thinking explicitly enabled by the user but no profile: send the flag
+            extra_body["enable_thinking"] = True
         if thinking and profile and profile.thinking_budget_tokens:
             extra_body["thinking_budget"] = profile.thinking_budget_tokens
 

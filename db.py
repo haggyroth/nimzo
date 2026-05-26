@@ -122,42 +122,47 @@ def init_db(db_path: Optional[Path] = None):
         _migrate(conn)
 
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """Return the set of column names for *table* (empty set if table missing)."""
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {r["name"] for r in rows}
+
+
+def _add_column_if_missing(
+    conn: sqlite3.Connection,
+    table: str,
+    column: str,
+    definition: str,
+    _cache: dict[str, set[str]] = {},
+) -> None:
+    """ALTER TABLE … ADD COLUMN only when the column does not already exist.
+
+    Uses PRAGMA table_info rather than try/except so that genuine SQL errors
+    (wrong type, constraint violation, etc.) are not silently swallowed.
+    Results are cached per (table, column) pair within a single migration run.
+    """
+    key = table
+    if key not in _cache:
+        _cache[key] = _table_columns(conn, table)
+    if column not in _cache[key]:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        _cache[key].add(column)
+
+
 def _migrate(conn: sqlite3.Connection):
-    # Add lesson_type column if missing (pre-v2 databases)
-    try:
-        conn.execute("ALTER TABLE lessons ADD COLUMN lesson_type TEXT DEFAULT 'improve'")
-    except sqlite3.OperationalError:
-        pass  # already exists
-    # Add portrait_path column if missing
-    try:
-        conn.execute("ALTER TABLE players ADD COLUMN portrait_path TEXT")
-    except sqlite3.OperationalError:
-        pass  # already exists
-    # Add strategic_profile column if missing (lesson compression)
-    try:
-        conn.execute("ALTER TABLE players ADD COLUMN strategic_profile TEXT")
-    except sqlite3.OperationalError:
-        pass  # already exists
-    # Add thinking_content column if missing (pre-Phase-10 databases)
-    try:
-        conn.execute("ALTER TABLE moves ADD COLUMN thinking_content TEXT")
-    except sqlite3.OperationalError:
-        pass  # already exists
-    # Add bad_move_rate_before for lesson effectiveness tracking (Phase 7 loose end)
-    try:
-        conn.execute("ALTER TABLE lessons ADD COLUMN bad_move_rate_before REAL")
-    except sqlite3.OperationalError:
-        pass  # already exists
-    # Phase 12: reasoning coherence score (judge model per move)
-    try:
-        conn.execute("ALTER TABLE moves ADD COLUMN coherence_score REAL")
-    except sqlite3.OperationalError:
-        pass
-    # Phase 12: time-control timeout flag
-    try:
-        conn.execute("ALTER TABLE moves ADD COLUMN timed_out INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+    """Non-destructive schema migrations for databases created before the
+    current schema was finalised.  Each call is idempotent."""
+    # Flush the per-call column cache (the default-arg dict is shared across
+    # calls within the same process, so reset it at migration entry).
+    _add_column_if_missing.__defaults__[0].clear()  # type: ignore[index]
+
+    _add_column_if_missing(conn, "lessons", "lesson_type",        "TEXT DEFAULT 'improve'")
+    _add_column_if_missing(conn, "players", "portrait_path",       "TEXT")
+    _add_column_if_missing(conn, "players", "strategic_profile",   "TEXT")
+    _add_column_if_missing(conn, "moves",   "thinking_content",    "TEXT")
+    _add_column_if_missing(conn, "lessons", "bad_move_rate_before","REAL")
+    _add_column_if_missing(conn, "moves",   "coherence_score",     "REAL")
+    _add_column_if_missing(conn, "moves",   "timed_out",           "INTEGER DEFAULT 0")
     # Create tournament tables for existing DBs (CREATE TABLE IF NOT EXISTS is idempotent
     # in the schema, but the schema only runs once so we ensure them here too)
     conn.executescript("""
