@@ -262,7 +262,7 @@ async function _cmcbRender(animate) {
 
   // Human input handling
   if (gameState.isHumanTurn) {
-    const humanColorConst = gameState.humanColor === ‘black’ ? COLOR.black : COLOR.white;
+    const humanColorConst = gameState.humanColor === 'black' ? COLOR.black : COLOR.white;
     const allowedUci = gameState.humanAssisted
       ? gameState.humanCandidates
       : gameState.humanLegalUci;
@@ -278,7 +278,7 @@ async function _cmcbRender(animate) {
         // Check promotions (pawn to back rank)
         const matches = allowedUci.filter(u => u.startsWith(uci));
         if (matches.length > 0) {
-          const chosen = matches.find(u => u.endsWith(‘q’)) || matches[0];
+          const chosen = matches.find(u => u.endsWith('q')) || matches[0];
           submitHumanMove(chosen);
           return true;
         }
@@ -291,16 +291,16 @@ async function _cmcbRender(animate) {
   }
 
   // Keep flip button icon in sync
-  const btn = document.getElementById(‘flipBtn’);
-  if (btn) btn.title = gameState.boardFlipped ? "Flip to White’s perspective" : "Flip to Black’s perspective";
+  const btn = document.getElementById('flipBtn');
+  if (btn) btn.title = gameState.boardFlipped ? "Flip to White's perspective" : "Flip to Black's perspective";
 
   // Refresh captured-pieces graveyards
-  renderGraveyards(gameState.fen, { white: ‘graveyardWhite’, black: ‘graveyardBlack’ });
+  renderGraveyards(gameState.fen, { white: 'graveyardWhite', black: 'graveyardBlack' });
 }
 
 function toggleFlip() {
   gameState.boardFlipped = !gameState.boardFlipped;
-  localStorage.setItem(‘boardFlipped’, gameState.boardFlipped);
+  localStorage.setItem('boardFlipped', gameState.boardFlipped);
   if (_cmcb.ready && _cmcb.board) {
     _cmcb.board.setOrientation(gameState.boardFlipped ? _cmcb.COLOR.black : _cmcb.COLOR.white, false);
   }
