@@ -192,10 +192,8 @@ app.mount("/portraits", StaticFiles(directory=str(_PORTRAITS_DIR)), name="portra
 # All paths are anchored to __file__'s parent so the server works regardless
 # of the working directory from which `python arena.py` is launched.
 _STATIC_DIR = Path(__file__).parent / "static"
-_JS_DIR     = Path(__file__).parent / "js"
 _STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
-app.mount("/js",     StaticFiles(directory=str(_JS_DIR)),     name="js")
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 /**
- * tests/test_viewer.js — unit tests for pure utility functions in js/viewer_utils.js.
+ * tests/test_viewer.js — unit tests for pure utility functions in static/viewer_utils.js.
  *
  * Run with:  node --test tests/test_viewer.js
  * No build step, no npm install — uses Node's built-in test runner (Node ≥ 18).
@@ -17,7 +17,7 @@ const {
   extractModelName,
   buildSparkline,
   escHtml,
-} = require(path.join(__dirname, '..', 'js', 'viewer_utils.js'));
+} = require(path.join(__dirname, '..', 'static', 'viewer_utils.js'));
 
 const STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 

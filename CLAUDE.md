@@ -12,9 +12,9 @@ analysis.py       — ELO calculation, post-game lesson generation via LLM
 db.py             — SQLite persistence: games, moves, ELO history, lessons
 config_loader.py  — TOML config file parser
 viewer.html       — Slim HTML shell (~474 lines); links to:
-  static/viewer.css — All viewer styles (~1087 lines)
-  static/viewer.js  — All viewer JavaScript (~1694 lines)
-js/
+static/
+  viewer.css        — All viewer styles (~1087 lines)
+  viewer.js         — All viewer JavaScript (~1694 lines)
   viewer_utils.js   — Shared utility functions (FEN parser, sparklines, etc.)
 models/
   base.py               — abstract ChessPlayer, prompt builder, lesson memory
