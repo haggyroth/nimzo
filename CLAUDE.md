@@ -11,6 +11,7 @@ engine.py         — Stockfish wrapper: candidate generation, move quality eval
 analysis.py       — ELO calculation, post-game lesson generation via LLM
 db.py             — SQLite persistence: games, moves, ELO history, lessons
 config_loader.py  — TOML config file parser
+providers.py      — Cloud provider registry (OpenAI, DeepSeek, Qwen, Gemini, xAI)
 viewer.html       — Slim HTML shell (~474 lines); links to:
 static/
   viewer.css        — All viewer styles (~1087 lines)
@@ -213,6 +214,11 @@ Then add a branch in `build_player()` in `arena.py`.
 | `PORT` | `8765` | Server port |
 | `NIMZO_HOST` | `127.0.0.1` | Bind address (`0.0.0.0` to expose on LAN) |
 | `LMSTUDIO_BASE_URL` | `http://localhost:1234/v1` | Default LM Studio endpoint |
+| `OPENAI_API_KEY` | — | OpenAI cloud backend |
+| `DEEPSEEK_API_KEY` | — | DeepSeek cloud backend |
+| `DASHSCOPE_API_KEY` | — | Qwen / Alibaba Dashscope cloud backend |
+| `GEMINI_API_KEY` | — | Google Gemini cloud backend |
+| `XAI_API_KEY` | — | xAI Grok cloud backend |
 
 ## Git Workflow
 

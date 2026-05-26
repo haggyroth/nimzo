@@ -5,6 +5,10 @@ const WS_URL = `ws://${location.host}/ws`;
 // Default LM Studio endpoint — matches the server-side _DEFAULT_LMSTUDIO_URL constant.
 const DEFAULT_LMSTUDIO_URL = 'http://localhost:1234/v1';
 
+// Cloud provider registry, populated from /api/providers on page load.
+// Shape: { [name]: { label, base_url, models[], configured } }
+let _providers = {};
+
 // ── cm-chessboard handle (populated in async boot) ───────────────────────
 const _cmcb = {};
 
@@ -608,6 +612,9 @@ function renderTrnPlayerList() {
       <select class="ctrl-select" id="trnBackend_${p.id}" onchange="trnSyncBackend(${p.id})">
         <option value="lmstudio" ${p.backend==='lmstudio'?'selected':''}>LM Studio</option>
         <option value="anthropic" ${p.backend==='anthropic'?'selected':''}>Anthropic</option>
+        ${Object.entries(_providers).map(([name, prov]) =>
+          `<option value="${name}" ${p.backend===name?'selected':''}>${prov.configured ? prov.label : prov.label + ' (no key)'}</option>`
+        ).join('')}
       </select>
       <div class="url-row">
         <input class="ctrl-input" id="trnUrl_${p.id}" placeholder="${DEFAULT_LMSTUDIO_URL}" value="${escHtml(p.url)}" oninput="trnSync(${p.id})">
@@ -643,6 +650,28 @@ function trnSyncBackend(id) {
   const p = trnPlayers.find(x => x.id === id);
   if (!p) return;
   p.backend = document.getElementById(`trnBackend_${id}`).value;
+
+  // For Anthropic and cloud providers: hide the URL row and populate preset models
+  const urlRow  = document.querySelector(`#trnRow_${id} .url-row`);
+  const modelSel = document.getElementById(`trnModel_${id}`);
+
+  const presetModels =
+    p.backend === 'anthropic'
+      ? ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001']
+      : isCloudBackend(p.backend)
+        ? (_providers[p.backend]?.models || [])
+        : null;
+
+  if (presetModels) {
+    if (urlRow) urlRow.style.display = 'none';
+    if (modelSel) {
+      modelSel.innerHTML = presetModels.map(m =>
+        `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('');
+      p.model = presetModels[0] || '';
+    }
+  } else {
+    if (urlRow) urlRow.style.display = '';
+  }
 }
 
 function trnSyncModel(id) {
@@ -837,6 +866,42 @@ function onModelSelect(side) {
   }
 }
 
+// ── Cloud provider helpers ────────────────────────────────────────────────
+
+async function loadProviders() {
+  try {
+    _providers = await fetch(`${API}/api/providers`).then(r => r.json());
+  } catch(e) {
+    _providers = {};
+    return;
+  }
+  // Inject cloud provider options into the static backend <select> elements
+  const selIds = ['whiteBackend', 'blackBackend', 'tutorBackend', 'trnTutorBackend'];
+  selIds.forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    // Remove any previously-added cloud options (avoid duplicates on re-call)
+    sel.querySelectorAll('option[data-cloud]').forEach(o => o.remove());
+    // Insert before the "Human" / "none" option, or append
+    const anchorOpt = [...sel.options].find(o => o.value === 'human' || o.value === 'none');
+    Object.entries(_providers).forEach(([name, p]) => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.dataset.cloud = '1';
+      opt.textContent = p.configured ? p.label : `${p.label} (no key)`;
+      if (!p.configured) opt.style.color = 'var(--text-dim)';
+      if (anchorOpt) sel.insertBefore(opt, anchorOpt);
+      else sel.appendChild(opt);
+    });
+  });
+  // Re-render tournament player rows so their backend selects include providers
+  if (typeof renderTrnPlayerList === 'function') renderTrnPlayerList();
+}
+
+function isCloudBackend(backend) {
+  return backend in _providers;
+}
+
 async function fetchModels(side) {
   const urlId = side === 'tutor' ? 'tutorUrl' : side === 'trnTutor' ? 'trnTutorUrl' : side + 'Url';
   const selId = side === 'tutor' ? 'tutorModel' : side === 'trnTutor' ? 'trnTutorModel' : side + 'Model';
@@ -904,13 +969,23 @@ function onBackendChange(side) {
     if (hoEl) hoEl.style.display = 'none';
   }
 
-  if (backend === 'anthropic') {
-    // For Anthropic, populate with known models instead of fetching
+  // Preset-model backends: Anthropic and cloud providers — hide URL row,
+  // populate the model select with a known list instead of fetching.
+  const presetModels =
+    backend === 'anthropic'
+      ? ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001']
+      : isCloudBackend(backend)
+        ? (_providers[backend]?.models || [])
+        : null;
+
+  if (presetModels) {
     const sel = document.getElementById(modelId);
     if (sel) {
       sel.innerHTML = '';
-      ['claude-opus-4-7','claude-sonnet-4-6','claude-haiku-4-5-20251001'].forEach(m => {
-        const opt = document.createElement('option'); opt.value = opt.textContent = m; sel.appendChild(opt);
+      presetModels.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = m;
+        sel.appendChild(opt);
       });
     }
     if (urlRow) urlRow.style.display = 'none';
@@ -1677,6 +1752,7 @@ buildThemeSwatches();
   // ── Kick off the rest of the boot sequence ──────────────────────────────
   sizeBoard();
   connect();
+  loadProviders();
   loadLeaderboard();
   loadHistory();
   loadTournamentHistory();

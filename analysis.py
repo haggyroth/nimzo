@@ -1,7 +1,8 @@
 """
 ELO calculation and post-game adaptive learning.
 Generates lessons for both players via a configurable tutor model.
-Tutor can be any LM Studio / Ollama (OpenAI-compatible) endpoint or Anthropic cloud.
+Tutor can be any LM Studio / Ollama (OpenAI-compatible) endpoint, Anthropic cloud,
+or any cloud provider listed in providers.CLOUD_PROVIDERS.
 """
 
 from __future__ import annotations
@@ -309,8 +310,17 @@ def _call_tutor_like(
     system: str,
     max_tokens: int = 500,
 ) -> str:
-    """Generic caller that works for both TutorConfig and JudgeConfig."""
+    """
+    Generic caller that works for both TutorConfig and JudgeConfig.
+
+    Dispatches to the Anthropic SDK for ``backend="anthropic"``, uses a plain
+    OpenAI-compatible call (no extra_body) for cloud providers registered in
+    ``CLOUD_PROVIDERS``, and sends ``extra_body={"enable_thinking": False}``
+    only for ``backend="lmstudio"`` where LM Studio / Ollama accept it.
+    """
     import os
+    from providers import CLOUD_PROVIDERS
+
     if cfg.backend == "anthropic":
         import anthropic
         client = anthropic.Anthropic(
@@ -323,11 +333,16 @@ def _call_tutor_like(
             messages=[{"role": "user", "content": prompt}],
         )
         return msg.content[0].text
-    else:
-        from openai import OpenAI
+
+    from openai import OpenAI
+
+    if cfg.backend in CLOUD_PROVIDERS:
+        # Cloud provider: use the registry's base_url and env key.
+        # Don't send extra_body — cloud APIs don't accept LM Studio extensions.
+        info = CLOUD_PROVIDERS[cfg.backend]
         client = OpenAI(
-            base_url=cfg.base_url,
-            api_key=cfg.api_key or os.environ.get("LMSTUDIO_API_KEY", "lm-studio"),
+            base_url=cfg.base_url or info["base_url"],
+            api_key=cfg.api_key or os.environ.get(info["key_env"], ""),
         )
         resp = client.chat.completions.create(
             model=cfg.model_id,
@@ -337,9 +352,25 @@ def _call_tutor_like(
                 {"role": "system", "content": system},
                 {"role": "user",   "content": prompt},
             ],
-            extra_body={"enable_thinking": False},
         )
         return resp.choices[0].message.content or ""
+
+    # Default: LM Studio / Ollama — OpenAI-compat with thinking disabled
+    client = OpenAI(
+        base_url=cfg.base_url,
+        api_key=cfg.api_key or os.environ.get("LMSTUDIO_API_KEY", "lm-studio"),
+    )
+    resp = client.chat.completions.create(
+        model=cfg.model_id,
+        max_tokens=max_tokens,
+        temperature=0.0,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user",   "content": prompt},
+        ],
+        extra_body={"enable_thinking": False},
+    )
+    return resp.choices[0].message.content or ""
 
 
 # ── Lesson parser ─────────────────────────────────────────────────────────
