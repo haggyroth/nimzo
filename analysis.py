@@ -8,11 +8,14 @@ or any cloud provider listed in providers.CLOUD_PROVIDERS.
 from __future__ import annotations
 
 import json
+import logging
 from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ── ELO ─────────────────────────────────────────────────────────────────
@@ -304,7 +307,7 @@ def score_reasoning_coherence(
         if m:
             return float(m.group(1))
     except Exception as exc:
-        print(f"  ⚠  Judge call failed ({type(exc).__name__}): {exc}")
+        logger.error("Judge call failed (%s): %s", type(exc).__name__, exc)
     return None
 
 
@@ -535,18 +538,19 @@ def generate_lessons(
         lessons = _parse_lessons(raw)
         if not lessons["improve"] and not lessons["strength"]:
             if not raw.strip():
-                print(
-                    f"  ⚠  Tutor ({tutor.model_id}) returned an empty response for "
-                    f"{player_name}. The model may have run out of context or tokens."
+                logger.warning(
+                    "Tutor (%s) returned an empty response for %s. "
+                    "The model may have run out of context or tokens.",
+                    tutor.model_id, player_name,
                 )
             else:
-                print(
-                    f"  ⚠  Tutor returned no parseable lessons for {player_name}. "
-                    f"Raw response:\n{raw[:600]}"
+                logger.warning(
+                    "Tutor returned no parseable lessons for %s. Raw response:\n%s",
+                    player_name, raw[:600],
                 )
         return lessons
     except Exception as e:
-        print(f"  ⚠  Lesson generation failed ({tutor.backend}/{tutor.model_id}): {e}")
+        logger.error("Lesson generation failed (%s/%s): %s", tutor.backend, tutor.model_id, e)
         return {"improve": [], "strength": []}
 
 
@@ -588,10 +592,10 @@ def compress_lessons(
         raw = _call_tutor_like(tutor, prompt, system=_TUTOR_SYSTEM)
         raw = raw.strip()
         if raw:
-            print(f"  🗜  Compressed {len(all_lessons)} lessons → strategic profile for {player_name}")
+            logger.info("Compressed %d lessons -> strategic profile for %s", len(all_lessons), player_name)
         return raw or None
     except Exception as e:
-        print(f"  ⚠  Lesson compression failed ({tutor.backend}/{tutor.model_id}): {e}")
+        logger.error("Lesson compression failed (%s/%s): %s", tutor.backend, tutor.model_id, e)
         return None
 
 

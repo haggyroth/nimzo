@@ -5,7 +5,19 @@ AI chess tournament system where locally-hosted LLMs compete in **guided mode**:
 ## Architecture
 
 ```
-arena.py          — FastAPI app, WebSocket/HTTP routes, shared state (_state, broadcast)
+arena/            — FastAPI server package (replaces monolithic arena.py)
+  __init__.py       — Re-exports symbols game.py needs; assembles app with routers
+  __main__.py       — `python -m arena` entry point
+  state.py          — Shared mutable state, constants, broadcast(), TournamentAborted
+  models.py         — Pydantic models: PlayerSpec, TournamentStartConfig, HumanMoveRequest
+  app.py            — FastAPI app object, lifespan, startup utilities (backfill, portraits)
+  cli.py            — argparse, _free_port(), entry point logic (main())
+  routes/
+    __init__.py     — empty
+    games.py        — /api/games/* routes, _build_game_pgn helper
+    model_api.py    — /api/models/* routes, portrait endpoints
+    stats.py        — /api/stats/*, /api/leaderboard, /api/elo-history, serve_viewer, stats_page
+    tournament.py   — WebSocket endpoint, /api/tournament/*, /api/human-move
 game.py           — Core game loop (play_game), tournament runners, build_player
 engine.py         — Stockfish wrapper: candidate generation, move quality evaluation
 analysis.py       — ELO calculation, post-game lesson generation via LLM
@@ -27,14 +39,19 @@ models/
   portraits.py          — Gemini portrait generation
 ```
 
-### arena.py ↔ game.py circular import
+### arena/ ↔ game.py circular import
 
-`arena.py` imports `game.py` at its bottom (after all definitions).
 `game.py` imports `import arena as _arena` at its top to access `broadcast`,
 `_state`, `_pause_event`, `_stop_requested`, and `TournamentAborted`.
-Python resolves this safely because `game.py`'s `import arena` runs against the
-already-complete `arena` module object.  **Rule:** never move definitions that
-`game.py` depends on below the `from game import ...` line in `arena.py`.
+These symbols live in `arena/state.py` and are re-exported from `arena/__init__.py`.
+
+The import order in `arena/__init__.py` is critical:
+1. `from arena.state import ...` — state symbols first, before anything that imports game.py
+2. `from arena.app import app` — no game.py dep
+3. `from arena.routes import tournament` — this imports game.py, which does `import arena`
+   By this point all arena.* symbols are already on the package object.
+
+**Rule:** never move state symbol imports below the router imports in `arena/__init__.py`.
 
 ## How Guided Mode Works
 
@@ -57,7 +74,7 @@ Move quality labels: `best` `excellent` `good` `inaccuracy` `mistake` `blunder`
 pip install -r requirements.txt
 export STOCKFISH_PATH=/opt/homebrew/bin/stockfish   # or wherever stockfish is installed
 
-python arena.py
+python -m arena
 # Browser opens automatically at http://localhost:8765
 # Select models from the dropdowns and click Start
 ```
@@ -69,7 +86,7 @@ needed; just load whichever models you want in LM Studio and pick them in the UI
 ### CLI mode (auto-starts without browser)
 
 ```bash
-python arena.py \
+python -m arena \
   --white-name "Qwen" --white-model qwen3-coder-30b \
   --black-name "Gemma" --black-model google/gemma-4-e4b \
   --games 5
@@ -86,7 +103,7 @@ Colors alternate each game automatically.
 ### Headless mode (no HTTP server)
 
 ```bash
-python arena.py --headless \
+python -m arena --headless \
   --white-model qwen3-coder-30b --black-model gemma-4b --games 20
 ```
 
@@ -95,7 +112,7 @@ Runs purely as a CLI process — no uvicorn, no browser. Useful for overnight be
 ### TOML config file
 
 ```bash
-python arena.py --config tournament.toml
+python -m arena --config tournament.toml
 ```
 
 See `config_loader.py` for the full schema. Supports multi-player bracket/round-robin/gauntlet formats with per-player style and candidate count overrides.
@@ -182,7 +199,7 @@ In `analysis.py`:
 - `K_INITIAL / K_MID / K_STABLE` — ELO K-factor schedule (32 → 24 → 16 as games accumulate)
 - `K_THRESH_PROVISIONAL / K_THRESH_ESTABLISHED` — game-count breakpoints for K-factor decay
 
-In `arena.py`:
+In `arena/state.py`:
 - `_DEFAULT_PORT` — server port (default: 8765; override with `--port` or `PORT` env var)
 - `_DEFAULT_LMSTUDIO_URL` — default LM Studio endpoint (http://localhost:1234/v1)
 
@@ -202,7 +219,7 @@ class MyPlayer(ChessPlayer):
         return MoveDecision(uci, reasoning, candidate_rank, raw)
 ```
 
-Then add a branch in `build_player()` in `arena.py`.
+Then add a branch in `build_player()` in `game.py`.
 
 ## Environment Variables
 

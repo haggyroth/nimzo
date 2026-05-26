@@ -17,10 +17,13 @@ from __future__ import annotations  # PEP 563 — all annotations are strings at
 
 import asyncio
 import itertools
+import logging
 import random
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 import chess
 import chess.pgn
@@ -303,7 +306,7 @@ async def play_game(
             )
             decision = await asyncio.wait_for(coro, timeout=timeout_secs)
         except asyncio.TimeoutError:
-            print(f"  ⏱  {current_player.config.name} timed out after {timeout_secs}s — {'random (blind)' if is_blind else 'top candidate used'}")
+            logger.warning("%s timed out after %ss — %s", current_player.config.name, timeout_secs, "random (blind)" if is_blind else "top candidate used")
             fallback_move = random.choice(list(board.legal_moves)) if is_blind else candidates[0][0]
             decision = MoveDecision(
                 move_uci=fallback_move.uci(),
@@ -319,7 +322,7 @@ async def play_game(
             if _arena._stop_requested:
                 raise _arena.TournamentAborted()
             fallback_move = random.choice(list(board.legal_moves)) if is_blind else candidates[0][0]
-            print(f"  ⚠  {current_player.config.name} API error ({type(exc).__name__}): {exc} — falling back to {'random move' if is_blind else 'top candidate'}")
+            logger.warning("%s API error (%s): %s — falling back to %s", current_player.config.name, type(exc).__name__, exc, "random move" if is_blind else "top candidate")
             decision = MoveDecision(
                 move_uci=fallback_move.uci(),
                 reasoning=f"(API error — fell back to {'random move' if is_blind else 'top candidate'})",
@@ -489,7 +492,7 @@ async def play_game(
         if codes:
             database.record_achievements(player.config.model_id, game_id, codes)
             awards[player.config.model_id] = codes
-            print(f"  🏅 {player.config.name}: {', '.join(codes)}")
+            logger.info("Achievements for %s: %s", player.config.name, ", ".join(codes))
 
     await _arena.broadcast({
         "type":            "game_over",
@@ -554,7 +557,7 @@ async def play_game(
 
             for lesson in lessons["improve"]:
                 if is_duplicate_lesson(lesson, existing):
-                    print(f"  ≈ Skipping duplicate lesson for {player.config.name}: {lesson[:60]}")
+                    logger.warning("Skipping duplicate lesson for %s: %s", player.config.name, lesson[:60])
                     continue
                 tagged = f"[improve] {lesson}"
                 player.add_lesson(tagged)
@@ -564,7 +567,7 @@ async def play_game(
 
             for lesson in lessons["strength"]:
                 if is_duplicate_lesson(lesson, existing):
-                    print(f"  ≈ Skipping duplicate lesson for {player.config.name}: {lesson[:60]}")
+                    logger.warning("Skipping duplicate lesson for %s: %s", player.config.name, lesson[:60])
                     continue
                 tagged = f"[strength] {lesson}"
                 player.add_lesson(tagged)
@@ -580,17 +583,17 @@ async def play_game(
                     "improve":  saved_improve,
                     "strength": saved_strength,
                 })
-                print(f"\n  📚 {player.config.name}:")
+                logger.info("Lessons for %s:", player.config.name)
                 for l in saved_improve:
-                    print(f"    ↑ improve: {l}")
+                    logger.info("  improve: %s", l)
                 for l in saved_strength:
-                    print(f"    ★ strength: {l}")
+                    logger.info("  strength: %s", l)
 
         # ── Lesson compression: every 5 games once threshold is reached ──
         game_count = database.get_player_game_count(player.config.model_id)
         lesson_count = database.get_lesson_count(player.config.model_id)
         if _has_tutor and game_count >= 5 and game_count % 5 == 0 and lesson_count >= 10:
-            print(f"  🗜  Compressing {lesson_count} lessons for {player.config.name} (game #{game_count})…")
+            logger.info("Compressing %d lessons for %s (game #%d)…", lesson_count, player.config.name, game_count)
             all_lessons = database.get_all_raw_lessons(player.config.model_id)
             profile = await loop.run_in_executor(
                 None, compress_lessons, all_lessons, player.config.name, game_count, tutor
@@ -611,10 +614,10 @@ async def play_game(
             old_count = player.config.candidate_count
             if rate > _ADAPT_WIN_RATE_HIGH and old_count > _ADAPT_CANDIDATE_MIN:
                 player.config.candidate_count = old_count - 1
-                print(f"  📉 {player.config.name}: win rate {rate:.0%} → candidates {old_count}→{player.config.candidate_count}")
+                logger.info("%s: win rate %.0f%% -> candidates %d->%d (harder)", player.config.name, rate * 100, old_count, player.config.candidate_count)
             elif rate < _ADAPT_WIN_RATE_LOW and old_count < _ADAPT_CANDIDATE_MAX:
                 player.config.candidate_count = old_count + 1
-                print(f"  📈 {player.config.name}: win rate {rate:.0%} → candidates {old_count}→{player.config.candidate_count}")
+                logger.info("%s: win rate %.0f%% -> candidates %d->%d (easier)", player.config.name, rate * 100, old_count, player.config.candidate_count)
 
     return {
         "game_id":     game_id,
@@ -694,11 +697,11 @@ async def run_bracket_tournament(
             })
             await _arena.broadcast({"type": "tournament_status", **_arena._state})
 
-            print(f"\n♟  Game {actual_idx}/{total}: {white.config.name} (W) vs {black.config.name} (B)")
+            logger.info("Game %d/%d: %s (W) vs %s (B)", actual_idx, total, white.config.name, black.config.name)
             try:
                 summary = await play_game(white, black, stockfish, actual_idx, tutor, judge, adaptive_difficulty=adaptive_difficulty, max_moves=max_moves or 500)
             except _arena.TournamentAborted:
-                print("\n  Tournament stopped by user.")
+                logger.info("Tournament stopped by user.")
                 database.abort_tournament(tournament_id)
                 break
 
@@ -730,7 +733,7 @@ async def run_bracket_tournament(
             if remaining > 0 and leader > trailer + remaining:
                 winner_id = max(ps["wins"], key=ps["wins"].get)
                 winner_name = player_map[winner_id].config.name
-                print(f"   Series decided: {winner_name} wins — skipping {remaining} remaining game(s)")
+                logger.info("Series decided: %s wins — skipping %d remaining game(s)", winner_name, remaining)
                 skipped.add(key)
 
             standings = compute_standings(player_specs, game_results)
@@ -749,10 +752,7 @@ async def run_bracket_tournament(
                 "total":      total,
             })
 
-            print(
-                f"   Result: {result} in {summary['moves']} moves "
-                f"({summary['termination']})"
-            )
+            logger.info("Result: %s in %d moves (%s)", result, summary["moves"], summary["termination"])
             await asyncio.sleep(2)
 
     # ── Final standings + title ───────────────────────────────────────
@@ -775,7 +775,7 @@ async def run_bracket_tournament(
             "title":     title,
         })
         if final:
-            print(f'\n\U0001f3c6 Tournament complete!  Winner: {final[0]["name"]} — "{title}"')
+            logger.info('Tournament complete! Winner: %s — "%s"', final[0]["name"], title)
     else:
         _arena._state["status"] = "idle"
 
@@ -809,21 +809,15 @@ async def run_tournament(
             _arena._state.update({"game_number": i, "white_elo": round(white.elo), "black_elo": round(black.elo)})
             await _arena.broadcast({"type": "tournament_status", **_arena._state})
 
-            print(f"\n♟  Game {i}/{n_games}: {white.config.name} (W) vs {black.config.name} (B)")
+            logger.info("Game %d/%d: %s (W) vs %s (B)", i, n_games, white.config.name, black.config.name)
             try:
                 summary = await play_game(white, black, stockfish, i, tutor, judge, adaptive_difficulty=adaptive_difficulty, max_moves=max_moves or 500)
             except _arena.TournamentAborted:
-                print("\n  Tournament stopped by user.")
+                logger.info("Tournament stopped by user.")
                 break
 
-            print(
-                f"   Result: {summary['result']} in {summary['moves']} moves "
-                f"({summary['termination']})"
-            )
-            print(
-                f"   ELO → {white.config.name}: {round(white.elo)} | "
-                f"{black.config.name}: {round(black.elo)}"
-            )
+            logger.info("Result: %s in %d moves (%s)", summary["result"], summary["moves"], summary["termination"])
+            logger.info("ELO -> %s: %d | %s: %d", white.config.name, round(white.elo), black.config.name, round(black.elo))
 
             white, black = black, white   # alternate colors
             if not _arena._headless:
@@ -831,7 +825,7 @@ async def run_tournament(
 
     _arena._state["status"] = "idle"
     await _arena.broadcast({"type": "tournament_status", **_arena._state})
-    print("\n🏆 Tournament complete!")
+    logger.info("Tournament complete!")
 
 
 # ── Player builder ────────────────────────────────────────────────────────
@@ -887,10 +881,10 @@ def build_player(
     if db_exists:
         player.elo = database.get_player_elo(model_id)
         if player.elo != 1200.0:
-            print(f"  ↑ {name} ({model_id}): restored ELO {round(player.elo)}")
+            logger.info("%s (%s): restored ELO %d", name, model_id, round(player.elo))
     else:
         prior = family_elo_prior(model_id)
         if prior != 0.0:
             player.elo = 1200.0 + prior
-            print(f"  ↑ {name}: new player, family prior {prior:+.0f} → starting ELO {round(player.elo)}")
+            logger.info("%s: new player, family prior %+.0f -> starting ELO %d", name, prior, round(player.elo))
     return player
