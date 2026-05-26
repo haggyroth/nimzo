@@ -197,41 +197,27 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 17 — Theme Expansion & App Identity
-*Next*
+## Phase 17 — Theme Expansion & App Identity ✅
 
 ### Goals
 Extend the appearance system beyond board colors to full UI color schemes, add a light mode, and give the app a proper visual identity.
 
-- [ ] **Terminal color scheme presets**: Solarized Dark, Solarized Light, Catppuccin Mocha, Catppuccin Latte, Nord, Dracula — each defines a full set of UI CSS variables (`--bg`, `--panel-bg`, `--text`, `--text-dim`, `--accent`, `--border`), not just board squares. Added as palette swatches alongside the existing board themes.
-- [ ] **Light/dark mode toggle**: derive all UI colors from a `data-theme` attribute on `<body>`; `prefers-color-scheme` media query as default; one-click toggle button in the Appearance panel. Most existing dark values become the dark-theme base; a complementary light palette is defined.
-- [ ] **Theme import**: parse a subset of the `terminalcolors.com` JSON export format (16-color ANSI → map to Nimzo's 8 CSS variables); import via file upload or URL in the Appearance panel. Graceful fallback if the format doesn't match.
-- [ ] **Favicon**: add `<link rel="icon">` to `viewer.html` pointing to a SVG favicon in `static/`; chess-knight or Nimzo "N" monogram design.
-- [ ] **GitHub logo / social card**: fix the broken image in `.github/` — add a proper social preview image and update `.github/` references.
-
-### Implementation notes
-- All new theme variables extend the existing `nimzo_settings` localStorage key (no migration needed).
-- The Appearance panel gains a "UI Theme" section separate from the existing "Board Colors" section.
-- Light mode requires auditing ~40 CSS custom properties; the dark defaults stay unchanged.
-- terminalcolors.com exports as `{ "color_01": "#...", ... }` — map `color_00`→`--bg`, `color_07`→`--text`, `color_08`→`--text-dim`, `color_15`→`--panel-bg`, and use the dominant accent color for `--accent`.
+- [x] **Terminal color scheme presets**: Solarized Dark, Solarized Light, Catppuccin Mocha, Catppuccin Latte, Nord, Dracula — palette swatches in the Appearance panel; each drives the full set of UI CSS variables.
+- [x] **Light/dark mode toggle**: ☀️/🌙 button in the header; each theme tagged `dark: bool`; `_UI_THEME_PAIRS` maps each theme to its closest light/dark partner.
+- [x] **Theme import**: `terminalcolors.com` JSON import — maps 16-color ANSI palette to Nimzo's CSS variables; saved as a custom "Imported" swatch.
+- [x] **Favicon**: SVG chess-knight favicon (`static/favicon.svg`) linked in `viewer.html`; social card images already present in `.github/`.
 
 ---
 
-## Phase 18 — Layout & Visual Customization
-*Future*
+## Phase 18 — Layout & Visual Customization ✅
 
 ### Goals
 Give users meaningful control over the page layout and let them bring in their own visual assets.
 
-- [ ] **Collapsible side panels**: each panel on the right sidebar (Appearance, Leaderboard, Recent Games, Tournament) gets an independent collapse chevron; collapsed state persists to `localStorage`; board area expands to fill freed space via CSS flexbox reflow. Allows shrinking the window without the board becoming tiny.
-- [ ] **Graveyard expansion**: move the captured-pieces display from the slim inline strip into a dedicated area below each player's name bar; larger piece icons (24–32px vs current 14px); show piece count per type (♙×3 style); material imbalance stays as a single score line. Requires rethinking the player strip layout.
-- [ ] **Custom piece PNG import**: file upload (12 files: K Q R B N P × 2 colors) in the Appearance panel; piece images stored as data-URLs in `localStorage`; a CSS filter + `background-image` approach layers custom images over cm-chessboard's SVG sprites (avoids re-creating the board). Alternatively explore cm-chessboard's `spriteUrl` option for a full swap.
-- [ ] **Background image upload**: single file upload stored as `localStorage` data-URL; applied as `background-image` on the `.board-wrapper` or `body`; opacity slider for transparency control; "clear" button to revert.
-
-### Implementation notes
-- Panel collapse: CSS `grid-template-rows: 0fr` transition (smoother than `max-height`); chevron rotates 90° via CSS transform; `aria-expanded` attribute for accessibility.
-- Graveyard rewrite touches `renderGraveyards()` in `viewer_utils.js` and the corresponding HTML structure in `viewer.html`; the `computeCaptures()` logic is unchanged.
-- Custom pieces: cm-chessboard re-renders on each `_cmcbRender()` call — the overlay must be re-applied after each render. A `MutationObserver` on the board container is the cleanest hook.
+- [x] **Collapsible main panels**: ⊢/⊣ toggle buttons in the header fold the center (analysis) and right (controls) columns to 24 px; board area reflows via CSS grid-template-columns; state persisted to `localStorage`.
+- [x] **Graveyard expansion**: captured-piece display moved from inline player-strip into dedicated `.player-graveyard` rows above/below the board; 14 px glyphs with letter-spacing for compact display; material imbalance score preserved.
+- [x] **Background image upload**: file input in Appearance panel; base64 stored in separate `nimzo_board_bg` localStorage key; opacity slider (0–100%); "Clear image" button; applied via `::before` pseudo-element on `.board-col`.
+- [ ] **Custom piece PNG import**: deferred — cm-chessboard SVG sprite architecture makes clean per-piece PNG overlays complex; moved to [Future Considerations](#future-considerations).
 
 ---
 
@@ -255,7 +241,7 @@ Rich per-model stat cards surfaced inline during games and in the leaderboard; s
 ---
 
 ## Phase 20 — Gameplay Rules & Blind Mode
-*Future*
+*Next*
 
 ### Goals
 Give more control over game rules and let models play their opening moves from their own chess knowledge rather than always following Stockfish's guidance.
@@ -305,10 +291,8 @@ Make lesson generation visible to the viewer, improve compression quality, and f
 
 ### Open Questions — New
 
-- **Custom piece PNGs**: can we import PNGs for custom piece sets? Targeted for Phase 18 — see implementation notes.
-- **Background image**: user-uploaded board backgrounds? Targeted for Phase 18 — CSS `background-image` on the board wrapper.
-- **Turn cap**: introduce a draw rule at 250 moves per player (500 half-moves)? Targeted for Phase 20.
-- **Favicon & logo**: add a chess-knight favicon + fix broken GitHub social image? Targeted for Phase 17.
+- **Custom piece PNGs**: cm-chessboard's SVG sprite architecture makes clean per-piece PNG overlays complex; deferred to Future Considerations.
+- **Turn cap**: introduce a draw rule at 250 moves per player (500 half-moves)? Addressed in Phase 20.
 
 ---
 
@@ -328,6 +312,7 @@ Items that are well-defined but deferred due to complexity, scope, or dependenci
 
 ### Other Deferred Items
 
+- **Custom piece PNG import**: file upload (12 files: K Q R B N P × 2 colors); cm-chessboard re-renders via SVG sprites — a `MutationObserver` + CSS `background-image` overlay approach is workable but fiddly; deferred from Phase 18
 - **Non-blocking tutor**: move lesson generation to a background task so the next game starts immediately; broadcast `lesson_generating` / `lessons_saved` WS events while the game runs (partial overlap with Phase 21's splash screen)
 - **Parallel bracket games**: run simultaneous games in a bracket round for speed; requires scoped `_state` per game, multiple Stockfish engine instances, and careful WebSocket multiplexing
 - **arena.py code split**: at 1600+ lines, splitting into `arena/api.py` (HTTP/WS endpoints), `arena/runners.py` (game loop, tournament runners), and `arena/cli.py` (argparse + entry point) would significantly improve navigability
