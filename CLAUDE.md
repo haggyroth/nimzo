@@ -5,11 +5,17 @@ AI chess tournament system where locally-hosted LLMs compete in **guided mode**:
 ## Architecture
 
 ```
-arena.py          — orchestrator: game loop, WebSocket broadcast, tournament runner
+arena.py          — FastAPI app, WebSocket/HTTP routes, shared state (_state, broadcast)
+game.py           — Core game loop (play_game), tournament runners, build_player
 engine.py         — Stockfish wrapper: candidate generation, move quality evaluation
 analysis.py       — ELO calculation, post-game lesson generation via LLM
 db.py             — SQLite persistence: games, moves, ELO history, lessons
 config_loader.py  — TOML config file parser
+viewer.html       — Slim HTML shell (~474 lines); links to:
+  static/viewer.css — All viewer styles (~1087 lines)
+  static/viewer.js  — All viewer JavaScript (~1694 lines)
+js/
+  viewer_utils.js   — Shared utility functions (FEN parser, sparklines, etc.)
 models/
   base.py               — abstract ChessPlayer, prompt builder, lesson memory
   lmstudio_player.py    — OpenAI-compatible client (LM Studio, Ollama)
@@ -19,6 +25,15 @@ models/
   model_profiles.py     — Per-model behavioural profiles (thinking budget, token limits)
   portraits.py          — Gemini portrait generation
 ```
+
+### arena.py ↔ game.py circular import
+
+`arena.py` imports `game.py` at its bottom (after all definitions).
+`game.py` imports `import arena as _arena` at its top to access `broadcast`,
+`_state`, `_pause_event`, `_stop_requested`, and `TournamentAborted`.
+Python resolves this safely because `game.py`'s `import arena` runs against the
+already-complete `arena` module object.  **Rule:** never move definitions that
+`game.py` depends on below the `from game import ...` line in `arena.py`.
 
 ## How Guided Mode Works
 
@@ -169,6 +184,8 @@ In `analysis.py`:
 In `arena.py`:
 - `_DEFAULT_PORT` — server port (default: 8765; override with `--port` or `PORT` env var)
 - `_DEFAULT_LMSTUDIO_URL` — default LM Studio endpoint (http://localhost:1234/v1)
+
+In `game.py`:
 - `_ADAPT_CANDIDATE_MIN/MAX` — candidate count bounds for adaptive difficulty (3–10)
 - `_ADAPT_WIN_RATE_HIGH/LOW` — win-rate thresholds that trigger difficulty adjustment (0.65/0.35)
 
