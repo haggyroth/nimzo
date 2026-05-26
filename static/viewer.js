@@ -2,6 +2,9 @@
 const API   = '';          // same origin
 const WS_URL = `ws://${location.host}/ws`;
 
+// Default LM Studio endpoint — matches the server-side _DEFAULT_LMSTUDIO_URL constant.
+const DEFAULT_LMSTUDIO_URL = 'http://localhost:1234/v1';
+
 // ── cm-chessboard handle (populated in async boot) ───────────────────────
 const _cmcb = {};
 
@@ -583,7 +586,7 @@ let trnNextId = 0;
 
 function trnAddPlayer() {
   const id = trnNextId++;
-  trnPlayers.push({ id, name: '', backend: 'lmstudio', url: 'http://localhost:1234/v1', model: '', thinking: false, style: '' });
+  trnPlayers.push({ id, name: '', backend: 'lmstudio', url: DEFAULT_LMSTUDIO_URL, model: '', thinking: false, style: '' });
   renderTrnPlayerList();
 }
 
@@ -607,7 +610,7 @@ function renderTrnPlayerList() {
         <option value="anthropic" ${p.backend==='anthropic'?'selected':''}>Anthropic</option>
       </select>
       <div class="url-row">
-        <input class="ctrl-input" id="trnUrl_${p.id}" placeholder="http://localhost:1234/v1" value="${escHtml(p.url)}" oninput="trnSync(${p.id})">
+        <input class="ctrl-input" id="trnUrl_${p.id}" placeholder="${DEFAULT_LMSTUDIO_URL}" value="${escHtml(p.url)}" oninput="trnSync(${p.id})">
         <button class="fetch-btn" onclick="trnFetchModels(${p.id})" title="Load models">⟳</button>
       </div>
       <select class="ctrl-select" id="trnModel_${p.id}" onchange="trnSyncModel(${p.id})">
@@ -714,7 +717,7 @@ async function startTournament() {
     black_style:     document.getElementById('blackStyle').value,
     tutor_backend:   tutorBackend==='none' ? 'lmstudio' : tutorBackend,
     tutor_model:     tutorModel,
-    tutor_url:       tutorUrl || 'http://localhost:1234/v1',
+    tutor_url:       tutorUrl || DEFAULT_LMSTUDIO_URL,
     games:           parseInt(document.getElementById('gamesCount').value) || 10,
     human_assisted:  document.getElementById('humanAssisted') ? document.getElementById('humanAssisted').checked : true,
     adaptive_difficulty: document.getElementById('adaptiveDifficulty') ? document.getElementById('adaptiveDifficulty').checked : false,
@@ -754,7 +757,7 @@ async function startBracketTournament() {
     games_per_pair: parseInt(document.getElementById('trnGamesPair').value) || 2,
     tutor_backend:  tutorBackend==='none' ? 'lmstudio' : tutorBackend,
     tutor_model:    tutorModel,
-    tutor_url:      tutorUrl || 'http://localhost:1234/v1',
+    tutor_url:      tutorUrl || DEFAULT_LMSTUDIO_URL,
   };
 
   const res = await fetch(`${API}/api/tournament/start`, {

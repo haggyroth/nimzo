@@ -23,6 +23,8 @@ CP_LOSS_MISTAKE     = 150   # < 150 cp loss → mistake  (≥ 150 → blunder)
 
 @dataclass
 class AnalysisResult:
+    """Full Stockfish analysis for a single position."""
+
     best_move: chess.Move
     score_cp: Optional[int]         # centipawns (positive = good for current player)
     mate_in: Optional[int]          # None if not a forced mate
@@ -31,6 +33,16 @@ class AnalysisResult:
 
 
 class StockfishEngine:
+    """
+    Thin wrapper around a Stockfish subprocess.
+
+    Use as a context manager — the engine process is started on ``__enter__``
+    and shut down on ``__exit__``::
+
+        with StockfishEngine() as sf:
+            candidates = sf.get_candidates(board, n=5)
+    """
+
     def __init__(
         self,
         path: str = DEFAULT_STOCKFISH_PATH,

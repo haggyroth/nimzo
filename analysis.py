@@ -45,6 +45,7 @@ def new_elo(
     score: float,           # 1.0 win / 0.5 draw / 0.0 loss
     games_played: int = 0,
 ) -> float:
+    """Return the updated ELO for a player after a single game result."""
     k = dynamic_k_factor(games_played)
     expected = expected_score(player_elo, opponent_elo)
     return round(player_elo + k * (score - expected), 2)
@@ -57,6 +58,7 @@ def calculate_elos(
     white_games: int = 0,
     black_games: int = 0,
 ) -> tuple[float, float]:
+    """Return (new_white_elo, new_black_elo) after a game with the given result."""
     if result == "1-0":
         w_score, b_score = 1.0, 0.0
     elif result == "0-1":
@@ -129,6 +131,8 @@ def detect_opening_depth(pgn_string: str) -> tuple[str, str, int] | None:
 
 @dataclass
 class TutorConfig:
+    """Connection config for the tutor model that generates post-game lessons."""
+
     backend: str = "lmstudio"              # "lmstudio" | "anthropic"
     model_id: str = ""                     # e.g. "qwen3-30b" or "claude-haiku-4-5-20251001"
     base_url: str = "http://localhost:1234/v1"
@@ -139,6 +143,8 @@ class TutorConfig:
 # call-sites self-documenting and lets the two be configured independently.
 @dataclass
 class JudgeConfig:
+    """Connection config for the judge model that scores reasoning coherence."""
+
     backend: str = "lmstudio"
     model_id: str = ""
     base_url: str = "http://localhost:1234/v1"

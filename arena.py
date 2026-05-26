@@ -50,6 +50,11 @@ import db as database
 _PORTRAITS_DIR = Path("portraits")
 _PORTRAITS_DIR.mkdir(exist_ok=True)
 
+# Per-model portrait generation cooldown: prevents hammering the paid Imagen
+# API with repeated requests for the same model_id. Value is seconds.
+_PORTRAIT_COOLDOWN_S = 60.0
+_portrait_last_generated: dict[str, float] = {}   # model_id → epoch time
+
 # ── Named constants ───────────────────────────────────────────────────────
 # Server
 _DEFAULT_PORT           = 8765
@@ -175,6 +180,7 @@ async def _pregenerate_portraits():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """FastAPI lifespan: initialise DB, backfill achievements, kick off background tasks."""
     database.init_db()
     if not database.has_any_achievements():
         n = backfill_achievements()
@@ -200,6 +206,13 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for live game events.
+
+    Accepts same-origin connections only (rejects foreign ``Origin`` headers).
+    Immediately pushes the current ``_state`` snapshot on connect so
+    late-joining viewers are in sync without waiting for the next broadcast.
+    """
     # Reject cross-origin connections.  The viewer is served by the same
     # origin so legitimate browsers always send a matching Origin header.
     # curl / scripts that omit Origin are still allowed (origin is None).
@@ -222,6 +235,7 @@ async def ws_endpoint(websocket: WebSocket):
 
 
 async def broadcast(event: dict):
+    """Serialise ``event`` to JSON and send it to every connected WebSocket client."""
     if _headless or not _connected_clients:
         return
     msg = json.dumps(event)
@@ -281,6 +295,7 @@ async def stats_page():
 
 @app.get("/api/models/{model_id:path}/profile")
 async def api_model_profile(model_id: str):
+    """Return enriched profile for a model: stats, personality traits, and achievements."""
     profile = database.get_model_profile(model_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Model not found")
@@ -338,8 +353,13 @@ async def api_generate_portrait(model_id: str):
     Returns ``{portrait_url: "/portraits/abc.png"}`` on success,
     ``{portrait_url: null}`` if no API key or generation fails.
     Runs the blocking Imagen call in a thread-pool executor.
+
+    Rate-limited to one generation per model per ``_PORTRAIT_COOLDOWN_S``
+    seconds to prevent runaway paid API calls.
     """
-    # Reject unknown model IDs — prevents unbounded paid API calls for ghost IDs
+    import time
+
+    # Reject unknown model IDs — prevents paid API calls for arbitrary ghost IDs
     if not database.player_exists(model_id):
         raise HTTPException(status_code=404, detail="Model not found")
 
@@ -351,6 +371,17 @@ async def api_generate_portrait(model_id: str):
     api_key = os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
         return {"portrait_url": None}
+
+    # Cooldown check — reject repeat calls within the window
+    now = time.monotonic()
+    last = _portrait_last_generated.get(model_id, 0.0)
+    if now - last < _PORTRAIT_COOLDOWN_S:
+        remaining = int(_PORTRAIT_COOLDOWN_S - (now - last))
+        raise HTTPException(
+            status_code=429,
+            detail=f"Portrait recently generated; retry in {remaining}s",
+        )
+    _portrait_last_generated[model_id] = now
 
     loop = asyncio.get_running_loop()
     path = await loop.run_in_executor(
@@ -370,6 +401,7 @@ async def api_achievement_catalogue():
 
 @app.get("/api/games/{game_id}")
 async def api_game(game_id: int):
+    """Return the game record for ``game_id``, or 404 if not found."""
     row = database.get_game(game_id)
     if not row:
         raise HTTPException(status_code=404, detail="Game not found")
@@ -472,6 +504,7 @@ def _build_game_pgn(game_row: dict, moves: list[dict], round_number: Optional[in
 
 @app.get("/api/games/{game_id}/pgn")
 async def api_game_pgn(game_id: int):
+    """Download a single game as an annotated PGN file."""
     from fastapi.responses import PlainTextResponse
     game_row = database.get_game(game_id)
     if not game_row:
@@ -548,6 +581,8 @@ async def api_models(url: str = _DEFAULT_LMSTUDIO_URL):
 
 
 class PlayerSpec(BaseModel):
+    """Per-player spec used in multi-player tournament start requests."""
+
     backend: str = "lmstudio"
     name: str = ""
     model_id: str = ""
@@ -563,6 +598,13 @@ _active_human_players: dict[str, HumanPlayer] = {}
 
 
 class TournamentStartConfig(BaseModel):
+    """
+    Request body for ``POST /api/tournament/start``.
+
+    Covers both 2-player match mode (white/black fields) and multi-player
+    bracket/round-robin mode (``players`` list with len ≥ 2).
+    """
+
     white_backend: str = "lmstudio"
     white_name: str = "White"
     white_model: str = ""
@@ -598,6 +640,13 @@ class TournamentStartConfig(BaseModel):
 
 @app.post("/api/tournament/start")
 async def api_start(config: TournamentStartConfig):
+    """
+    Start a new tournament or match.
+
+    Rejects the request if a tournament is already running.  Dispatches to
+    ``run_bracket_tournament`` for multi-player configs (``players`` len ≥ 2)
+    or ``run_tournament`` for 2-player matches.
+    """
     global _tournament_task, _stop_requested
     if _tournament_task and not _tournament_task.done():
         return {"error": "A tournament is already running"}
@@ -736,6 +785,7 @@ async def api_tournament_history(limit: int = 20):
 
 @app.post("/api/tournament/pause")
 async def api_pause():
+    """Pause the running tournament after the current move completes."""
     _pause_event.clear()
     _state["status"] = "paused"
     await broadcast({"type": "tournament_status", **_state})
@@ -744,6 +794,7 @@ async def api_pause():
 
 @app.post("/api/tournament/resume")
 async def api_resume():
+    """Resume a paused tournament."""
     _pause_event.set()
     _state["status"] = "running"
     await broadcast({"type": "tournament_status", **_state})
@@ -752,6 +803,7 @@ async def api_resume():
 
 @app.post("/api/tournament/stop")
 async def api_stop():
+    """Request a graceful stop; the tournament finishes the current game then halts."""
     global _stop_requested
     _stop_requested = True
     _pause_event.set()   # unblock if paused
@@ -902,6 +954,7 @@ if __name__ == "__main__":
         print(f"⚡ Nimzo headless  ·  {w} vs {b}  ·  {g} game(s)")
 
         async def _run_headless():
+            """Run a headless tournament: start it, then await completion."""
             _pause_event.set()
             await api_start(_cli_config)
             # Wait for the task to finish
@@ -961,6 +1014,7 @@ if __name__ == "__main__":
         import threading
         import webbrowser
         def _open_browser():
+            """Open the viewer in the default browser after uvicorn is ready."""
             import time
             time.sleep(1.2)   # wait for uvicorn to be ready
             webbrowser.open(f"http://localhost:{port}")

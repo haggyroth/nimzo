@@ -43,6 +43,8 @@ def _extract_thinking(raw: str) -> tuple[str, str]:
 
 
 class LMStudioPlayer(ChessPlayer):
+    """Chess player backed by any OpenAI-compatible endpoint (LM Studio, Ollama, etc.)."""
+
     def __init__(self, config: PlayerConfig):
         super().__init__(config)
         self.client = OpenAI(
@@ -57,6 +59,7 @@ class LMStudioPlayer(ChessPlayer):
         candidates: list[tuple[chess.Move, float]],
         game_history_pgn: str,
     ) -> MoveDecision:
+        """Call the LM Studio API and parse the response into a MoveDecision."""
         prompt  = self.build_prompt(board, candidates, game_history_pgn)
         thinking = self.config.enable_thinking
         profile  = get_profile(self.config.model_id)
@@ -126,6 +129,13 @@ class LMStudioPlayer(ChessPlayer):
         candidates: list[tuple[chess.Move, float]],
         board: chess.Board,
     ) -> MoveDecision:
+        """
+        Extract CHOICE/MOVE/REASONING from raw model output.
+
+        Strips ``<think>…</think>`` blocks first, then falls back through:
+        explicit MOVE UCI → CHOICE number → any UCI token in the response.
+        Returns candidate #1 with a parse-failed note if all strategies fail.
+        """
         # Always extract <think> blocks — some models (DeepSeek R1, Qwen3 in
         # thinking mode) include them regardless of the enable_thinking flag.
         thinking_content, clean = _extract_thinking(raw)

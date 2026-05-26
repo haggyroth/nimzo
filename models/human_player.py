@@ -43,6 +43,13 @@ class HumanPlayer(ChessPlayer):
         candidates: list[tuple[chess.Move, float | None]],
         game_history_pgn: str,
     ) -> MoveDecision:
+        """
+        Block until the human submits a move via the browser UI.
+
+        Stores board state and candidates so the viewer can display them,
+        then waits on ``_move_ready`` for up to 5 minutes.  Falls back to
+        Stockfish's top candidate on timeout.
+        """
         self._current_board     = board.copy()
         self._current_candidates = list(candidates)
         self._pending_uci       = None
