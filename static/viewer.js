@@ -102,14 +102,21 @@ const _UI_THEME_PAIRS = {
 };
 
 const _DEFAULT_SETTINGS = {
-  theme:    'wood',
-  lightSq:  '#e8d5b0',
-  darkSq:   '#8b6148',
-  accent:   '#c8921e',
-  pieceSet: 'unicode',
-  font:     'mono',
-  uiTheme:  'nimzo',
+  theme:          'wood',
+  lightSq:        '#e8d5b0',
+  darkSq:         '#8b6148',
+  accent:         '#c8921e',
+  pieceSet:       'unicode',
+  font:           'mono',
+  uiTheme:        'nimzo',
+  panelCenter:    true,
+  panelRight:     true,
+  boardBgOpacity: 0.4,
 };
+
+// Board background image stored separately — can be several hundred KB as base64.
+// Keeping it outside _settings avoids bloating the main JSON blob on every save.
+let _boardBgData = localStorage.getItem('nimzo_board_bg') || null;
 
 // Load settings from localStorage
 const _settings = Object.assign({}, _DEFAULT_SETTINGS,
@@ -235,6 +242,20 @@ function applySettings() {
   root.style.setProperty('--gold',        _settings.accent);
   root.style.setProperty('--gold-bright', lightenHex(_settings.accent, 30));
 
+  // Restore panel collapse states
+  const mainEl = document.querySelector('main');
+  if (mainEl) {
+    mainEl.classList.toggle('cp-collapsed', !(_settings.panelCenter ?? true));
+    mainEl.classList.toggle('rp-collapsed', !(_settings.panelRight  ?? true));
+  }
+  const btnC = document.getElementById('btnToggleCenter');
+  const btnR = document.getElementById('btnToggleRight');
+  if (btnC) btnC.classList.toggle('collapsed', !(_settings.panelCenter ?? true));
+  if (btnR) btnR.classList.toggle('collapsed', !(_settings.panelRight  ?? true));
+
+  // Apply board background
+  applyBoardBg();
+
   // Sync UI widgets (may not exist yet at initial call)
   syncSettingsUI();
   // Re-render eval graph with new accent if it has data
@@ -333,9 +354,68 @@ function setFont(id) {
 function resetSettings() {
   Object.assign(_settings, _DEFAULT_SETTINGS);
   saveSettings();
+  clearBoardBg();   // also removes the separate board-bg localStorage entry
   applySettings();
   buildThemeSwatches();
   buildUiThemeSwatches();
+}
+
+// ── Panel collapse toggle ────────────────────────────────────────────────
+function togglePanel(which) {
+  if (which === 'center') {
+    _settings.panelCenter = !(_settings.panelCenter ?? true);
+    document.querySelector('main').classList.toggle('cp-collapsed', !_settings.panelCenter);
+    const btn = document.getElementById('btnToggleCenter');
+    if (btn) btn.classList.toggle('collapsed', !_settings.panelCenter);
+  } else {
+    _settings.panelRight = !(_settings.panelRight ?? true);
+    document.querySelector('main').classList.toggle('rp-collapsed', !_settings.panelRight);
+    const btn = document.getElementById('btnToggleRight');
+    if (btn) btn.classList.toggle('collapsed', !_settings.panelRight);
+  }
+  saveSettings();
+  // Grid column widths changed — recalculate board size on next frame.
+  requestAnimationFrame(sizeBoard);
+}
+
+// ── Board background image ───────────────────────────────────────────────
+function applyBoardBg() {
+  const root = document.documentElement;
+  if (_boardBgData) {
+    root.style.setProperty('--board-bg-img',     `url("${_boardBgData}")`);
+    root.style.setProperty('--board-bg-opacity', String(_settings.boardBgOpacity ?? 0.4));
+  } else {
+    root.style.setProperty('--board-bg-img', 'none');
+  }
+  // Sync opacity slider
+  const slider = document.getElementById('boardBgOpacity');
+  if (slider) slider.value = Math.round((_settings.boardBgOpacity ?? 0.4) * 100);
+  // Show/hide Clear button
+  const clearBtn = document.getElementById('boardBgClear');
+  if (clearBtn) clearBtn.style.display = _boardBgData ? '' : 'none';
+}
+
+function setBoardBg(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _boardBgData = e.target.result;
+    try { localStorage.setItem('nimzo_board_bg', _boardBgData); } catch (_) { /* quota */ }
+    applyBoardBg();
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearBoardBg() {
+  _boardBgData = null;
+  localStorage.removeItem('nimzo_board_bg');
+  applyBoardBg();
+}
+
+function onBoardBgOpacity(val) {
+  _settings.boardBgOpacity = Number(val) / 100;
+  saveSettings();
+  document.documentElement.style.setProperty('--board-bg-opacity', String(_settings.boardBgOpacity));
 }
 
 // PIECES is now dynamic — use current piece set
@@ -370,11 +450,12 @@ let isPaused = false;
 // ── Board sizing ──────────────────────────────────────────────────────────
 function sizeBoard() {
   const col   = document.getElementById('boardCol');
-  const avail = Math.min(col.clientHeight - 110, col.clientWidth - 32, 560);
+  const avail = Math.min(col.clientHeight - 160, col.clientWidth - 32, 560);
   const px    = Math.max(260, avail);
   document.getElementById('boardWrap').style.width  = px + 'px';
   document.getElementById('boardWrap').style.height = px + 'px';
   document.querySelectorAll('.player-strip').forEach(s => s.style.width = px + 'px');
+  document.querySelectorAll('.player-col').forEach(s => s.style.width = px + 'px');
   document.documentElement.style.setProperty('--board-px', px + 'px');
   // cm-chessboard auto-fills its container on resize; no explicit redraw needed.
 }

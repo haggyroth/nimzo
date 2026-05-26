@@ -1240,3 +1240,116 @@
       transition: opacity .15s;
     }
     .theme-toggle-btn:hover { opacity: 1; }
+
+    /* ════════════════════════════════════════════════════════════════
+       PHASE 18 — Layout & Visual Customization
+       ════════════════════════════════════════════════════════════════ */
+
+    /* ── Panel toggle buttons (header) ──────────────────────────── */
+    .panel-toggle-btn {
+      background: transparent;
+      border: none;
+      font-size: 13px;
+      cursor: pointer;
+      padding: 2px 5px;
+      line-height: 1;
+      opacity: .45;
+      color: var(--text);
+      font-family: var(--ui-font);
+      border-radius: 2px;
+      transition: opacity .15s, background .15s;
+    }
+    .panel-toggle-btn:hover    { opacity: 1; background: var(--bg-card); }
+    .panel-toggle-btn.collapsed { opacity: .2; }
+
+    /* ── Panel collapse grid overrides ──────────────────────────── */
+    main.cp-collapsed {
+      grid-template-columns: minmax(0,1fr) 24px 318px;
+    }
+    main.rp-collapsed {
+      grid-template-columns: minmax(0,1fr) 286px 24px;
+    }
+    main.cp-collapsed.rp-collapsed {
+      grid-template-columns: minmax(0,1fr) 24px 24px;
+    }
+    main.cp-collapsed .center-panel,
+    main.rp-collapsed .right-panel { overflow: hidden; }
+
+    /* ── Player column layout ─────────────────────────────────────── */
+    .player-col {
+      display: flex;
+      flex-direction: column;
+      width: var(--board-px, 460px);
+    }
+
+    /* Standalone graveyard row (replaced inline .p-graveyard) */
+    .player-graveyard {
+      min-height: 20px;
+      padding: 2px 11px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1px;
+      font-size: 14px;
+      line-height: 1;
+      letter-spacing: -3px;
+      color: #a8a4a0;
+    }
+    .player-graveyard .gv-piece { display: inline-block; }
+    .player-graveyard .gv-adv {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; font-weight: 500;
+      letter-spacing: .5px;
+      color: var(--gold-bright);
+      margin-left: 8px;
+    }
+
+    /* ── Board column background image ───────────────────────────── */
+    .board-col { position: relative; }
+    .board-col::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: var(--board-bg-img, none);
+      background-size: cover;
+      background-position: center;
+      opacity: var(--board-bg-opacity, 0.4);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .board-col > * { position: relative; z-index: 1; }
+
+    /* ── Board background upload widget ─────────────────────────── */
+    .board-bg-upload {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 4px 8px;
+      background: transparent;
+      border: 1px solid var(--border-hi);
+      color: var(--text-mid);
+      font-family: var(--ui-font);
+      font-size: 9px;
+      letter-spacing: .8px;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: color .15s, border-color .15s;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    .board-bg-upload:hover { color: var(--text); border-color: var(--text-mid); }
+    .board-bg-opacity-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .board-bg-opacity-row label {
+      font-size: 9px;
+      color: var(--text-dim);
+      min-width: 44px;
+    }
+    .board-bg-opacity-row input[type=range] {
+      flex: 1;
+      accent-color: var(--border-hi);
+    }
