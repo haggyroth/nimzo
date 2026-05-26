@@ -308,7 +308,7 @@ def _call_tutor_like(
     cfg: "TutorConfig | JudgeConfig",
     prompt: str,
     system: str,
-    max_tokens: int = 500,
+    max_tokens: int = 1024,
 ) -> str:
     """
     Generic caller that works for both TutorConfig and JudgeConfig.
@@ -415,6 +415,56 @@ def _parse_lessons(raw: str) -> dict[str, list[str]]:
 
 # ── Public API ────────────────────────────────────────────────────────────
 
+# Maximum number of full moves (pairs) included in the lesson PGN snippet.
+# Long games (100+ moves) push small tutor models past their context window,
+# causing empty responses.  We keep the last N moves — the decisive phase —
+# since the quality_summary already flags specific blunder/mistake moves by SAN.
+_LESSON_PGN_MAX_MOVES = 60
+
+
+def _trim_pgn(pgn: str, max_full_moves: int = _LESSON_PGN_MAX_MOVES) -> str:
+    """
+    Return the last *max_full_moves* full moves of a PGN string.
+
+    If the game is shorter than the limit the original string is returned
+    unchanged.  Move-number prefixes are rewritten so the snippet starts at
+    move 1 for readability.
+    """
+    import re
+    # Extract the moves section (everything after the last blank header line)
+    # PGN headers end with a blank line before the move text.
+    parts = re.split(r"\n\n", pgn, maxsplit=1)
+    header = parts[0] if len(parts) == 2 else ""
+    moves_text = parts[-1].strip()
+
+    # Split on move numbers (e.g. "23." or "23...") to get individual tokens
+    tokens = re.split(r"(\d+\.+)", moves_text)
+    # Rebuild as list of (move_number_token, move_text) pairs
+    pairs: list[tuple[str, str]] = []
+    i = 1
+    while i < len(tokens):
+        num_tok = tokens[i]
+        text_tok = tokens[i + 1] if i + 1 < len(tokens) else ""
+        if "..." not in num_tok:   # full-move number (white's turn)
+            pairs.append((num_tok, text_tok))
+        i += 2
+
+    if len(pairs) <= max_full_moves:
+        return pgn
+
+    truncated_pairs = pairs[-max_full_moves:]
+    # Rewrite move numbers from 1 for compactness
+    snippet_lines = []
+    for idx, (_, text) in enumerate(truncated_pairs, start=1):
+        snippet_lines.append(f"{idx}.{text}")
+    snippet = "".join(snippet_lines).strip()
+
+    prefix = f"[... {len(pairs) - max_full_moves} earlier moves omitted ...]\n\n"
+    if header:
+        return f"{header}\n\n{prefix}{snippet}"
+    return f"{prefix}{snippet}"
+
+
 def generate_lessons(
     pgn: str,
     player_name: str,
@@ -433,6 +483,9 @@ def generate_lessons(
     Draws use a shorter single-bullet prompt. A draw with no blunders or
     mistakes produces very weak coaching signal — ``skip_if_clean_draw=True``
     (the default) returns empty lists rather than generating noise.
+
+    Long PGNs are trimmed to the last ``_LESSON_PGN_MAX_MOVES`` full moves
+    to prevent small tutor models from exceeding their context window.
 
     Returns {"improve": [...], "strength": [...]} — empty lists if no tutor
     configured or if the game is a clean draw.
@@ -457,6 +510,9 @@ def generate_lessons(
         if opening else ""
     )
 
+    # Trim long PGNs — keeps the decisive phase, prevents context overflow
+    pgn_snippet = _trim_pgn(pgn)
+
     # Draws with some mistakes get a lighter prompt; decisive games get the full one
     template = _DRAW_LESSON_TEMPLATE if is_draw else _LESSON_TEMPLATE
     prompt = template.format(
@@ -466,15 +522,24 @@ def generate_lessons(
         player_color=player_color,
         outcome=outcome,
         opening_line=opening_line,
-        pgn=pgn,
+        pgn=pgn_snippet,
         quality_summary=quality_summary,
     )
 
     try:
-        raw = _call_tutor_like(tutor, prompt, system=_TUTOR_SYSTEM)
+        raw = _call_tutor_like(tutor, prompt, system=_TUTOR_SYSTEM, max_tokens=1024)
         lessons = _parse_lessons(raw)
         if not lessons["improve"] and not lessons["strength"]:
-            print(f"  ⚠  Tutor returned no parseable lessons. Raw response:\n{raw[:600]}")
+            if not raw.strip():
+                print(
+                    f"  ⚠  Tutor ({tutor.model_id}) returned an empty response for "
+                    f"{player_name}. The model may have run out of context or tokens."
+                )
+            else:
+                print(
+                    f"  ⚠  Tutor returned no parseable lessons for {player_name}. "
+                    f"Raw response:\n{raw[:600]}"
+                )
         return lessons
     except Exception as e:
         print(f"  ⚠  Lesson generation failed ({tutor.backend}/{tutor.model_id}): {e}")

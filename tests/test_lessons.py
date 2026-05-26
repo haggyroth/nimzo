@@ -1,8 +1,43 @@
 """
-Tests for _parse_lessons, build_quality_summary, and generate_lessons logic
-(the parts that don't require an LLM call).
+Tests for _parse_lessons, build_quality_summary, generate_lessons logic,
+and _trim_pgn (the parts that don't require an LLM call).
 """
-from analysis import _parse_lessons, build_quality_summary, generate_lessons, TutorConfig
+from analysis import _parse_lessons, build_quality_summary, generate_lessons, TutorConfig, _trim_pgn
+
+
+def _make_pgn(n_full_moves: int) -> str:
+    """Build a minimal PGN with n_full_moves moves (e4 e5 repeating)."""
+    header = '[Event "Test"]\n[Result "*"]'
+    moves = " ".join(
+        f"{i}. e4 e5" for i in range(1, n_full_moves + 1)
+    ) + " *"
+    return f"{header}\n\n{moves}"
+
+
+class TestTrimPgn:
+    def test_short_game_unchanged(self):
+        pgn = _make_pgn(30)
+        assert _trim_pgn(pgn, max_full_moves=60) == pgn
+
+    def test_exact_limit_unchanged(self):
+        pgn = _make_pgn(60)
+        assert _trim_pgn(pgn, max_full_moves=60) == pgn
+
+    def test_long_game_trimmed(self):
+        pgn = _make_pgn(100)
+        result = _trim_pgn(pgn, max_full_moves=60)
+        assert "omitted" in result
+        assert "40 earlier moves omitted" in result
+
+    def test_trimmed_starts_at_move_1(self):
+        pgn = _make_pgn(100)
+        result = _trim_pgn(pgn, max_full_moves=60)
+        # The snippet portion should start with "1."
+        snippet_part = result.split("\n\n")[-1]
+        assert snippet_part.lstrip().startswith("1.")
+
+    def test_empty_pgn_unchanged(self):
+        assert _trim_pgn("", max_full_moves=60) == ""
 
 
 class TestParseLessons:
