@@ -35,6 +35,8 @@
   <div style="display:flex;align-items:center;gap:14px">
     <a href="/stats" style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-mid);text-decoration:none;transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text-mid)'">Stats ↗</a>
     <button id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleLightDark()" title="Toggle light/dark mode">☀️</button>
+    <button class="panel-toggle-btn" id="btnToggleCenter" onclick="togglePanel('center')" title="Toggle analysis panel">⊢</button>
+    <button class="panel-toggle-btn" id="btnToggleRight"  onclick="togglePanel('right')"  title="Toggle control panel">⊣</button>
     <div class="conn-status">
       <div class="dot waiting" id="dot"></div>
       <span id="connLabel">connecting</span>
@@ -45,18 +47,21 @@
 <main>
   <!-- ── Board column ─────────────────────────────────────────────── -->
   <div class="board-col" id="boardCol">
-    <div class="player-strip" id="stripBlack">
-      <div class="p-left">
-        <img class="p-avatar" id="avatarBlack" alt="">
-        <div class="p-swatch" style="background:#1a1a1a;border:1px solid #444"></div>
-        <div class="p-name" id="nameBlack">—</div>
+    <!-- Black player: name bar + graveyard row -->
+    <div class="player-col">
+      <div class="player-strip" id="stripBlack">
+        <div class="p-left">
+          <img class="p-avatar" id="avatarBlack" alt="">
+          <div class="p-swatch" style="background:#1a1a1a;border:1px solid #444"></div>
+          <div class="p-name" id="nameBlack">—</div>
+        </div>
+        <div class="p-right">
+          <div class="p-think" id="thinkBlack">● thinking</div>
+          <div class="p-eval"  id="evalBlack"></div>
+          <div class="p-elo"   id="eloBlack">—</div>
+        </div>
       </div>
-      <div class="p-graveyard" id="graveyardBlack"></div>
-      <div class="p-right">
-        <div class="p-think" id="thinkBlack">● thinking</div>
-        <div class="p-eval"  id="evalBlack"></div>
-        <div class="p-elo"   id="eloBlack">—</div>
-      </div>
+      <div class="player-graveyard" id="graveyardBlack"></div>
     </div>
 
     <div class="board-wrap" id="boardWrap">
@@ -65,17 +70,20 @@
       <button id="flipBtn" class="flip-btn" onclick="toggleFlip()" title="Flip to Black's perspective">⇅</button>
     </div>
 
-    <div class="player-strip" id="stripWhite">
-      <div class="p-left">
-        <img class="p-avatar" id="avatarWhite" alt="">
-        <div class="p-swatch" style="background:#f0f0f0;border:1px solid #bbb"></div>
-        <div class="p-name" id="nameWhite">—</div>
-      </div>
-      <div class="p-graveyard" id="graveyardWhite"></div>
-      <div class="p-right">
-        <div class="p-think" id="thinkWhite">● thinking</div>
-        <div class="p-eval"  id="evalWhite"></div>
-        <div class="p-elo"   id="eloWhite">—</div>
+    <!-- White player: graveyard row + name bar -->
+    <div class="player-col">
+      <div class="player-graveyard" id="graveyardWhite"></div>
+      <div class="player-strip" id="stripWhite">
+        <div class="p-left">
+          <img class="p-avatar" id="avatarWhite" alt="">
+          <div class="p-swatch" style="background:#f0f0f0;border:1px solid #bbb"></div>
+          <div class="p-name" id="nameWhite">—</div>
+        </div>
+        <div class="p-right">
+          <div class="p-think" id="thinkWhite">● thinking</div>
+          <div class="p-eval"  id="evalWhite"></div>
+          <div class="p-elo"   id="eloWhite">—</div>
+        </div>
       </div>
     </div>
   </div>
@@ -391,6 +399,20 @@
           <div class="setting-group">
             <div class="setting-label">Board Orientation</div>
             <button class="piece-set-btn" id="flipBtnSettings" onclick="toggleFlip()" style="width:100%">⇅ Flip Board</button>
+          </div>
+
+          <!-- Board background image -->
+          <div class="setting-group">
+            <div class="setting-label">Board Background</div>
+            <label class="board-bg-upload" title="Upload an image to show in the board area background">
+              ↑ Upload image
+              <input type="file" accept="image/*" style="display:none" onchange="setBoardBg(this.files[0])">
+            </label>
+            <div class="board-bg-opacity-row">
+              <label for="boardBgOpacity">Opacity</label>
+              <input type="range" id="boardBgOpacity" min="0" max="100" value="40" oninput="onBoardBgOpacity(this.value)">
+            </div>
+            <button id="boardBgClear" class="piece-set-btn" onclick="clearBoardBg()" style="width:100%;display:none">✕ Clear image</button>
           </div>
 
           <div class="settings-reset" onclick="resetSettings()">↺ Reset to defaults</div>
