@@ -41,7 +41,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -58,6 +58,7 @@ from analysis import (
     ACHIEVEMENT_CATALOGUE,
 )
 from models.metadata import get_model_metadata
+import models.portraits as _portraits_module
 from models.portraits import generate_portrait
 import db as database
 
@@ -175,7 +176,7 @@ async def _pregenerate_portraits():
     if not api_key:
         return
     players = database.get_all_players()
-    missing = [p for p in players if not p.get("portrait_path")]
+    missing = [p for p in players if not p.get("portrait_path") and not database.is_user_provided_portrait(p["model_id"])]
     if not missing:
         return
     print(f"[portraits] Pre-generating portraits for {len(missing)} model(s)…")
@@ -385,7 +386,11 @@ async def api_generate_portrait(model_id: str):
 
     api_key = os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
-        return {"portrait_url": None}
+        return {"portrait_url": None, "quota_exhausted": False}
+
+    # Quota exhausted — return immediately without hammering the API
+    if _portraits_module._quota_exhausted:
+        return {"portrait_url": None, "quota_exhausted": True}
 
     # Cooldown check — reject repeat calls within the window
     now = time.monotonic()
@@ -406,7 +411,54 @@ async def api_generate_portrait(model_id: str):
     if path:
         database.set_portrait_path(model_id, path)
 
-    return {"portrait_url": f"/{path}" if path else None}
+    quota_exhausted = _portraits_module._quota_exhausted
+    return {"portrait_url": f"/{path}" if path else None, "quota_exhausted": quota_exhausted}
+
+
+@app.post("/api/models/{model_id:path}/portrait/upload")
+async def api_upload_portrait(model_id: str, file: UploadFile = File(...)):
+    """
+    Accept a user-uploaded portrait (PNG / JPEG / WebP, max 2 MB).
+
+    Saves to ``portraits/`` using the same deterministic filename as
+    AI-generated portraits, marks the record as ``user_provided=True``
+    so automatic Gemini re-generation never overwrites it, and returns
+    the public URL.
+    """
+    _ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
+    _MAX_BYTES = 2 * 1024 * 1024   # 2 MB
+
+    if not database.player_exists(model_id):
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in _ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type {content_type!r}. Use PNG, JPEG, or WebP.",
+        )
+
+    data = await file.read()
+    if len(data) > _MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large ({len(data)//1024} KB). Maximum is 2 MB.",
+        )
+
+    from models.portraits import portrait_filename
+    filename = portrait_filename(model_id)
+    dest = _PORTRAITS_DIR / filename
+    _PORTRAITS_DIR.mkdir(exist_ok=True)
+    dest.write_bytes(data)
+
+    database.set_portrait_path(model_id, f"portraits/{filename}", user_provided=True)
+    return {"portrait_url": f"/portraits/{filename}", "user_provided": True}
+
+
+@app.get("/api/models/{model_id_a:path}/h2h/{model_id_b:path}")
+async def api_h2h(model_id_a: str, model_id_b: str):
+    """Head-to-head record for model_a vs model_b from model_a's perspective."""
+    return database.get_h2h_record(model_id_a, model_id_b)
 
 
 @app.get("/api/achievements/catalogue")

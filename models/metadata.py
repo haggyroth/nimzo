@@ -27,7 +27,7 @@ from typing import Optional
 
 
 _CACHE_PATH = Path("hf_metadata_cache.json")
-_CACHE_TTL_SECONDS = 7 * 24 * 3600   # 7 days
+_CACHE_TTL_SECONDS = 24 * 3600   # 24 hours
 _HF_API = "https://huggingface.co/api/models/{repo}"
 _REQUEST_TIMEOUT = 4.0    # seconds — strict, this is a UI call
 
@@ -211,6 +211,17 @@ def fetch_hf_metadata(model_id: str) -> dict:
                 data["file_size_bytes"] = total
                 data["file_size_label"] = _fmt_size(total)
 
+        # safetensors.total — total parameter count from tensor shapes (more
+        # accurate than filename-parsing for MoE models like Mixtral, Qwen3-MoE)
+        st = raw.get("safetensors") or {}
+        if isinstance(st, dict) and st.get("total"):
+            try:
+                total_params = int(st["total"])
+                if total_params >= 1_000_000:
+                    data["safetensors_params"] = _format_b(total_params / 1e9)
+            except (TypeError, ValueError):
+                pass
+
         # Number of downloads (interesting on the card)
         if raw.get("downloads"):
             data["downloads"] = raw["downloads"]
@@ -237,9 +248,14 @@ def _fmt_size(bytes_: int) -> str:
 
 def get_model_metadata(model_id: str) -> dict:
     """
-    Parse the filename + best-effort HF lookup, merged. HF wins on
-    conflicting fields (it's authoritative).
+    Parse the filename + best-effort HF lookup, merged.  HF wins on
+    conflicting fields (it's authoritative).  If the filename parser
+    found no param count but HF returned safetensors_params, promote it.
     """
     parsed = parse_model_id(model_id)
     hf     = fetch_hf_metadata(model_id)
-    return {**parsed, **hf}
+    merged = {**parsed, **hf}
+    # Promote safetensors_params → param_count when filename-parse missed it
+    if "param_count" not in merged and "safetensors_params" in merged:
+        merged["param_count"] = merged["safetensors_params"]
+    return merged

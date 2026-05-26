@@ -169,10 +169,49 @@
     }
     .p-name {
       font-family: 'Cinzel', serif;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: .4px;
+      font-size: 12px; font-weight: 600; letter-spacing: .4px;
+      cursor: pointer;
     }
+    .p-name:hover { color: var(--gold-bright); }
+    .p-chevron {
+      background: none; border: none; color: var(--text-dim);
+      font-size: 9px; cursor: pointer; padding: 0 2px; line-height: 1;
+      transition: transform .2s, color .2s;
+    }
+    .p-chevron:hover { color: var(--gold); }
+    .p-chevron.open { transform: rotate(90deg); color: var(--gold); }
+
+    /* ── Inline stat card (chyron) ─────────────────────────────────── */
+    .stat-card {
+      display: none; width: var(--board-px, 460px);
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-top: none; padding: 6px 11px 7px;
+    }
+    .stat-card.open { display: block; }
+    .sc-row {
+      display: flex; flex-wrap: wrap; gap: 0; align-items: center;
+      font-size: 9px; letter-spacing: .04em;
+    }
+    .sc-stat {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 3px 10px 3px 0; min-width: 52px;
+    }
+    .sc-stat + .sc-stat { border-left: 1px solid var(--border); padding-left: 10px; }
+    .sc-val { font-size: 11px; font-weight: 600; color: var(--text); line-height: 1.2; }
+    .sc-lbl { font-size: 8px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-top: 1px; }
+    .sc-sparkline { height: 18px; width: 68px; overflow: hidden; }
+    .sc-sparkline svg { display: block; }
+    .sc-badge {
+      font-size: 8px; padding: 1px 5px; border-radius: 3px; font-weight: 600;
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      color: var(--gold); margin-left: 4px; white-space: nowrap;
+    }
+    .sc-tournament { font-size: 8px; color: var(--text-mid); padding-left: 10px; }
+    .sc-quota-notice {
+      font-size: 8px; color: var(--text-dim); padding: 4px 0 0;
+      letter-spacing: .04em;
+    }
+
     .p-right { display: flex; align-items: center; gap: 12px; }
     .p-elo   { font-size: 10px; color: var(--gold); letter-spacing: 1px; }
     .p-eval  {
@@ -717,6 +756,22 @@
       animation: spin .8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Portrait action buttons (upload / regenerate) */
+    .mc-portrait-actions {
+      display: flex; gap: 6px; margin-top: 6px; justify-content: center;
+    }
+    .mc-portrait-btn {
+      font-size: 9px; padding: 3px 8px; border-radius: 3px; cursor: pointer;
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      color: var(--text-mid); letter-spacing: .04em;
+      transition: color .15s, border-color .15s;
+    }
+    .mc-portrait-btn:hover { color: var(--gold); border-color: var(--gold); }
+    .mc-quota-notice {
+      font-size: 8px; color: var(--text-dim); margin-top: 4px;
+      text-align: center; letter-spacing: .04em;
+    }
 
     .mc-name {
       font-family: 'Cinzel', serif; font-size: 20px; font-weight: 700;

@@ -163,6 +163,7 @@ def _migrate(conn: sqlite3.Connection):
     _add_column_if_missing(conn, "lessons", "bad_move_rate_before","REAL")
     _add_column_if_missing(conn, "moves",   "coherence_score",     "REAL")
     _add_column_if_missing(conn, "moves",   "timed_out",           "INTEGER DEFAULT 0")
+    _add_column_if_missing(conn, "players", "user_provided_portrait", "INTEGER DEFAULT 0")
     # Create tournament tables for existing DBs (CREATE TABLE IF NOT EXISTS is idempotent
     # in the schema, but the schema only runs once so we ensure them here too)
     conn.executescript("""
@@ -254,13 +255,26 @@ def get_portrait_path(model_id: str) -> Optional[str]:
         return row["portrait_path"] if row else None
 
 
-def set_portrait_path(model_id: str, path: str) -> None:
-    """Persist a generated portrait path for a player."""
+def set_portrait_path(model_id: str, path: str, user_provided: bool = False) -> None:
+    """Persist a portrait path for a player.
+
+    When ``user_provided`` is True the record is marked so that automatic
+    AI re-generation doesn't silently overwrite the user's own photo.
+    """
     with get_conn() as conn:
         conn.execute(
-            "UPDATE players SET portrait_path = ? WHERE model_id = ?",
-            (path, model_id),
+            "UPDATE players SET portrait_path = ?, user_provided_portrait = ? WHERE model_id = ?",
+            (path, 1 if user_provided else 0, model_id),
         )
+
+
+def is_user_provided_portrait(model_id: str) -> bool:
+    """Return True if the model's portrait was uploaded by the user."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT user_provided_portrait FROM players WHERE model_id = ?", (model_id,)
+        ).fetchone()
+        return bool(row["user_provided_portrait"]) if row else False
 
 
 def get_strategic_profile(model_id: str) -> Optional[str]:
@@ -899,6 +913,35 @@ def get_head_to_head() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_h2h_record(model_id_a: str, model_id_b: str) -> dict:
+    """W/D/L for model_a vs model_b from model_a's perspective, across all colors."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                SUM(CASE WHEN
+                    (wp.model_id=:a AND g.result='1-0') OR
+                    (bp.model_id=:a AND g.result='0-1')
+                    THEN 1 ELSE 0 END) AS wins,
+                SUM(CASE WHEN g.result='1/2-1/2' THEN 1 ELSE 0 END) AS draws,
+                SUM(CASE WHEN
+                    (wp.model_id=:a AND g.result='0-1') OR
+                    (bp.model_id=:a AND g.result='1-0')
+                    THEN 1 ELSE 0 END) AS losses,
+                COUNT(*) AS total
+            FROM games g
+            JOIN players wp ON g.white_player_id = wp.id
+            JOIN players bp ON g.black_player_id = bp.id
+            WHERE (wp.model_id=:a AND bp.model_id=:b)
+               OR (wp.model_id=:b AND bp.model_id=:a)
+            """,
+            {"a": model_id_a, "b": model_id_b},
+        ).fetchone()
+        if not row or not row["total"]:
+            return {"wins": 0, "draws": 0, "losses": 0, "total": 0}
+        return dict(row)
+
+
 # ── Model profile (personality + headline stats) ──────────────────────────
 
 def get_model_profile(model_id: str) -> dict | None:
@@ -909,7 +952,7 @@ def get_model_profile(model_id: str) -> dict | None:
     with get_conn() as conn:
         player = conn.execute(
             """
-            SELECT id, name, model_id, backend, ROUND(elo) AS elo
+            SELECT id, name, model_id, backend, ROUND(elo) AS elo, user_provided_portrait
             FROM players WHERE model_id = ?
             """,
             (model_id,),
@@ -1000,10 +1043,11 @@ def get_model_profile(model_id: str) -> dict | None:
         ).fetchall()
 
         return {
-            "name":             player["name"],
-            "model_id":         player["model_id"],
-            "backend":          player["backend"],
-            "elo":              player["elo"],
+            "name":                  player["name"],
+            "model_id":              player["model_id"],
+            "backend":               player["backend"],
+            "elo":                   player["elo"],
+            "user_provided_portrait": bool(player["user_provided_portrait"]),
             "moves":            dict(moves) if moves else {},
             "castling": {
                 "games_castled":   len(castle_moves),

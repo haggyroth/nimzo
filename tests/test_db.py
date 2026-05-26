@@ -193,3 +193,86 @@ class TestLeaderboard:
         lb = tmp_db.get_leaderboard()
         elos = [row["elo"] for row in lb]
         assert elos == sorted(elos, reverse=True)
+
+
+class TestH2HRecord:
+    """Tests for get_h2h_record — head-to-head win/draw/loss totals."""
+
+    def _setup_players_and_game(self, db, result):
+        db.upsert_player("model-a", "Model A", "lmstudio", 1200.0)
+        db.upsert_player("model-b", "Model B", "lmstudio", 1200.0)
+        db.record_game(
+            white_model_id="model-a",
+            black_model_id="model-b",
+            result=result,
+            termination="checkmate",
+            total_moves=20,
+            pgn="",
+            white_elo_before=1200.0,
+            black_elo_before=1200.0,
+            white_elo_after=1216.0,
+            black_elo_after=1184.0,
+        )
+
+    def test_no_games_returns_zeros(self, tmp_db):
+        tmp_db.upsert_player("model-a", "Model A", "lmstudio", 1200.0)
+        tmp_db.upsert_player("model-b", "Model B", "lmstudio", 1200.0)
+        h2h = tmp_db.get_h2h_record("model-a", "model-b")
+        assert h2h["wins"] == 0
+        assert h2h["draws"] == 0
+        assert h2h["losses"] == 0
+
+    def test_win_counted_for_perspective_player(self, tmp_db):
+        self._setup_players_and_game(tmp_db, "1-0")
+        # model-a was white and won
+        h2h = tmp_db.get_h2h_record("model-a", "model-b")
+        assert h2h["wins"] == 1
+        assert h2h["draws"] == 0
+        assert h2h["losses"] == 0
+
+    def test_loss_counted_when_perspective_flipped(self, tmp_db):
+        self._setup_players_and_game(tmp_db, "1-0")
+        # From model-b's perspective, it was a loss
+        h2h = tmp_db.get_h2h_record("model-b", "model-a")
+        assert h2h["wins"] == 0
+        assert h2h["losses"] == 1
+
+    def test_draw_counted(self, tmp_db):
+        self._setup_players_and_game(tmp_db, "1/2-1/2")
+        h2h = tmp_db.get_h2h_record("model-a", "model-b")
+        assert h2h["draws"] == 1
+        assert h2h["wins"] == 0
+        assert h2h["losses"] == 0
+
+    def test_unknown_player_returns_zeros(self, tmp_db):
+        h2h = tmp_db.get_h2h_record("nobody", "nobody-else")
+        assert h2h["wins"] == 0
+        assert h2h["draws"] == 0
+        assert h2h["losses"] == 0
+
+
+class TestUserProvidedPortrait:
+    """Tests for is_user_provided_portrait and set_portrait_path user_provided flag."""
+
+    def test_new_player_not_user_provided(self, tmp_db):
+        tmp_db.upsert_player("model-a", "Model A", "lmstudio", 1200.0)
+        assert tmp_db.is_user_provided_portrait("model-a") is False
+
+    def test_set_portrait_marks_user_provided(self, tmp_db):
+        tmp_db.upsert_player("model-a", "Model A", "lmstudio", 1200.0)
+        tmp_db.set_portrait_path("model-a", "portraits/abc.png", user_provided=True)
+        assert tmp_db.is_user_provided_portrait("model-a") is True
+
+    def test_ai_portrait_not_user_provided(self, tmp_db):
+        tmp_db.upsert_player("model-a", "Model A", "lmstudio", 1200.0)
+        tmp_db.set_portrait_path("model-a", "portraits/abc.png", user_provided=False)
+        assert tmp_db.is_user_provided_portrait("model-a") is False
+
+    def test_unknown_model_returns_false(self, tmp_db):
+        assert tmp_db.is_user_provided_portrait("does-not-exist") is False
+
+    def test_user_provided_flag_in_model_profile(self, tmp_db):
+        tmp_db.upsert_player("model-a", "Model A", "lmstudio", 1200.0)
+        tmp_db.set_portrait_path("model-a", "portraits/abc.png", user_provided=True)
+        profile = tmp_db.get_model_profile("model-a")
+        assert profile["user_provided_portrait"] is True
