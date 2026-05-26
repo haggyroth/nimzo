@@ -308,7 +308,7 @@ def _call_tutor_like(
     cfg: "TutorConfig | JudgeConfig",
     prompt: str,
     system: str,
-    max_tokens: int = 1024,
+    max_tokens: int = 9600,
 ) -> str:
     """
     Generic caller that works for both TutorConfig and JudgeConfig.
@@ -527,7 +527,7 @@ def generate_lessons(
     )
 
     try:
-        raw = _call_tutor_like(tutor, prompt, system=_TUTOR_SYSTEM, max_tokens=1024)
+        raw = _call_tutor_like(tutor, prompt, system=_TUTOR_SYSTEM, max_tokens=9600)
         lessons = _parse_lessons(raw)
         if not lessons["improve"] and not lessons["strength"]:
             if not raw.strip():
