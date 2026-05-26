@@ -210,43 +210,6 @@ Each bullet must be a concrete, actionable chess principle, not vague praise. \
 Do not include one-off observations that appeared in only one game."""
 
 
-# ── Backend callers ───────────────────────────────────────────────────────
-
-def _call_lmstudio(tutor: TutorConfig, prompt: str) -> str:
-    import os
-    from openai import OpenAI
-    client = OpenAI(
-        base_url=tutor.base_url,
-        api_key=tutor.api_key or os.environ.get("LMSTUDIO_API_KEY", "lm-studio"),
-    )
-    resp = client.chat.completions.create(
-        model=tutor.model_id,
-        max_tokens=500,
-        temperature=0.4,
-        messages=[
-            {"role": "system", "content": _TUTOR_SYSTEM},
-            {"role": "user",   "content": prompt},
-        ],
-        extra_body={"enable_thinking": False},
-    )
-    return resp.choices[0].message.content or ""
-
-
-def _call_anthropic(tutor: TutorConfig, prompt: str) -> str:
-    import os
-    import anthropic
-    client = anthropic.Anthropic(
-        api_key=tutor.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-    )
-    msg = client.messages.create(
-        model=tutor.model_id or "claude-haiku-4-5-20251001",
-        max_tokens=500,
-        system=_TUTOR_SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return msg.content[0].text
-
-
 # ── Reasoning coherence scoring ──────────────────────────────────────────
 
 _JUDGE_SYSTEM = (
@@ -462,10 +425,7 @@ def generate_lessons(
     )
 
     try:
-        if tutor.backend == "anthropic":
-            raw = _call_anthropic(tutor, prompt)
-        else:
-            raw = _call_lmstudio(tutor, prompt)
+        raw = _call_tutor_like(tutor, prompt, system=_TUTOR_SYSTEM)
         lessons = _parse_lessons(raw)
         if not lessons["improve"] and not lessons["strength"]:
             print(f"  ⚠  Tutor returned no parseable lessons. Raw response:\n{raw[:600]}")
@@ -510,10 +470,7 @@ def compress_lessons(
     )
 
     try:
-        if tutor.backend == "anthropic":
-            raw = _call_anthropic(tutor, prompt)
-        else:
-            raw = _call_lmstudio(tutor, prompt)
+        raw = _call_tutor_like(tutor, prompt, system=_TUTOR_SYSTEM)
         raw = raw.strip()
         if raw:
             print(f"  🗜  Compressed {len(all_lessons)} lessons → strategic profile for {player_name}")

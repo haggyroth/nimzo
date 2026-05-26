@@ -193,7 +193,7 @@ class TestGenerateLessonsSkipLogic:
     def test_messy_draw_not_skipped(self, mocker):
         """A draw with blunders/mistakes should still go to the LLM."""
         tutor = TutorConfig(model_id="test-model", base_url="http://localhost:1234/v1")
-        mock_call = mocker.patch("analysis._call_lmstudio", return_value="IMPROVE:\n- Watch for blunders\nSTRENGTH:\n- Good opening\n")
+        mock_call = mocker.patch("analysis._call_tutor_like", return_value="IMPROVE:\n- Watch for blunders\nSTRENGTH:\n- Good opening\n")
         generate_lessons(
             pgn="1. e4 e5 *",
             player_name="ModelA",
@@ -209,7 +209,7 @@ class TestGenerateLessonsSkipLogic:
 
     def test_skip_clean_draw_false_passes_through(self, mocker):
         tutor = TutorConfig(model_id="test-model", base_url="http://localhost:1234/v1")
-        mock_call = mocker.patch("analysis._call_lmstudio", return_value="IMPROVE:\n- Lesson\nSTRENGTH:\n- Strength\n")
+        mock_call = mocker.patch("analysis._call_tutor_like", return_value="IMPROVE:\n- Lesson\nSTRENGTH:\n- Strength\n")
         generate_lessons(
             pgn="1. e4 e5 *",
             player_name="ModelA",

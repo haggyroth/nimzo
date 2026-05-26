@@ -193,6 +193,15 @@ def upsert_player(model_id: str, name: str, backend: str, elo: float = 1200.0) -
         return row["id"]
 
 
+def player_exists(model_id: str) -> bool:
+    """Return True if the model_id has a row in the players table."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM players WHERE model_id = ?", (model_id,)
+        ).fetchone()
+        return row is not None
+
+
 def get_player_elo(model_id: str) -> float:
     with get_conn() as conn:
         row = conn.execute("SELECT elo FROM players WHERE model_id = ?", (model_id,)).fetchone()

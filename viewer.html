@@ -2002,7 +2002,7 @@ function addMoveCard(data) {
   card.innerHTML = `
     <div class="move-top">
       <span class="move-num-label">${label}</span>
-      <span class="move-san-text">${data.san}</span>
+      <span class="move-san-text">${escHtml(data.san)}</span>
       <span class="move-badge ${q}">${q}</span>
       ${coherenceHtml}${timeoutHtml}
     </div>

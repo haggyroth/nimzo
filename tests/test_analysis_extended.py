@@ -231,7 +231,7 @@ class TestCompressLessons:
     def test_calls_backend_and_returns_profile(self, mocker):
         tutor = TutorConfig(model_id="test-model", base_url="http://localhost:1234/v1")
         mock_call = mocker.patch(
-            "analysis._call_lmstudio",
+            "analysis._call_tutor_like",
             return_value="WEAKNESSES:\n- Drops pieces\nSTRENGTHS:\n- Good endgames\n",
         )
         lessons = [
@@ -245,21 +245,21 @@ class TestCompressLessons:
 
     def test_empty_llm_response_returns_none(self, mocker):
         tutor = TutorConfig(model_id="test-model", base_url="http://localhost:1234/v1")
-        mocker.patch("analysis._call_lmstudio", return_value="   ")
+        mocker.patch("analysis._call_tutor_like", return_value="   ")
         lessons = [{"lesson": "Watch for forks", "lesson_type": "improve"}]
         result = compress_lessons(lessons, "ModelA", game_count=10, tutor=tutor)
         assert result is None
 
     def test_api_error_returns_none(self, mocker):
         tutor = TutorConfig(model_id="test-model", base_url="http://localhost:1234/v1")
-        mocker.patch("analysis._call_lmstudio", side_effect=ConnectionError("refused"))
+        mocker.patch("analysis._call_tutor_like", side_effect=ConnectionError("refused"))
         lessons = [{"lesson": "Watch for forks", "lesson_type": "improve"}]
         result = compress_lessons(lessons, "ModelA", game_count=10, tutor=tutor)
         assert result is None
 
     def test_prompt_includes_player_name_and_lessons(self, mocker):
         tutor = TutorConfig(model_id="test-model", base_url="http://localhost:1234/v1")
-        mock_call = mocker.patch("analysis._call_lmstudio", return_value="WEAKNESSES:\n- Test\n")
+        mock_call = mocker.patch("analysis._call_tutor_like", return_value="WEAKNESSES:\n- Test\n")
         lessons = [
             {"lesson": "Avoid hanging pieces", "lesson_type": "improve"},
             {"lesson": "Strong endgames", "lesson_type": "strength"},
@@ -273,7 +273,7 @@ class TestCompressLessons:
 
     def test_improve_and_strength_lessons_formatted_separately(self, mocker):
         tutor = TutorConfig(model_id="test-model", base_url="http://localhost:1234/v1")
-        mock_call = mocker.patch("analysis._call_lmstudio", return_value="WEAKNESSES:\n- x\n")
+        mock_call = mocker.patch("analysis._call_tutor_like", return_value="WEAKNESSES:\n- x\n")
         lessons = [
             {"lesson": "Lesson A", "lesson_type": "improve"},
             {"lesson": "Lesson B", "lesson_type": "improve"},
