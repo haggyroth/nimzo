@@ -1391,6 +1391,19 @@ function onLessons(d) {
   showLessons(d.player, d.color, d.improve || [], d.strength || []);
 }
 
+function onLessonGenerating(d) {
+  const el = document.getElementById('lessonSpinner');
+  if (!el) return;
+  const tutor = document.getElementById('lsTutor');
+  if (tutor) tutor.textContent = d.tutor_model ? `via ${d.tutor_model}` : '';
+  el.classList.add('show');
+}
+
+function onLessonsSaved() {
+  const el = document.getElementById('lessonSpinner');
+  if (el) el.classList.remove('show');
+}
+
 function renderStandings(standings) {
   const sec  = document.getElementById('standingsSection');
   const body = document.getElementById('standingsBody');
@@ -1520,6 +1533,8 @@ function dispatch(msg) {
       case 'move':              onMove(d);             break;
       case 'game_over':         onGameOver(d);         break;
       case 'lessons':           onLessons(d);          break;
+      case 'lesson_generating': onLessonGenerating(d); break;
+      case 'lessons_saved':     onLessonsSaved();      break;
       case 'tournament_status':  onTournamentStatus(d);  break;
       case 'standings_update':   onStandingsUpdate(d);   break;
       case 'tournament_complete':onTournamentComplete(d); break;

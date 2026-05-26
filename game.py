@@ -44,6 +44,8 @@ from analysis import (
     detect_opening_depth,
     evaluate_achievements,
     score_reasoning_coherence,
+    is_duplicate_lesson,
+    family_elo_prior,
     ACHIEVEMENT_CATALOGUE,
 )
 
@@ -472,12 +474,22 @@ async def play_game(
 
     # ── Lessons for both players ───────────────────────────────────────
     is_draw = result == "1/2-1/2"
-    for player, color, qualities in [
-        (white, "White", move_qualities_white),
-        (black, "Black", move_qualities_black),
-    ]:
-        if isinstance(player, HumanPlayer):
-            continue   # humans don't receive AI-generated lessons
+    _has_tutor = bool(tutor and tutor.model_id)
+    _lesson_players = [
+        (p, c, q) for p, c, q in [
+            (white, "White", move_qualities_white),
+            (black, "Black", move_qualities_black),
+        ]
+        if not isinstance(p, HumanPlayer)
+    ]
+
+    if _has_tutor and _lesson_players:
+        await _arena.broadcast({
+            "type":        "lesson_generating",
+            "tutor_model": tutor.model_id,
+        })
+
+    for player, color, qualities in _lesson_players:
         quality_summary = build_quality_summary(qualities)
         lessons = generate_lessons(
             pgn=pgn_string,
@@ -493,32 +505,49 @@ async def play_game(
 
         if lessons["improve"] or lessons["strength"]:
             bmr = bad_move_rate(qualities)
+            existing = [l["lesson"] for l in database.get_all_raw_lessons(player.config.model_id)]
+
+            saved_improve: list[str] = []
+            saved_strength: list[str] = []
+
             for lesson in lessons["improve"]:
+                if is_duplicate_lesson(lesson, existing):
+                    print(f"  ≈ Skipping duplicate lesson for {player.config.name}: {lesson[:60]}")
+                    continue
                 tagged = f"[improve] {lesson}"
                 player.add_lesson(tagged)
                 database.record_lesson(player.config.model_id, game_id, lesson, "improve", bmr)
+                existing.append(lesson)
+                saved_improve.append(lesson)
+
             for lesson in lessons["strength"]:
+                if is_duplicate_lesson(lesson, existing):
+                    print(f"  ≈ Skipping duplicate lesson for {player.config.name}: {lesson[:60]}")
+                    continue
                 tagged = f"[strength] {lesson}"
                 player.add_lesson(tagged)
                 database.record_lesson(player.config.model_id, game_id, lesson, "strength", bmr)
+                existing.append(lesson)
+                saved_strength.append(lesson)
 
-            await _arena.broadcast({
-                "type":     "lessons",
-                "player":   player.config.name,
-                "color":    color.lower(),
-                "improve":  lessons["improve"],
-                "strength": lessons["strength"],
-            })
-            print(f"\n  📚 {player.config.name}:")
-            for l in lessons["improve"]:
-                print(f"    ↑ improve: {l}")
-            for l in lessons["strength"]:
-                print(f"    ★ strength: {l}")
+            if saved_improve or saved_strength:
+                await _arena.broadcast({
+                    "type":     "lessons",
+                    "player":   player.config.name,
+                    "color":    color.lower(),
+                    "improve":  saved_improve,
+                    "strength": saved_strength,
+                })
+                print(f"\n  📚 {player.config.name}:")
+                for l in saved_improve:
+                    print(f"    ↑ improve: {l}")
+                for l in saved_strength:
+                    print(f"    ★ strength: {l}")
 
         # ── Lesson compression: every 5 games once threshold is reached ──
         game_count = database.get_player_game_count(player.config.model_id)
         lesson_count = database.get_lesson_count(player.config.model_id)
-        if tutor and tutor.model_id and game_count >= 5 and game_count % 5 == 0 and lesson_count >= 10:
+        if _has_tutor and game_count >= 5 and game_count % 5 == 0 and lesson_count >= 10:
             print(f"  🗜  Compressing {lesson_count} lessons for {player.config.name} (game #{game_count})…")
             all_lessons = database.get_all_raw_lessons(player.config.model_id)
             profile = await loop.run_in_executor(
@@ -527,6 +556,9 @@ async def play_game(
             if profile:
                 database.set_strategic_profile(player.config.model_id, profile)
                 player.config.strategic_profile = profile
+
+    if _has_tutor and _lesson_players:
+        await _arena.broadcast({"type": "lessons_saved"})
 
     # ── Adaptive difficulty ───────────────────────────────────────────────
     if adaptive_difficulty:
@@ -810,4 +842,9 @@ def build_player(
         player.elo = database.get_player_elo(model_id)
         if player.elo != 1200.0:
             print(f"  ↑ {name} ({model_id}): restored ELO {round(player.elo)}")
+    else:
+        prior = family_elo_prior(model_id)
+        if prior != 0.0:
+            player.elo = 1200.0 + prior
+            print(f"  ↑ {name}: new player, family prior {prior:+.0f} → starting ELO {round(player.elo)}")
     return player

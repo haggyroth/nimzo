@@ -897,6 +897,22 @@
     .rp-move-san  { color: var(--text); }
     .rp-move-qual { font-size: 8px; min-width: 16px; text-align: right; }
 
+    /* ── Lesson generation spinner ───────────────────────────────── */
+    #lessonSpinner {
+      display: none; position: fixed; inset: 0;
+      background: rgba(7,9,12,.6); backdrop-filter: blur(4px);
+      z-index: 190; align-items: center; justify-content: center;
+    }
+    #lessonSpinner.show { display: flex; }
+    .ls-content {
+      background: var(--bg-card); border: 1px solid var(--border-hi);
+      border-radius: 8px; padding: 28px 44px; text-align: center; min-width: 220px;
+    }
+    @keyframes spinPiece { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    .ls-icon  { font-size: 2.2rem; display: inline-block; animation: spinPiece 1.6s linear infinite; margin-bottom: 10px; }
+    .ls-title { font-size: .9rem; color: var(--text); letter-spacing: .06em; text-transform: uppercase; }
+    .ls-tutor { margin-top: 6px; font-size: .75rem; color: var(--text-mid); }
+
     /* ── Game-over overlay ───────────────────────────────────────── */
     #overlay {
       display: none; position: fixed; inset: 0;

@@ -273,20 +273,14 @@ Give more control over game rules and let models play their opening moves from t
 
 ---
 
-## Phase 21 — Tutor UX & Learning Improvements
-*Future*
+## Phase 21 — Tutor UX & Learning Improvements ✅
 
 ### Goals
 Make lesson generation visible to the viewer, improve compression quality, and fix ELO seeding for new players.
 
-- [ ] **Lesson generation splash screen**: when `generate_lessons()` begins, broadcast a `lesson_generating` WS event (`{player, tutor_model}`); the viewer shows a centered overlay with a chess-piece spinner, the tutor model name, and "Generating lessons…" When `lessons_saved` is broadcast, the overlay dismisses and the lessons panel updates. Purely frontend — no blocking change to the Python side.
-- [ ] **Semantic similarity lesson compression**: replace the fixed game-count trigger with a per-lesson deduplication pass using word-overlap Jaccard similarity (no external embedding API). When a new lesson is ≥ 0.75 similar to an existing one, merge them (keep the more specific phrasing). Full compression still triggers at 10+ lessons, but now produces tighter profiles. Implemented in `analysis.py`'s `compress_lessons()`.
-- [ ] **ELO seeding improvements**: new players start at 1200 with `K_PROVISIONAL = 40` for their first 5 games, then transition to the existing K-factor schedule. A small model-family prior (`±15 ELO` based on known family strength order) is applied only as a validated starting offset with a decay factor — it washes out within ~8 games. Thresholds and priors defined as named constants in `analysis.py`.
-
-### Implementation notes
-- WS events `lesson_generating` / `lessons_saved` are cheap — no new DB columns needed; viewer stores no state beyond showing/hiding the overlay.
-- Jaccard similarity: `len(words_a & words_b) / len(words_a | words_b)` on lowercased token sets; fast for the ~50-word lesson strings.
-- ELO seeding: `players` table gains `provisional_games_remaining INT DEFAULT 5`; decremented by `calculate_elos()` until 0, at which point K-factor steps down to the standard schedule.
+- [x] **Lesson generation splash screen**: when `generate_lessons()` begins, broadcast a `lesson_generating` WS event (`{tutor_model}`); the viewer shows a centered overlay with a chess-piece spinner, the tutor model name, and "Generating lessons…" When `lessons_saved` is broadcast, the overlay dismisses and the lessons panel updates.
+- [x] **Jaccard similarity lesson deduplication**: before saving a new lesson, check it against all existing lessons via word-overlap Jaccard similarity (threshold 0.75). Near-duplicates are skipped with a console notice. Full compression still triggers at 10+ lessons.
+- [x] **ELO seeding improvements**: `K_PROVISIONAL = 40` for the first 5 games (new tier added to `dynamic_k_factor()`), then drops to the existing K=32/24/16 schedule. A small size-based starting offset (`family_elo_prior()`) is applied to brand-new players — e.g. 70B models start at +12, 2B models at −10 — and washes out within ~8 games.
 
 ---
 

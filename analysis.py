@@ -19,16 +19,20 @@ from typing import Optional
 
 # K-factor schedule: high for new players, decays with experience.
 # Lower K = more rating stability; raise K_INITIAL for faster early calibration.
-K_INITIAL      = 32.0   # games < K_THRESH_PROVISIONAL
-K_MID          = 24.0   # games < K_THRESH_ESTABLISHED
-K_STABLE       = 16.0   # games ≥ K_THRESH_ESTABLISHED
+K_PROVISIONAL         = 40.0   # games < K_THRESH_VERY_PROVISIONAL (first 5 games)
+K_INITIAL             = 32.0   # games < K_THRESH_PROVISIONAL
+K_MID                 = 24.0   # games < K_THRESH_ESTABLISHED
+K_STABLE              = 16.0   # games ≥ K_THRESH_ESTABLISHED
+K_THRESH_VERY_PROVISIONAL = 5
 K_THRESH_PROVISIONAL  = 20
 K_THRESH_ESTABLISHED  = 40
 
 
 def dynamic_k_factor(games_played: int) -> float:
     """K decays as a player accumulates experience."""
-    if games_played < K_THRESH_PROVISIONAL:
+    if games_played < K_THRESH_VERY_PROVISIONAL:
+        return K_PROVISIONAL
+    elif games_played < K_THRESH_PROVISIONAL:
         return K_INITIAL
     elif games_played < K_THRESH_ESTABLISHED:
         return K_MID
@@ -791,6 +795,63 @@ def bad_move_rate(move_qualities: list[tuple[str, str]]) -> float | None:
         return None
     bad = sum(1 for _, q in move_qualities if q in ("blunder", "mistake"))
     return round(bad / len(move_qualities), 4)
+
+
+# ── Lesson deduplication ─────────────────────────────────────────────────
+
+JACCARD_DEDUP_THRESHOLD = 0.75
+
+
+def jaccard_similarity(a: str, b: str) -> float:
+    """Word-overlap Jaccard similarity between two lesson strings."""
+    words_a = set(a.lower().split())
+    words_b = set(b.lower().split())
+    if not words_a or not words_b:
+        return 0.0
+    return len(words_a & words_b) / len(words_a | words_b)
+
+
+def is_duplicate_lesson(
+    new_lesson: str,
+    existing_lessons: list[str],
+    threshold: float = JACCARD_DEDUP_THRESHOLD,
+) -> bool:
+    """Return True if new_lesson is too similar to any lesson already recorded."""
+    return any(jaccard_similarity(new_lesson, ex) >= threshold for ex in existing_lessons)
+
+
+# ── Family ELO prior ──────────────────────────────────────────────────────
+
+# Ordered list of (size-tag, elo-offset) pairs matched against lowercased model_id.
+# Applied once as a starting-ELO nudge for brand-new players; washes out within
+# ~8 games due to K_PROVISIONAL=40.  First match wins.
+_SIZE_ELO_PRIORS: list[tuple[str, float]] = [
+    ("70b",  +12.0),
+    ("72b",  +12.0),
+    ("65b",  +10.0),
+    ("34b",   +8.0),
+    ("30b",   +8.0),
+    ("27b",   +6.0),
+    ("14b",   +3.0),
+    ("13b",   +3.0),
+    ("12b",   +3.0),
+    ("7b",     0.0),
+    ("8b",     0.0),
+    ("6b",    -2.0),
+    ("4b",    -5.0),
+    ("3b",    -7.0),
+    ("2b",   -10.0),
+    ("1b",   -12.0),
+]
+
+
+def family_elo_prior(model_id: str) -> float:
+    """Return a small ELO starting offset inferred from size tags in the model_id."""
+    lower = model_id.lower()
+    for tag, prior in _SIZE_ELO_PRIORS:
+        if tag in lower:
+            return prior
+    return 0.0
 
 
 def build_quality_summary(move_qualities: list[tuple[str, str]]) -> str:
