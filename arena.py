@@ -202,6 +202,16 @@ app.mount("/portraits", StaticFiles(directory=str(_PORTRAITS_DIR)), name="portra
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket):
+    # Reject cross-origin connections.  The viewer is served by the same
+    # origin so legitimate browsers always send a matching Origin header.
+    # curl / scripts that omit Origin are still allowed (origin is None).
+    origin = websocket.headers.get("origin")
+    if origin is not None:
+        from urllib.parse import urlparse
+        host = urlparse(origin).hostname or ""
+        if host not in ("localhost", "127.0.0.1", "::1"):
+            await websocket.close(code=1008, reason="Cross-origin WebSocket not allowed")
+            return
     await websocket.accept()
     _connected_clients.add(websocket)
     # Immediately push current state so late-joiners are in sync
@@ -270,14 +280,6 @@ async def api_stats_h2h():
 async def stats_page():
     return (Path(__file__).parent / "stats.html").read_text()
 
-
-_QUALITY_GLYPH = {
-    "best":       "!!",
-    "excellent":  "!",
-    "inaccuracy": "?!",
-    "mistake":    "?",
-    "blunder":    "??",
-}
 
 @app.get("/api/models/{model_id:path}/profile")
 async def api_model_profile(model_id: str):
@@ -389,6 +391,13 @@ def _build_game_pgn(game_row: dict, moves: list[dict], round_number: Optional[in
     model's reasoning, move quality label, and candidate rank.  Used by both
     the single-game download endpoint and the bulk export endpoint.
     """
+    _QUALITY_GLYPH = {
+        "best":       "!!",
+        "excellent":  "!",
+        "inaccuracy": "?!",
+        "mistake":    "?",
+        "blunder":    "??",
+    }
     tags = [
         '[Event "Nimzo Arena"]',
         '[Site "localhost"]',
