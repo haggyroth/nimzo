@@ -9,10 +9,15 @@ arena.py          — orchestrator: game loop, WebSocket broadcast, tournament r
 engine.py         — Stockfish wrapper: candidate generation, move quality evaluation
 analysis.py       — ELO calculation, post-game lesson generation via LLM
 db.py             — SQLite persistence: games, moves, ELO history, lessons
+config_loader.py  — TOML config file parser
 models/
-  base.py         — abstract ChessPlayer, prompt builder, lesson memory
-  lmstudio_player.py  — OpenAI-compatible client (LM Studio, Ollama)
-  anthropic_player.py — Anthropic API client (optional, not used in local setup)
+  base.py               — abstract ChessPlayer, prompt builder, lesson memory
+  lmstudio_player.py    — OpenAI-compatible client (LM Studio, Ollama)
+  anthropic_player.py   — Anthropic API client
+  human_player.py       — Human move input (via browser UI)
+  metadata.py           — Model metadata parsing (family, size, quantization)
+  model_profiles.py     — Per-model behavioural profiles (thinking budget, token limits)
+  portraits.py          — Gemini portrait generation
 ```
 
 ## How Guided Mode Works
@@ -20,12 +25,13 @@ models/
 Each turn:
 1. Stockfish analyses the position at `candidate_depth=10` with `multipv=N`
 2. Top N moves are formatted with SAN notation and centipawn scores
-3. The model receives the board FEN, game PGN so far, candidate list, and accumulated lessons
+3. The model receives the board FEN, game PGN so far, candidate list, accumulated lessons, and any coaching profile
 4. Model responds with `CHOICE`, `MOVE` (UCI), and `REASONING`
 5. Response is parsed; falls back to candidate #1 if parsing fails
 6. Move quality is evaluated by comparing chosen move's score vs top candidate
 
 Move quality labels: `best` `excellent` `good` `inaccuracy` `mistake` `blunder`
+(Thresholds: <10 / <25 / <50 / <150 cp loss — see `CP_LOSS_*` constants in `engine.py`)
 
 ## Running a Tournament
 
@@ -61,6 +67,43 @@ simultaneously), start a second one on port 1235 and pass `--black-url http://lo
 
 Colors alternate each game automatically.
 
+### Headless mode (no HTTP server)
+
+```bash
+python arena.py --headless \
+  --white-model qwen3-coder-30b --black-model gemma-4b --games 20
+```
+
+Runs purely as a CLI process — no uvicorn, no browser. Useful for overnight benchmarking.
+
+### TOML config file
+
+```bash
+python arena.py --config tournament.toml
+```
+
+See `config_loader.py` for the full schema. Supports multi-player bracket/round-robin/gauntlet formats with per-player style and candidate count overrides.
+
+## Personality Styles
+
+Each player can have a playing style injected into its system prompt:
+
+| Style | Effect |
+|---|---|
+| `aggressive` | Favours open games, tactics, piece activity, material sacrifice |
+| `positional` | Favours closed structures, outposts, patient manoeuvring |
+| `defensive` | Consolidates before attacking; trades when ahead in material |
+
+Set via `--white-style aggressive` or in `PlayerSpec.style`.
+
+## Adaptive Difficulty
+
+When `adaptive_difficulty=True`, after each game the rolling 10-game win rate for each player is checked. If it exceeds 65% their `candidate_count` drops by 1 (harder); if it falls below 35% it rises by 1 (easier). Bounds are 3–10. Thresholds are named constants in `arena.py` (`_ADAPT_*`).
+
+## Reasoning Coherence Scoring
+
+An optional judge model scores each move's reasoning 0–10 via `score_reasoning_coherence()` in `analysis.py`. Configure with `--judge-model <id>`. Scores are stored per move and shown in the viewer.
+
 ## WebSocket Events
 
 The arena broadcasts JSON events to `ws://localhost:8765`. The visualizer connects here.
@@ -68,28 +111,29 @@ The arena broadcasts JSON events to `ws://localhost:8765`. The visualizer connec
 | Event | Key fields |
 |---|---|
 | `game_start` | `white`, `black`, `white_elo`, `black_elo`, `fen` |
-| `thinking` | `player`, `color`, `fen`, `candidates[]` |
-| `move` | `san`, `uci`, `quality`, `candidate_rank`, `reasoning`, `fen` |
+| `thinking` | `player`, `color`, `fen`, `candidates[]`, `is_human_turn` |
+| `move` | `san`, `uci`, `quality`, `candidate_rank`, `reasoning`, `coherence_score`, `fen` |
 | `game_over` | `result`, `termination`, `white_elo_after`, `black_elo_after` |
 
 ## Adaptive Learning Loop
 
 After each game:
 1. Losing player's move history is summarized (quality counts, blunders/mistakes by SAN)
-2. A Haiku API call generates 2-3 specific lessons from the PGN + quality summary
+2. A tutor LLM call generates 2-3 specific lessons from the PGN + quality summary
 3. Lessons are stored in SQLite and appended to the player's `lesson_memory`
-4. On the next game, the last 10 lessons are injected into the system prompt
+4. On the next game, the last 10 lessons (or a compressed strategic profile) are injected into the system prompt
 
-If both models are local and no Anthropic key is set, disable lesson generation by commenting out the `generate_lessons()` call in `arena.py` around the game-over block, or swap in a local model call in `analysis.py`.
+If both models are local and no Anthropic key is set, disable lesson generation by commenting out the `generate_lessons()` call in `arena.py` around the game-over block, or configure a local `--tutor-model`.
 
 ## Database Schema
 
-`nimzo.db` — created automatically on first run.
+`nimzo.db` — created automatically on first run, anchored to the directory containing `arena.py` regardless of working directory.
 
-- `players` — name, model_id, backend, current ELO
+- `players` — name, model_id, backend, current ELO, portrait_path
 - `games` — result, termination, PGN, ELO before/after for both players
-- `moves` — per-move record with quality, candidate rank, reasoning, FEN after
+- `moves` — per-move record with quality, candidate rank, reasoning, coherence score, FEN after
 - `lessons` — per-player lessons linked to the game that generated them
+- `tournaments` — bracket/round-robin tournament records
 
 Useful queries:
 ```sql
@@ -111,13 +155,22 @@ FROM moves m JOIN players p ON m.player_id = p.id GROUP BY p.name;
 In `models/base.py`:
 - `candidate_count` — how many Stockfish candidates the model sees (default: 5)
 - `temperature` — model temperature (default: 0.3; lower = more consistent)
+- `DEFAULT_REQUEST_TIMEOUT_S` — HTTP timeout for all player backends (default: 120s)
 
 In `engine.py`:
 - `depth` — Stockfish depth for full analysis (default: 15)
 - `candidate_depth` — depth for candidate generation (default: 10; increase for stronger candidates, slower per move)
+- `CP_LOSS_*` — named thresholds for move quality labels (excellent/good/inaccuracy/mistake/blunder)
 
 In `analysis.py`:
-- `K_FACTOR` — ELO K-factor (default: 32; reduce as game count grows for stability)
+- `K_INITIAL / K_MID / K_STABLE` — ELO K-factor schedule (32 → 24 → 16 as games accumulate)
+- `K_THRESH_PROVISIONAL / K_THRESH_ESTABLISHED` — game-count breakpoints for K-factor decay
+
+In `arena.py`:
+- `_DEFAULT_PORT` — server port (default: 8765; override with `--port` or `PORT` env var)
+- `_DEFAULT_LMSTUDIO_URL` — default LM Studio endpoint (http://localhost:1234/v1)
+- `_ADAPT_CANDIDATE_MIN/MAX` — candidate count bounds for adaptive difficulty (3–10)
+- `_ADAPT_WIN_RATE_HIGH/LOW` — win-rate thresholds that trigger difficulty adjustment (0.65/0.35)
 
 ## Adding a New Backend
 
@@ -138,7 +191,11 @@ Then add a branch in `build_player()` in `arena.py`.
 | Variable | Default | Description |
 |---|---|---|
 | `STOCKFISH_PATH` | `/usr/games/stockfish` | Path to stockfish binary |
-| `ANTHROPIC_API_KEY` | — | Required only if using Anthropic backend or lesson generation |
+| `ANTHROPIC_API_KEY` | — | Required for Anthropic backend or lesson generation |
+| `GOOGLE_API_KEY` | — | Required for portrait generation (Gemini Imagen) |
+| `PORT` | `8765` | Server port |
+| `NIMZO_HOST` | `127.0.0.1` | Bind address (`0.0.0.0` to expose on LAN) |
+| `LMSTUDIO_BASE_URL` | `http://localhost:1234/v1` | Default LM Studio endpoint |
 
 ## Git Workflow
 

@@ -9,6 +9,10 @@ from dataclasses import dataclass, field
 from typing import Optional
 import chess
 
+# Default HTTP timeout for all player backends (seconds).
+# Override per-player via PlayerConfig.move_timeout.
+DEFAULT_REQUEST_TIMEOUT_S = 120.0
+
 
 @dataclass
 class PlayerConfig:

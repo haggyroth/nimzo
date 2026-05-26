@@ -15,7 +15,7 @@ import time
 import chess
 from openai import OpenAI
 
-from .base import ChessPlayer, PlayerConfig, MoveDecision
+from .base import ChessPlayer, DEFAULT_REQUEST_TIMEOUT_S, PlayerConfig, MoveDecision
 from .model_profiles import get_profile
 
 
@@ -38,17 +38,12 @@ def _extract_thinking(raw: str) -> tuple[str, str]:
 
 
 class LMStudioPlayer(ChessPlayer):
-    # Bound a single move request so the UI never hangs waiting on a model
-    # that got unloaded / wedged. 120s is ~5× a realistic max for a chess
-    # move and well under the SDK default (600s).
-    DEFAULT_TIMEOUT_S = 120.0
-
     def __init__(self, config: PlayerConfig):
         super().__init__(config)
         self.client = OpenAI(
             base_url=config.base_url or os.environ.get("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
             api_key=config.api_key or os.environ.get("LMSTUDIO_API_KEY", "lm-studio"),
-            timeout=self.DEFAULT_TIMEOUT_S,
+            timeout=DEFAULT_REQUEST_TIMEOUT_S,
         )
 
     def choose_move(

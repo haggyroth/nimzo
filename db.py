@@ -96,8 +96,17 @@ CREATE TABLE IF NOT EXISTS tournament_games (
 
 
 @contextmanager
-def get_conn(db_path: Path = DB_PATH):
-    conn = sqlite3.connect(db_path)
+def get_conn(db_path: Optional[Path] = None):
+    """
+    Yield a configured SQLite connection.
+
+    ``db_path`` defaults to the module-level ``DB_PATH`` so that
+    monkeypatching ``db.DB_PATH`` in tests takes effect without needing to
+    pass an explicit path.  (Using ``DB_PATH`` as a default argument would
+    capture it at import time and ignore later patches.)
+    """
+    path = db_path if db_path is not None else DB_PATH
+    conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -106,7 +115,7 @@ def get_conn(db_path: Path = DB_PATH):
         conn.close()
 
 
-def init_db(db_path: Path = DB_PATH):
+def init_db(db_path: Optional[Path] = None):
     with get_conn(db_path) as conn:
         conn.executescript(_SCHEMA)
         # Non-destructive migrations for existing databases
@@ -599,8 +608,12 @@ def get_lesson_effectiveness(model_id: str, lookback_games: int = 3) -> list[dic
         if not game_rates:
             return []
 
-        # Build ordered list of (game_id, played_at, bad_rate)
-        ordered = [(r["game_id"], r["played_at"], r["bad_rate"]) for r in game_rates]
+        # Map game_id → bad_rate for fast lookup
+        rate_by_game: dict[int, float] = {
+            r["game_id"]: r["bad_rate"] for r in game_rates if r["bad_rate"] is not None
+        }
+        # Ordered game IDs (ascending by played_at) for slicing subsequent games
+        ordered_game_ids: list[int] = [r["game_id"] for r in game_rates]
 
         lessons = conn.execute(
             """
@@ -618,12 +631,16 @@ def get_lesson_effectiveness(model_id: str, lookback_games: int = 3) -> list[dic
 
         results = []
         for les in lessons:
-            lesson_at = les["lesson_at"]
+            lesson_game_id = les["game_id"]
             # Subsequent game rates (games played AFTER this lesson's game)
-            subsequent = [
-                rate for (_, at, rate) in ordered
-                if at > lesson_at and rate is not None
-            ][:lookback_games]
+            # Use positional ordering (already sorted by played_at ASC in the SQL
+            # above) to avoid brittle Python string-date comparison.
+            try:
+                idx = ordered_game_ids.index(lesson_game_id)
+            except ValueError:
+                continue
+            subsequent_ids = ordered_game_ids[idx + 1 : idx + 1 + lookback_games]
+            subsequent = [rate_by_game[gid] for gid in subsequent_ids if gid in rate_by_game]
             if not subsequent:
                 continue
             after = sum(subsequent) / len(subsequent)
@@ -635,7 +652,7 @@ def get_lesson_effectiveness(model_id: str, lookback_games: int = 3) -> list[dic
                 "bad_move_rate_after":  round(after, 4),
                 "delta":                round(after - before, 4),
                 "games_measured":       len(subsequent),
-                "game_id":              les["game_id"],
+                "game_id":              lesson_game_id,
             })
         return results
 
@@ -757,7 +774,8 @@ def get_player_move_stats() -> list[dict]:
 def get_player_quality_stats(model_id: str) -> Optional[dict]:
     """
     Move-quality breakdown for a single model.
-    Returns rates (0-1), counts, avg candidate rank and avg centipawn loss,
+    Returns rates (0-1), counts, avg candidate rank, and avg position score
+    (centipawns from White's POV after the chosen move — NOT centipawn loss),
     or None if the player is unknown or has no moves.
     """
     with get_conn() as conn:
@@ -778,7 +796,7 @@ def get_player_quality_stats(model_id: str) -> Optional[dict]:
                 SUM(CASE WHEN quality='mistake'    THEN 1 ELSE 0 END)          AS mistake,
                 SUM(CASE WHEN quality='blunder'    THEN 1 ELSE 0 END)          AS blunder,
                 ROUND(AVG(candidate_rank), 2)                                  AS avg_candidate_rank,
-                ROUND(AVG(CASE WHEN score_cp IS NOT NULL THEN score_cp END), 1) AS avg_score_cp
+                ROUND(AVG(CASE WHEN score_cp IS NOT NULL THEN score_cp END), 1) AS avg_position_score_cp
             FROM moves
             WHERE player_id = ?
             """,

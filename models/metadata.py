@@ -117,7 +117,7 @@ def parse_model_id(model_id: str) -> dict:
     # Quantization
     qm = _QUANT_RE.search(bare)
     if qm:
-        out["quantization"] = qm.group(1).upper().replace("_K_M", "_K_M")
+        out["quantization"] = qm.group(1).upper()
 
     return out
 
