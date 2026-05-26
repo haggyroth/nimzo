@@ -159,6 +159,10 @@
               <label class="toggle-row">
                 <input type="checkbox" id="whiteThinking"> Extended thinking
               </label>
+              <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
+                <span>Blind opening moves</span>
+                <input type="number" id="whiteBlindMoves" value="0" min="0" max="20" style="width:52px">
+              </div>
             </div>
 
             <hr class="divider">
@@ -186,6 +190,10 @@
               <label class="toggle-row">
                 <input type="checkbox" id="blackThinking"> Extended thinking
               </label>
+              <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
+                <span>Blind opening moves</span>
+                <input type="number" id="blackBlindMoves" value="0" min="0" max="20" style="width:52px">
+              </div>
             </div>
 
             <hr class="divider">
@@ -227,6 +235,11 @@
               <input type="checkbox" id="adaptiveDifficulty">
               Adaptive difficulty
             </label>
+
+            <div class="games-row" title="Declare a draw after this many half-moves (plies). 0 = no limit. 500 plies ≈ 250 moves per side.">
+              <span>Move limit (plies)</span>
+              <input type="number" id="maxMoves" value="0" min="0" max="5000" style="width:60px" placeholder="0">
+            </div>
 
             <button class="start-btn" id="startBtn" onclick="startTournament()">▶ Start Match</button>
           </div>

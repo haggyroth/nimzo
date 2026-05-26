@@ -30,6 +30,7 @@ class _PlayerSpec:
     url: str = "http://localhost:1234/v1"
     thinking: bool = False
     candidate_count: Optional[int] = None
+    blind_opening_moves: int = 0
 
 
 @dataclass
@@ -39,11 +40,13 @@ class _TournamentStartConfig:
     white_model: str = ""
     white_url: str = "http://localhost:1234/v1"
     white_thinking: bool = False
+    white_blind_opening_moves: int = 0
     black_backend: str = "lmstudio"
     black_name: str = "Black"
     black_model: str = ""
     black_url: str = "http://localhost:1235/v1"
     black_thinking: bool = False
+    black_blind_opening_moves: int = 0
     tutor_backend: str = "lmstudio"
     tutor_model: str = ""
     tutor_url: str = "http://localhost:1234/v1"
@@ -54,6 +57,7 @@ class _TournamentStartConfig:
     games_per_pair: int = 2
     format: str = "match"
     move_timeout: int = 0
+    max_moves: int = 0
     human_assisted: bool = True
     players: list = field(default_factory=list)
 

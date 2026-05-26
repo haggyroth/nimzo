@@ -98,17 +98,19 @@ def load_config(path: str | Path):
 
     fmt          = match_cfg.get("format", "match")
     move_timeout = int(match_cfg.get("move_timeout", 0))
+    max_moves    = int(match_cfg.get("max_moves", 0))
 
     # ── Multi-player bracket mode ─────────────────────────────────────────
     if len(players_list) >= 2:
         players = [
             PlayerSpec(
-                backend        = p.get("backend", "lmstudio"),
-                name           = p.get("name", ""),
-                model_id       = p.get("model", ""),
-                url            = p.get("url", "http://localhost:1234/v1"),
-                thinking       = bool(p.get("thinking", False)),
-                candidate_count= int(p.get("candidate_count", 5)) or None,
+                backend             = p.get("backend", "lmstudio"),
+                name                = p.get("name", ""),
+                model_id            = p.get("model", ""),
+                url                 = p.get("url", "http://localhost:1234/v1"),
+                thinking            = bool(p.get("thinking", False)),
+                candidate_count     = int(p.get("candidate_count", 5)) or None,
+                blind_opening_moves = int(p.get("blind_opening_moves", 0)),
             )
             for p in players_list
         ]
@@ -123,28 +125,32 @@ def load_config(path: str | Path):
             format         = fmt,
             games_per_pair = int(match_cfg.get("games", 2)),
             move_timeout   = move_timeout,
+            max_moves      = max_moves,
             human_assisted = bool(match_cfg.get("human_assisted", True)),
         )
 
     # ── 2-player match mode ───────────────────────────────────────────────
     return TournamentStartConfig(
-        white_backend  = white_cfg.get("backend", "lmstudio"),
-        white_name     = white_cfg.get("name", "White"),
-        white_model    = white_cfg.get("model", ""),
-        white_url      = white_cfg.get("url", "http://localhost:1234/v1"),
-        white_thinking = bool(white_cfg.get("thinking", False)),
-        black_backend  = black_cfg.get("backend", "lmstudio"),
-        black_name     = black_cfg.get("name", "Black"),
-        black_model    = black_cfg.get("model", ""),
-        black_url      = black_cfg.get("url", "http://localhost:1235/v1"),
-        black_thinking = bool(black_cfg.get("thinking", False)),
-        tutor_backend  = tutor_cfg.get("backend", "lmstudio"),
-        tutor_model    = tutor_cfg.get("model", ""),
-        tutor_url      = tutor_cfg.get("url", "http://localhost:1234/v1"),
-        judge_backend  = judge_cfg.get("backend", tutor_cfg.get("backend", "lmstudio")),
-        judge_model    = judge_cfg.get("model", tutor_cfg.get("model", "")),
-        judge_url      = judge_cfg.get("url", tutor_cfg.get("url", "http://localhost:1234/v1")),
-        games          = int(match_cfg.get("games", 1)),
-        move_timeout   = move_timeout,
-        human_assisted = bool(match_cfg.get("human_assisted", True)),
+        white_backend               = white_cfg.get("backend", "lmstudio"),
+        white_name                  = white_cfg.get("name", "White"),
+        white_model                 = white_cfg.get("model", ""),
+        white_url                   = white_cfg.get("url", "http://localhost:1234/v1"),
+        white_thinking              = bool(white_cfg.get("thinking", False)),
+        white_blind_opening_moves   = int(white_cfg.get("blind_opening_moves", 0)),
+        black_backend               = black_cfg.get("backend", "lmstudio"),
+        black_name                  = black_cfg.get("name", "Black"),
+        black_model                 = black_cfg.get("model", ""),
+        black_url                   = black_cfg.get("url", "http://localhost:1235/v1"),
+        black_thinking              = bool(black_cfg.get("thinking", False)),
+        black_blind_opening_moves   = int(black_cfg.get("blind_opening_moves", 0)),
+        tutor_backend               = tutor_cfg.get("backend", "lmstudio"),
+        tutor_model                 = tutor_cfg.get("model", ""),
+        tutor_url                   = tutor_cfg.get("url", "http://localhost:1234/v1"),
+        judge_backend               = judge_cfg.get("backend", tutor_cfg.get("backend", "lmstudio")),
+        judge_model                 = judge_cfg.get("model", tutor_cfg.get("model", "")),
+        judge_url                   = judge_cfg.get("url", tutor_cfg.get("url", "http://localhost:1234/v1")),
+        games                       = int(match_cfg.get("games", 1)),
+        move_timeout                = move_timeout,
+        max_moves                   = max_moves,
+        human_assisted              = bool(match_cfg.get("human_assisted", True)),
     )
