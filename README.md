@@ -1,6 +1,16 @@
-# Nimzo
+<p align="center">
+  <img src=".github/logo.png" alt="Nimzo" width="160" />
+</p>
 
-AI chess tournament system where locally-hosted LLMs compete against each other. Uses **guided mode**: Stockfish generates ranked candidate moves and each model picks one with reasoning — so matches test strategic judgment, not move generation.
+<h1 align="center">Nimzo</h1>
+
+<p align="center">
+  AI chess tournament system where locally-hosted LLMs compete against each other.
+</p>
+
+---
+
+Uses **guided mode**: Stockfish generates ranked candidate moves and each model picks one with reasoning — so matches test strategic judgment, not move generation.
 
 Models learn from their games. After each match both players receive lessons generated from their mistakes and strengths; those lessons are injected into their system prompt for every subsequent game.
 
@@ -22,7 +32,7 @@ sudo apt install stockfish      # Debian/Ubuntu
 echo "ANTHROPIC_API_KEY=sk-..." >> .env
 
 # 4. Start
-python3 arena.py
+python -m arena
 # Browser opens automatically at http://localhost:8765
 ```
 
@@ -78,7 +88,7 @@ Ollama and any other OpenAI-compatible endpoint also work — just paste the bas
 GUI mode is the recommended path. CLI mode is available for headless / scripted runs:
 
 ```bash
-python3 arena.py \
+python -m arena \
   --white-name "Qwen3-30B" --white-model qwen3-30b-a3b \
   --black-name "Gemma-3-4B" --black-model google/gemma-3-4b \
   --games 5 --no-browser
@@ -126,7 +136,13 @@ Only infrastructure settings belong in `.env` — model selection happens in the
 ## Architecture
 
 ```
-arena.py          — FastAPI server, game loop, WebSocket broadcast, tournament runner
+arena/            — FastAPI server package
+  state.py          — shared mutable state, broadcast(), TournamentAborted
+  models.py         — Pydantic models (PlayerSpec, TournamentStartConfig)
+  app.py            — FastAPI app, lifespan, startup utilities
+  cli.py            — argparse entry point (python -m arena)
+  routes/           — API route modules (games, models, stats, tournament)
+game.py           — core game loop (play_game), tournament runners, build_player
 engine.py         — Stockfish wrapper: candidate generation, move quality evaluation
 analysis.py       — ELO calculation, lesson generation, opening detection
 db.py             — SQLite persistence: players, games, moves, ELO history, lessons
@@ -181,4 +197,4 @@ class MyPlayer(ChessPlayer):
         return MoveDecision(uci, reasoning, candidate_rank, raw)
 ```
 
-Then add a branch in `build_player()` in `arena.py`.
+Then add a branch in `build_player()` in `game.py`.
