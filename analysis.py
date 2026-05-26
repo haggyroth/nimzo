@@ -16,14 +16,23 @@ from typing import Optional
 
 # ── ELO ─────────────────────────────────────────────────────────────────
 
+# K-factor schedule: high for new players, decays with experience.
+# Lower K = more rating stability; raise K_INITIAL for faster early calibration.
+K_INITIAL      = 32.0   # games < K_THRESH_PROVISIONAL
+K_MID          = 24.0   # games < K_THRESH_ESTABLISHED
+K_STABLE       = 16.0   # games ≥ K_THRESH_ESTABLISHED
+K_THRESH_PROVISIONAL  = 20
+K_THRESH_ESTABLISHED  = 40
+
+
 def dynamic_k_factor(games_played: int) -> float:
     """K decays as a player accumulates experience."""
-    if games_played < 20:
-        return 32.0
-    elif games_played < 40:
-        return 24.0
+    if games_played < K_THRESH_PROVISIONAL:
+        return K_INITIAL
+    elif games_played < K_THRESH_ESTABLISHED:
+        return K_MID
     else:
-        return 16.0
+        return K_STABLE
 
 
 def expected_score(player_elo: float, opponent_elo: float) -> float:

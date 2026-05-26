@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import asyncio
+import itertools
 import json
 from typing import Optional
 import argparse
@@ -62,6 +63,18 @@ import db as database
 # ── Portraits directory ───────────────────────────────────────────────────
 _PORTRAITS_DIR = Path("portraits")
 _PORTRAITS_DIR.mkdir(exist_ok=True)
+
+# ── Named constants ───────────────────────────────────────────────────────
+# Server
+_DEFAULT_PORT           = 8765
+_DEFAULT_LMSTUDIO_URL   = "http://localhost:1234/v1"
+_DEFAULT_LMSTUDIO_URL_2 = "http://localhost:1235/v1"  # second LM Studio instance
+
+# Adaptive difficulty (candidate_count window)
+_ADAPT_CANDIDATE_MIN = 3
+_ADAPT_CANDIDATE_MAX = 10
+_ADAPT_WIN_RATE_HIGH = 0.65   # reduce candidates (make it harder) above this win rate
+_ADAPT_WIN_RATE_LOW  = 0.35   # increase candidates (make it easier) below this win rate
 
 
 # ── Global tournament state ───────────────────────────────────────────────
@@ -144,6 +157,7 @@ async def _pregenerate_portraits():
     """
     Background task: generate portraits for any known player that doesn't
     have one yet.  Runs once at startup, fully non-blocking.
+    All missing portraits are generated concurrently (up to the thread-pool limit).
     """
     api_key = os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
@@ -154,14 +168,16 @@ async def _pregenerate_portraits():
         return
     print(f"[portraits] Pre-generating portraits for {len(missing)} model(s)…")
     loop = asyncio.get_running_loop()
-    for p in missing:
-        mid = p["model_id"]
+
+    async def _gen_one(mid: str) -> None:
         path = await loop.run_in_executor(
             None, generate_portrait, mid, api_key, _PORTRAITS_DIR
         )
         if path:
             database.set_portrait_path(mid, path)
             print(f"[portraits] ✓ {mid}")
+
+    await asyncio.gather(*[_gen_one(p["model_id"]) for p in missing])
     print("[portraits] Pre-generation complete.")
 
 
@@ -514,7 +530,7 @@ async def api_human_move(body: HumanMoveRequest):
 
 
 @app.get("/api/models")
-async def api_models(url: str = "http://localhost:1234/v1"):
+async def api_models(url: str = _DEFAULT_LMSTUDIO_URL):
     import httpx
     try:
         async with httpx.AsyncClient(timeout=4.0) as client:
@@ -528,7 +544,7 @@ class PlayerSpec(BaseModel):
     backend: str = "lmstudio"
     name: str = ""
     model_id: str = ""
-    url: str = "http://localhost:1234/v1"
+    url: str = _DEFAULT_LMSTUDIO_URL
     thinking: bool = False
     candidate_count: Optional[int] = None   # override default 5; None = use default
     style: str = ""                         # "aggressive" | "positional" | "defensive" | ""
@@ -543,20 +559,20 @@ class TournamentStartConfig(BaseModel):
     white_backend: str = "lmstudio"
     white_name: str = "White"
     white_model: str = ""
-    white_url: str = "http://localhost:1234/v1"
+    white_url: str = _DEFAULT_LMSTUDIO_URL
     white_thinking: bool = False
     black_backend: str = "lmstudio"
     black_name: str = "Black"
     black_model: str = ""
-    black_url: str = "http://localhost:1235/v1"
+    black_url: str = _DEFAULT_LMSTUDIO_URL_2
     black_thinking: bool = False
     tutor_backend: str = "lmstudio"
     tutor_model: str = ""
-    tutor_url: str = "http://localhost:1234/v1"
+    tutor_url: str = _DEFAULT_LMSTUDIO_URL
     # Reasoning coherence judge (defaults to same as tutor when model is "")
     judge_backend: str = "lmstudio"
     judge_model: str = ""
-    judge_url: str = "http://localhost:1234/v1"
+    judge_url: str = _DEFAULT_LMSTUDIO_URL
     games: int = 10
     # Time control: seconds per move, 0 = no limit
     move_timeout: int = 0
@@ -622,8 +638,7 @@ def generate_pairings(player_specs: list[PlayerSpec], fmt: str, games_per_pair: 
                 else:
                     pairings.append((ch, champion))
     else:  # round_robin
-        n = len(player_specs)
-        pairs = [(player_specs[i], player_specs[j]) for i in range(n) for j in range(i + 1, n)]
+        pairs = list(itertools.combinations(player_specs, 2))
         for g in range(games_per_pair):
             for (a, b) in pairs:
                 if g % 2 == 0:
@@ -1194,17 +1209,15 @@ async def play_game(
     # the game stays interesting: more candidates for struggling players,
     # fewer for dominant ones.  Only activates after ≥10 games.
     if adaptive_difficulty:
-        _ADAPT_MIN, _ADAPT_MAX = 3, 10
-        _WIN_LOW,  _WIN_HIGH   = 0.35, 0.65
         for player in (white, black):
             rate = database.get_recent_win_rate(player.config.model_id, n=10)
             if rate is None:
                 continue   # not enough history yet
             old_count = player.config.candidate_count
-            if rate > _WIN_HIGH and old_count > _ADAPT_MIN:
+            if rate > _ADAPT_WIN_RATE_HIGH and old_count > _ADAPT_CANDIDATE_MIN:
                 player.config.candidate_count = old_count - 1
                 print(f"  📉 {player.config.name}: win rate {rate:.0%} → candidates {old_count}→{player.config.candidate_count}")
-            elif rate < _WIN_LOW and old_count < _ADAPT_MAX:
+            elif rate < _ADAPT_WIN_RATE_LOW and old_count < _ADAPT_CANDIDATE_MAX:
                 player.config.candidate_count = old_count + 1
                 print(f"  📈 {player.config.name}: win rate {rate:.0%} → candidates {old_count}→{player.config.candidate_count}")
 
@@ -1515,14 +1528,14 @@ if __name__ == "__main__":
     parser.add_argument("--white-backend", default=os.environ.get("WHITE_BACKEND", "lmstudio"))
     parser.add_argument("--white-name",    default="")
     parser.add_argument("--white-model",   default="")   # explicit only — no env fallback
-    parser.add_argument("--white-url",     default=os.environ.get("WHITE_URL", os.environ.get("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")))
+    parser.add_argument("--white-url",     default=os.environ.get("WHITE_URL", os.environ.get("LMSTUDIO_BASE_URL", _DEFAULT_LMSTUDIO_URL)))
     parser.add_argument("--black-backend", default=os.environ.get("BLACK_BACKEND", "lmstudio"))
     parser.add_argument("--black-name",    default="")
     parser.add_argument("--black-model",   default="")   # explicit only — no env fallback
-    parser.add_argument("--black-url",     default=os.environ.get("BLACK_URL",     "http://localhost:1234/v1"))
+    parser.add_argument("--black-url",     default=os.environ.get("BLACK_URL",     _DEFAULT_LMSTUDIO_URL))
     parser.add_argument("--tutor-backend", default=os.environ.get("TUTOR_BACKEND", "lmstudio"))
     parser.add_argument("--tutor-model",   default=os.environ.get("TUTOR_MODEL",   ""))
-    parser.add_argument("--tutor-url",     default=os.environ.get("TUTOR_URL",     "http://localhost:1234/v1"))
+    parser.add_argument("--tutor-url",     default=os.environ.get("TUTOR_URL",     _DEFAULT_LMSTUDIO_URL))
     parser.add_argument("--judge-model",   default=os.environ.get("JUDGE_MODEL",   ""),
                         help="Model for reasoning coherence scoring (defaults to tutor model)")
     parser.add_argument("--games",         type=int, default=int(os.environ.get("GAMES", 1)))
@@ -1532,7 +1545,7 @@ if __name__ == "__main__":
                         help="Enable extended thinking for both players (LM Studio)")
     parser.add_argument("--headless",      action="store_true", default=False,
                         help="Run without HTTP server or browser — DB only, fast benchmarking")
-    parser.add_argument("--port",          type=int, default=int(os.environ.get("PORT", 8765)))
+    parser.add_argument("--port",          type=int, default=int(os.environ.get("PORT", _DEFAULT_PORT)))
     parser.add_argument("--listen",        default=os.environ.get("NIMZO_HOST", "127.0.0.1"),
                         metavar="HOST",
                         help="Interface to bind (default 127.0.0.1; use 0.0.0.0 to expose on LAN)")

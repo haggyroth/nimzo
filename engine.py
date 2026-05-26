@@ -13,6 +13,13 @@ import os
 
 DEFAULT_STOCKFISH_PATH = os.environ.get("STOCKFISH_PATH", "/usr/games/stockfish")
 
+# Move-quality centipawn-loss thresholds (vs Stockfish's top candidate).
+# Tune these to adjust how harshly moves are graded.
+CP_LOSS_EXCELLENT   =  10   # < 10 cp loss  → excellent
+CP_LOSS_GOOD        =  25   # < 25 cp loss  → good
+CP_LOSS_INACCURACY  =  50   # < 50 cp loss  → inaccuracy
+CP_LOSS_MISTAKE     = 150   # < 150 cp loss → mistake  (≥ 150 → blunder)
+
 
 @dataclass
 class AnalysisResult:
@@ -137,13 +144,13 @@ class StockfishEngine:
 
         loss = top_score - chosen_score  # centipawns lost
 
-        if loss < 10:
+        if loss < CP_LOSS_EXCELLENT:
             return "excellent"
-        elif loss < 25:
+        elif loss < CP_LOSS_GOOD:
             return "good"
-        elif loss < 50:
+        elif loss < CP_LOSS_INACCURACY:
             return "inaccuracy"
-        elif loss < 150:
+        elif loss < CP_LOSS_MISTAKE:
             return "mistake"
         else:
             return "blunder"
