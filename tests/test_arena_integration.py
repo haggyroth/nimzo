@@ -193,7 +193,7 @@ class TestPlayGame:
             assert new_w != initial_w or new_b != initial_b, "ELO unchanged after decisive game"
 
     def test_no_tutor_no_lessons(self):
-        summary = self._run(tutor=None)
+        self._run(tutor=None)
         lessons = database.get_player_lessons("white-bot")
         assert lessons == []
 
@@ -234,7 +234,7 @@ class TestAdaptiveDifficulty:
     def _seed_wins(self, model_id: str, opponent_id: str, n: int, result: str = "1-0"):
         """Seed n games with the given result for model_id as white."""
         for _ in range(n):
-            gid = database.record_game(
+            database.record_game(
                 white_model_id=model_id,
                 black_model_id=opponent_id,
                 result=result,
