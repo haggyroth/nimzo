@@ -23,6 +23,8 @@ from typing import Optional
 
 @dataclass
 class ModelProfile:
+    """Behavioural tuning profile for a specific model family."""
+
     match: str                            # Substring matched against model_id (case-insensitive)
     description: str = ""
     # Thinking control
@@ -37,6 +39,7 @@ _PROFILES: list[ModelProfile] | None = None
 
 
 def _load() -> list[ModelProfile]:
+    """Load and cache profiles from ``model_profiles.json``; returns ``[]`` if missing."""
     global _PROFILES
     if _PROFILES is not None:
         return _PROFILES

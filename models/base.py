@@ -16,6 +16,8 @@ DEFAULT_REQUEST_TIMEOUT_S = 120.0
 
 @dataclass
 class PlayerConfig:
+    """Runtime configuration for a single chess player."""
+
     name: str                          # Display name, e.g. "Claude Sonnet 4"
     model_id: str                      # API model string
     backend: str                       # "anthropic" | "lmstudio"
@@ -33,6 +35,8 @@ class PlayerConfig:
 
 @dataclass
 class MoveDecision:
+    """The outcome of a single ``choose_move`` call: the chosen move and its context."""
+
     move_uci: str                  # Chosen move in UCI format (e.g. "e2e4")
     reasoning: str                 # Model's explanation
     candidate_rank: int            # Which candidate was chosen (1 = Stockfish's top pick)
@@ -41,6 +45,8 @@ class MoveDecision:
 
 
 class ChessPlayer(ABC):
+    """Abstract base class for all player backends (LM Studio, Anthropic, Human)."""
+
     def __init__(self, config: PlayerConfig):
         self.config = config
         self.elo = 1200.0
@@ -59,6 +65,13 @@ class ChessPlayer(ABC):
         candidates: list[tuple[chess.Move, float]],
         game_history_pgn: str,
     ) -> str:
+        """
+        Build the user-turn prompt for the current position.
+
+        Formats the board FEN, game PGN so far, and numbered candidate moves
+        (with centipawn scores from White's perspective) into the structured
+        CHOICE/MOVE/REASONING prompt that all backends parse.
+        """
         color = "White" if board.turn == chess.WHITE else "Black"
         is_white = board.turn == chess.WHITE
         fen = board.fen()
@@ -122,6 +135,14 @@ Do not suggest any move not in the list above."""
     }
 
     def build_system_prompt(self) -> str:
+        """
+        Build the system prompt, injecting personality style and lesson memory.
+
+        If a compressed ``strategic_profile`` exists it is used as the primary
+        coaching context with the 3 most-recent raw lessons appended for
+        recency.  Otherwise, the last 10 raw lessons are formatted into
+        ``improve`` / ``strength`` sections.
+        """
         base = (
             "You are a chess player competing in an AI tournament. "
             "You think strategically, consider your opponent's plans, "

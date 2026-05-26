@@ -16,6 +16,8 @@ from .model_profiles import get_profile
 
 
 class AnthropicPlayer(ChessPlayer):
+    """Chess player backed by the Anthropic Messages API."""
+
     def __init__(self, config: PlayerConfig):
         super().__init__(config)
         self.client = anthropic.Anthropic(
@@ -29,6 +31,7 @@ class AnthropicPlayer(ChessPlayer):
         candidates: list[tuple[chess.Move, float]],
         game_history_pgn: str,
     ) -> MoveDecision:
+        """Call the Anthropic API and parse the response into a MoveDecision."""
         prompt  = self.build_prompt(board, candidates, game_history_pgn)
         thinking = self.config.enable_thinking
         profile  = get_profile(self.config.model_id)
@@ -75,6 +78,13 @@ class AnthropicPlayer(ChessPlayer):
         board: chess.Board,
         thinking_content: str = "",
     ) -> MoveDecision:
+        """
+        Extract CHOICE/MOVE/REASONING from raw model output.
+
+        Falls back through three strategies: explicit MOVE UCI field →
+        CHOICE number → any UCI token in the response.  If all fail,
+        returns candidate #1 with a parse-failed note.
+        """
         choice_match    = re.search(r"CHOICE:\s*(\d+)", raw, re.IGNORECASE)
         move_match      = re.search(r"MOVE:\s*([a-h][1-8][a-h][1-8][qrbn]?)", raw, re.IGNORECASE)
         reasoning_match = re.search(r"REASONING:\s*(.+?)(?:\n\n|\Z)", raw, re.IGNORECASE | re.DOTALL)

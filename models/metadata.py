@@ -225,6 +225,7 @@ def fetch_hf_metadata(model_id: str) -> dict:
 
 
 def _fmt_size(bytes_: int) -> str:
+    """Format a byte count as a human-readable string (e.g. ``7.2 GB``)."""
     if bytes_ >= 1024 ** 3:
         return f"{bytes_ / 1024 ** 3:.1f} GB"
     if bytes_ >= 1024 ** 2:

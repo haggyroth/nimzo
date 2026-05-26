@@ -80,6 +80,7 @@ _WINNER_TITLES = [
 
 
 def pick_title(model_id: str, fmt: str) -> str:
+    """Return a deterministic victory title for a model/format pair."""
     import hashlib
     seed = hashlib.md5(f"{model_id}:{fmt}".encode()).digest()
     idx = int.from_bytes(seed[:4], "big") % len(_WINNER_TITLES)
@@ -181,6 +182,15 @@ async def play_game(
     judge: JudgeConfig | None = None,
     adaptive_difficulty: bool = False,
 ) -> dict:
+    """
+    Run a single game between two players and return a result dict.
+
+    Broadcasts ``thinking``, ``move``, and ``game_over`` WebSocket events
+    during play.  After the game, optionally generates tutor lessons for the
+    loser and coherence scores for each move via the judge model.
+    Returns a dict with keys: result, termination, pgn, white_elo_before/after,
+    black_elo_before/after, and per-move quality/coherence data.
+    """
     board = chess.Board()
     game  = chess.pgn.Game()
     game.headers["White"] = white.config.name
@@ -550,6 +560,13 @@ async def run_bracket_tournament(
     judge: JudgeConfig | None = None,
     adaptive_difficulty: bool = False,
 ):
+    """
+    Drive a multi-player round-robin or gauntlet tournament.
+
+    Iterates through ``pairings``, playing ``games_per_pair`` games for each
+    head-to-head matchup (alternating colours).  Broadcasts live standings
+    updates after each game and a final ``tournament_over`` event when done.
+    """
     total = len(pairings)
     game_results: list[dict] = []
 
@@ -699,6 +716,13 @@ async def run_tournament(
     judge: JudgeConfig | None = None,
     adaptive_difficulty: bool = False,
 ):
+    """
+    Drive a 2-player match of ``n_games`` games, alternating colours each game.
+
+    Broadcasts ``tournament_over`` when all games are complete or a stop is
+    requested.  Handles adaptive difficulty by adjusting each player's
+    ``candidate_count`` after each game based on their rolling win rate.
+    """
     with StockfishEngine() as stockfish:
         for i in range(1, n_games + 1):
             await _arena._pause_event.wait()
@@ -745,6 +769,13 @@ def build_player(
     move_timeout: int = 0,
     style: str = "",
 ) -> ChessPlayer:
+    """
+    Construct the correct ``ChessPlayer`` subclass for the given backend.
+
+    Loads any existing lesson memory and strategic profile from the DB if
+    a player record already exists.  Supports backends: ``"lmstudio"``,
+    ``"anthropic"``, and ``"human"``.
+    """
     db_exists = (Path(__file__).parent / "nimzo.db").exists()
     config = PlayerConfig(
         name=name,
