@@ -30,14 +30,14 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 
 from engine import StockfishEngine
-from models.base import ChessPlayer, PlayerConfig
+from models.base import ChessPlayer, MoveDecision, PlayerConfig
 from models.anthropic_player import AnthropicPlayer
 from models.lmstudio_player import LMStudioPlayer
 from models.human_player import HumanPlayer
@@ -153,7 +153,7 @@ async def _pregenerate_portraits():
     if not missing:
         return
     print(f"[portraits] Pre-generating portraits for {len(missing)} model(s)…")
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     for p in missing:
         mid = p["model_id"]
         path = await loop.run_in_executor(
@@ -267,7 +267,6 @@ _QUALITY_GLYPH = {
 async def api_model_profile(model_id: str):
     profile = database.get_model_profile(model_id)
     if not profile:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Model not found")
     profile["traits"] = derive_personality_traits(profile)
     profile["achievements"] = [
@@ -279,7 +278,7 @@ async def api_model_profile(model_id: str):
         for a in database.get_player_achievements(model_id)
     ]
     # Run HF fetch off the event loop so a slow HF response can't stall the UI.
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     profile["metadata"] = await loop.run_in_executor(
         None, get_model_metadata, model_id,
     )
@@ -311,7 +310,6 @@ async def api_model_quality(model_id: str):
     """
     stats = database.get_player_quality_stats(model_id)
     if stats is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Model not found or no moves recorded")
     return stats
 
@@ -325,6 +323,10 @@ async def api_generate_portrait(model_id: str):
     ``{portrait_url: null}`` if no API key or generation fails.
     Runs the blocking Imagen call in a thread-pool executor.
     """
+    # Reject unknown model IDs — prevents unbounded paid API calls for ghost IDs
+    if not database.player_exists(model_id):
+        raise HTTPException(status_code=404, detail="Model not found")
+
     # Return cached path without regenerating
     existing = database.get_portrait_path(model_id)
     if existing and Path(existing).exists():
@@ -334,7 +336,7 @@ async def api_generate_portrait(model_id: str):
     if not api_key:
         return {"portrait_url": None}
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     path = await loop.run_in_executor(
         None, generate_portrait, model_id, api_key, _PORTRAITS_DIR
     )
@@ -354,7 +356,6 @@ async def api_achievement_catalogue():
 async def api_game(game_id: int):
     row = database.get_game(game_id)
     if not row:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Game not found")
     return row
 
@@ -509,7 +510,6 @@ async def api_human_move(body: HumanMoveRequest):
     for color, hp in list(_active_human_players.items()):
         if hp.submit_move(body.uci):
             return {"ok": True, "color": color, "uci": body.uci}
-    from fastapi import HTTPException
     raise HTTPException(status_code=400, detail="No human player awaiting a move, or illegal move")
 
 
@@ -878,7 +878,7 @@ async def play_game(
 
     move_number = 0
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     while not board.is_game_over():
         # Pause / stop checks
@@ -928,7 +928,6 @@ async def play_game(
             decision = await asyncio.wait_for(coro, timeout=timeout_secs)
         except asyncio.TimeoutError:
             print(f"  ⏱  {current_player.config.name} timed out after {timeout_secs}s — top candidate used")
-            from models.base import MoveDecision
             decision = MoveDecision(
                 move_uci=candidates[0][0].uci(),
                 reasoning=f"(timed out after {timeout_secs}s — fell back to top candidate)",
@@ -943,7 +942,6 @@ async def play_game(
             if _stop_requested:
                 raise TournamentAborted()
             print(f"  ⚠  {current_player.config.name} API error ({type(exc).__name__}): {exc} — falling back to top candidate")
-            from models.base import MoveDecision
             decision = MoveDecision(
                 move_uci=candidates[0][0].uci(),
                 reasoning="(API error — fell back to top candidate)",
@@ -1535,6 +1533,9 @@ if __name__ == "__main__":
     parser.add_argument("--headless",      action="store_true", default=False,
                         help="Run without HTTP server or browser — DB only, fast benchmarking")
     parser.add_argument("--port",          type=int, default=int(os.environ.get("PORT", 8765)))
+    parser.add_argument("--listen",        default=os.environ.get("NIMZO_HOST", "127.0.0.1"),
+                        metavar="HOST",
+                        help="Interface to bind (default 127.0.0.1; use 0.0.0.0 to expose on LAN)")
     parser.add_argument("--no-browser",    action="store_true", default=False,
                         help="Don't auto-open the browser on startup")
     args = parser.parse_args()
@@ -1552,6 +1553,7 @@ if __name__ == "__main__":
         _headless = args.headless
 
     port = args.port
+    host = args.listen
 
     if _headless:
         # ── Headless mode: skip uvicorn entirely ──────────────────────
@@ -1628,18 +1630,19 @@ if __name__ == "__main__":
             move_timeout=args.move_timeout,
         )
 
+    display_host = "localhost" if host in ("127.0.0.1", "::1") else host
     if _cli_config:
         w = _cli_config.white_name or _cli_config.white_model
         b = _cli_config.black_name or _cli_config.black_model
         g = _cli_config.games
-        print(f"🌐  Nimzo  →  http://localhost:{port}")
+        print(f"🌐  Nimzo  →  http://{display_host}:{port}")
         print(f"♟   {w} vs {b}  ·  {g} game(s)")
         if _cli_config.tutor_model:
             print(f"🎓  Tutor: {_cli_config.tutor_model}")
         if _cli_config.move_timeout:
             print(f"⏱  Move timeout: {_cli_config.move_timeout}s")
     else:
-        print(f"🌐  Nimzo  →  http://localhost:{port}")
+        print(f"🌐  Nimzo  →  http://{display_host}:{port}")
         print("    Open the browser to configure and start a tournament.")
 
     # Auto-open browser unless suppressed or in CLI mode with --no-browser
@@ -1652,4 +1655,4 @@ if __name__ == "__main__":
             webbrowser.open(f"http://localhost:{port}")
         threading.Thread(target=_open_browser, daemon=True).start()
 
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="warning")

@@ -65,12 +65,6 @@ def _load_toml(path: Path) -> dict:
         with open(path, "rb") as f:
             return tomllib.load(f)
     try:
-        import tomllib  # type: ignore[no-redef]
-        with open(path, "rb") as f:
-            return tomllib.load(f)
-    except ImportError:
-        pass
-    try:
         import tomli  # type: ignore[import]
         with open(path, "rb") as f:
             return tomli.load(f)
