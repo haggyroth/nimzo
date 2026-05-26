@@ -1085,3 +1085,158 @@
     .th-winner { color: var(--gold); font-weight: 500; flex: 1; }
     .th-title  { color: var(--text-mid); font-size: 9px; font-style: italic; }
     .th-meta   { color: var(--text-dim); font-size: 9px; text-align: right; min-width: 40px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       UI THEMES — override :root variables per data-ui-theme attr
+       The board-square variables (--sq-*) are controlled separately
+       by the board-theme swatch system and are not overridden here.
+       ═══════════════════════════════════════════════════════════════ */
+
+    [data-ui-theme="solarized-dark"] {
+      --bg:           #002b36;
+      --bg-panel:     #073642;
+      --bg-card:      #073642;
+      --bg-input:     #00212b;
+      --border:       #0a3e4f;
+      --border-hi:    #2aa198;
+      --text:         #839496;
+      --text-dim:     #28444e;
+      --text-mid:     #657b83;
+      --gold:         #b58900;
+      --gold-bright:  #cb4b16;
+    }
+
+    [data-ui-theme="solarized-light"] {
+      --bg:           #fdf6e3;
+      --bg-panel:     #eee8d5;
+      --bg-card:      #e4dfc9;
+      --bg-input:     #fdf6e3;
+      --border:       #d0cab6;
+      --border-hi:    #2aa198;
+      --text:         #657b83;
+      --text-dim:     #b0aa96;
+      --text-mid:     #839496;
+      --gold:         #b58900;
+      --gold-bright:  #cb4b16;
+    }
+
+    [data-ui-theme="catppuccin-mocha"] {
+      --bg:           #1e1e2e;
+      --bg-panel:     #181825;
+      --bg-card:      #313244;
+      --bg-input:     #181825;
+      --border:       #45475a;
+      --border-hi:    #89b4fa;
+      --text:         #cdd6f4;
+      --text-dim:     #45475a;
+      --text-mid:     #a6adc8;
+      --gold:         #f9e2af;
+      --gold-bright:  #fab387;
+    }
+
+    [data-ui-theme="catppuccin-latte"] {
+      --bg:           #eff1f5;
+      --bg-panel:     #e6e9ef;
+      --bg-card:      #dce0e8;
+      --bg-input:     #e6e9ef;
+      --border:       #ccd0da;
+      --border-hi:    #1e66f5;
+      --text:         #4c4f69;
+      --text-dim:     #bcc0cc;
+      --text-mid:     #6c6f85;
+      --gold:         #df8e1d;
+      --gold-bright:  #fe640b;
+    }
+
+    [data-ui-theme="nord"] {
+      --bg:           #2e3440;
+      --bg-panel:     #3b4252;
+      --bg-card:      #434c5e;
+      --bg-input:     #2e3440;
+      --border:       #4c566a;
+      --border-hi:    #88c0d0;
+      --text:         #d8dee9;
+      --text-dim:     #3b4252;
+      --text-mid:     #81a1c1;
+      --gold:         #ebcb8b;
+      --gold-bright:  #d08770;
+    }
+
+    [data-ui-theme="dracula"] {
+      --bg:           #282a36;
+      --bg-panel:     #21222c;
+      --bg-card:      #343746;
+      --bg-input:     #21222c;
+      --border:       #44475a;
+      --border-hi:    #bd93f9;
+      --text:         #f8f8f2;
+      --text-dim:     #44475a;
+      --text-mid:     #6272a4;
+      --gold:         #f1fa8c;
+      --gold-bright:  #ffb86c;
+    }
+
+    /* ── UI theme swatches ──────────────────────────────────────── */
+    .ui-theme-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .ui-theme-btn {
+      padding: 5px 8px;
+      border-radius: 3px;
+      border: 1px solid transparent;
+      font-family: var(--ui-font);
+      font-size: 9px;
+      letter-spacing: .8px;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color .15s, opacity .15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ui-theme-btn:hover  { opacity: .85; }
+    .ui-theme-btn.active { border-color: currentColor !important; }
+
+    /* ── Theme import ───────────────────────────────────────────── */
+    .theme-import-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .theme-import-lbl {
+      flex: 1;
+      font-size: 9px;
+      color: var(--text-dim);
+    }
+    .theme-import-btn {
+      padding: 3px 8px;
+      background: transparent;
+      border: 1px solid var(--border-hi);
+      color: var(--text-mid);
+      font-family: var(--ui-font);
+      font-size: 9px;
+      letter-spacing: .8px;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: color .15s, border-color .15s;
+      display: inline-block;
+    }
+    .theme-import-btn:hover { color: var(--text); border-color: var(--text-mid); }
+
+    /* ── Light/dark toggle (header) ─────────────────────────────── */
+    .theme-toggle-btn {
+      background: transparent;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+      opacity: .7;
+      transition: opacity .15s;
+    }
+    .theme-toggle-btn:hover { opacity: 1; }

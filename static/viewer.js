@@ -35,6 +35,72 @@ const FONTS = {
 // rather than one of the preset theme swatches.
 const THEME_CUSTOM = 'custom';
 
+// ── UI color scheme themes ────────────────────────────────────────────────
+// Each entry defines the full set of UI CSS variables.  Board-square colors
+// (--sq-*) are managed separately by the board-theme swatch system.
+const UI_THEMES = {
+  nimzo: {
+    label: 'Nimzo', dark: true, bg: '#07090c', text: '#c8d8e8', acc: '#c8921e',
+    vars: { '--bg':'#07090c','--bg-panel':'#0c1018','--bg-card':'#111820','--bg-input':'#0a1120',
+            '--border':'#1a2535','--border-hi':'#2a3d55',
+            '--text':'#c8d8e8','--text-dim':'#3d5570','--text-mid':'#6a8aaa',
+            '--gold':'#c8921e','--gold-bright':'#e8b84a' },
+  },
+  'solarized-dark': {
+    label: 'Solarized Dark', dark: true, bg: '#002b36', text: '#839496', acc: '#b58900',
+    vars: { '--bg':'#002b36','--bg-panel':'#073642','--bg-card':'#073642','--bg-input':'#00212b',
+            '--border':'#0a3e4f','--border-hi':'#2aa198',
+            '--text':'#839496','--text-dim':'#28444e','--text-mid':'#657b83',
+            '--gold':'#b58900','--gold-bright':'#cb4b16' },
+  },
+  'solarized-light': {
+    label: 'Solarized Light', dark: false, bg: '#fdf6e3', text: '#657b83', acc: '#b58900',
+    vars: { '--bg':'#fdf6e3','--bg-panel':'#eee8d5','--bg-card':'#e4dfc9','--bg-input':'#fdf6e3',
+            '--border':'#d0cab6','--border-hi':'#2aa198',
+            '--text':'#657b83','--text-dim':'#b0aa96','--text-mid':'#839496',
+            '--gold':'#b58900','--gold-bright':'#cb4b16' },
+  },
+  'catppuccin-mocha': {
+    label: 'Catppuccin', dark: true, bg: '#1e1e2e', text: '#cdd6f4', acc: '#f9e2af',
+    vars: { '--bg':'#1e1e2e','--bg-panel':'#181825','--bg-card':'#313244','--bg-input':'#181825',
+            '--border':'#45475a','--border-hi':'#89b4fa',
+            '--text':'#cdd6f4','--text-dim':'#45475a','--text-mid':'#a6adc8',
+            '--gold':'#f9e2af','--gold-bright':'#fab387' },
+  },
+  'catppuccin-latte': {
+    label: 'Catppuccin Latte', dark: false, bg: '#eff1f5', text: '#4c4f69', acc: '#df8e1d',
+    vars: { '--bg':'#eff1f5','--bg-panel':'#e6e9ef','--bg-card':'#dce0e8','--bg-input':'#e6e9ef',
+            '--border':'#ccd0da','--border-hi':'#1e66f5',
+            '--text':'#4c4f69','--text-dim':'#bcc0cc','--text-mid':'#6c6f85',
+            '--gold':'#df8e1d','--gold-bright':'#fe640b' },
+  },
+  nord: {
+    label: 'Nord', dark: true, bg: '#2e3440', text: '#d8dee9', acc: '#ebcb8b',
+    vars: { '--bg':'#2e3440','--bg-panel':'#3b4252','--bg-card':'#434c5e','--bg-input':'#2e3440',
+            '--border':'#4c566a','--border-hi':'#88c0d0',
+            '--text':'#d8dee9','--text-dim':'#3b4252','--text-mid':'#81a1c1',
+            '--gold':'#ebcb8b','--gold-bright':'#d08770' },
+  },
+  dracula: {
+    label: 'Dracula', dark: true, bg: '#282a36', text: '#f8f8f2', acc: '#f1fa8c',
+    vars: { '--bg':'#282a36','--bg-panel':'#21222c','--bg-card':'#343746','--bg-input':'#21222c',
+            '--border':'#44475a','--border-hi':'#bd93f9',
+            '--text':'#f8f8f2','--text-dim':'#44475a','--text-mid':'#6272a4',
+            '--gold':'#f1fa8c','--gold-bright':'#ffb86c' },
+  },
+};
+
+// Light/dark toggle: each theme maps to its closest partner of the other brightness
+const _UI_THEME_PAIRS = {
+  'nimzo':            'solarized-light',
+  'solarized-dark':   'solarized-light',
+  'catppuccin-mocha': 'catppuccin-latte',
+  'nord':             'solarized-light',
+  'dracula':          'solarized-light',
+  'solarized-light':  'nimzo',
+  'catppuccin-latte': 'catppuccin-mocha',
+};
+
 const _DEFAULT_SETTINGS = {
   theme:    'wood',
   lightSq:  '#e8d5b0',
@@ -42,6 +108,7 @@ const _DEFAULT_SETTINGS = {
   accent:   '#c8921e',
   pieceSet: 'unicode',
   font:     'mono',
+  uiTheme:  'nimzo',
 };
 
 // Load settings from localStorage
@@ -53,13 +120,120 @@ function saveSettings() {
   localStorage.setItem('nimzo_settings', JSON.stringify(_settings));
 }
 
+function applyUiTheme(id) {
+  const theme = UI_THEMES[id] || UI_THEMES.nimzo;
+  const root  = document.documentElement;
+
+  // Set the data attribute (drives CSS selector overrides)
+  if (id === 'nimzo') {
+    root.removeAttribute('data-ui-theme');
+  } else {
+    root.setAttribute('data-ui-theme', id);
+  }
+
+  // Also set vars directly so changes are immediate regardless of specificity
+  Object.entries(theme.vars).forEach(([prop, val]) => root.style.setProperty(prop, val));
+
+  // Update toggle button icon
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = theme.dark ? '☀️' : '🌙';
+}
+
+function setUiTheme(id) {
+  _settings.uiTheme = id;
+  saveSettings();
+  applyUiTheme(id);
+  buildUiThemeSwatches();
+}
+
+function buildUiThemeSwatches() {
+  const container = document.getElementById('uiThemeGrid');
+  if (!container) return;
+  container.innerHTML = Object.entries(UI_THEMES).map(([id, t]) => {
+    const active = _settings.uiTheme === id ? ' active' : '';
+    const borderCol = t.dark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.15)';
+    return `<button class="ui-theme-btn${active}" data-ui-theme="${id}"
+      style="background:${t.bg};color:${t.text};border-color:${active ? t.acc : borderCol}"
+      onclick="setUiTheme('${id}')" title="${t.label}">${t.label}</button>`;
+  }).join('');
+}
+
+function toggleLightDark() {
+  const current = _settings.uiTheme || 'nimzo';
+  const partner = _UI_THEME_PAIRS[current] || (UI_THEMES[current]?.dark ? 'solarized-light' : 'nimzo');
+  setUiTheme(partner);
+}
+
+function importThemeJson(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      // Support two common formats:
+      // Format A (terminalcolors.com): { background, foreground, black, red, ... }
+      // Format B (generic 16-color): { background, foreground, colors: ["#...", ...] }
+      const bg   = data.background || data.bg || '#1a1a2e';
+      const fg   = data.foreground || data.fg || '#e0e0e0';
+      // For accent pick yellow (index 3 in ANSI), fallback to cyan (6), fallback to blue (4)
+      const colors16 = data.colors || [];
+      const acc  = data.yellow || colors16[3] || data.cyan || colors16[6] || data.blue || colors16[4] || '#c8921e';
+      const bhi  = data.cyan   || colors16[6] || data.blue || colors16[4] || '#2aa198';
+      // Derive slightly lighter panel bg
+      const panelBg = shiftBrightness(bg, 8);
+      const cardBg  = shiftBrightness(bg, 14);
+      const dim     = data.brightBlack || (colors16[8] || shiftBrightness(fg, -60));
+
+      // Build and apply a custom theme object
+      const custom = {
+        label: data.name || 'Imported',
+        dark: isColorDark(bg),
+        bg, text: fg, acc,
+        vars: {
+          '--bg': bg, '--bg-panel': panelBg, '--bg-card': cardBg, '--bg-input': bg,
+          '--border': shiftBrightness(bg, 20), '--border-hi': bhi,
+          '--text': fg, '--text-dim': dim, '--text-mid': shiftBrightness(fg, -20),
+          '--gold': acc, '--gold-bright': lightenHex(acc, 25),
+        },
+      };
+      // Register as 'imported' so it persists across buildUiThemeSwatches()
+      UI_THEMES['imported'] = custom;
+      _UI_THEME_PAIRS['imported'] = custom.dark ? 'solarized-light' : 'nimzo';
+      setUiTheme('imported');
+    } catch(err) {
+      alert('Could not parse theme file. Expected terminalcolors.com JSON format.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function isColorDark(hex) {
+  const r = parseInt(hex.slice(1,3)||'00',16);
+  const g = parseInt(hex.slice(3,5)||'00',16);
+  const b = parseInt(hex.slice(5,7)||'00',16);
+  return (r*299 + g*587 + b*114) / 1000 < 128;
+}
+
+function shiftBrightness(hex, delta) {
+  const clamp = v => Math.max(0, Math.min(255, v));
+  const r = clamp(parseInt(hex.slice(1,3)||'00',16) + delta);
+  const g = clamp(parseInt(hex.slice(3,5)||'00',16) + delta);
+  const b = clamp(parseInt(hex.slice(5,7)||'00',16) + delta);
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
 function applySettings() {
   const root = document.documentElement;
   root.style.setProperty('--sq-light', _settings.lightSq);
   root.style.setProperty('--sq-dark',  _settings.darkSq);
+  root.style.setProperty('--ui-font',  FONTS[_settings.font]?.value || FONTS.mono.value);
+
+  // Apply UI color theme (sets --bg, --text, --gold, etc.)
+  applyUiTheme(_settings.uiTheme || 'nimzo');
+
+  // Board accent is separate — driven by board theme or custom color picker
   root.style.setProperty('--gold',        _settings.accent);
   root.style.setProperty('--gold-bright', lightenHex(_settings.accent, 30));
-  root.style.setProperty('--ui-font',  FONTS[_settings.font]?.value || FONTS.mono.value);
 
   // Sync UI widgets (may not exist yet at initial call)
   syncSettingsUI();
@@ -161,6 +335,7 @@ function resetSettings() {
   saveSettings();
   applySettings();
   buildThemeSwatches();
+  buildUiThemeSwatches();
 }
 
 // PIECES is now dynamic — use current piece set
@@ -1694,6 +1869,7 @@ function renderEvalGraph() {
 // ── Boot ──────────────────────────────────────────────────────────────────
 applySettings();   // apply persisted settings before first render
 buildThemeSwatches();
+buildUiThemeSwatches();
 
 (async () => {
   // ── Load cm-chessboard modules ──────────────────────────────────────────

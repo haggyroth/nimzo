@@ -10,6 +10,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nimzo</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/cm-chessboard.css">
@@ -33,6 +34,7 @@
 
   <div style="display:flex;align-items:center;gap:14px">
     <a href="/stats" style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-mid);text-decoration:none;transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text-mid)'">Stats ↗</a>
+    <button id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleLightDark()" title="Toggle light/dark mode">☀️</button>
     <div class="conn-status">
       <div class="dot waiting" id="dot"></div>
       <span id="connLabel">connecting</span>
@@ -329,6 +331,19 @@
       </div>
       <div id="settingsBody">
         <div class="settings-body">
+
+          <!-- UI color scheme -->
+          <div class="setting-group">
+            <div class="setting-label">UI Theme</div>
+            <div class="ui-theme-grid" id="uiThemeGrid"></div>
+            <div class="theme-import-row">
+              <span class="theme-import-lbl">Import <a href="https://terminalcolors.com" target="_blank" style="color:var(--text-mid);text-decoration:none">terminalcolors.com</a> JSON</span>
+              <label class="theme-import-btn" title="Import a terminal color scheme JSON file">
+                ↑ Import
+                <input type="file" accept=".json" style="display:none" onchange="importThemeJson(this.files[0])">
+              </label>
+            </div>
+          </div>
 
           <!-- Board theme presets -->
           <div class="setting-group">
