@@ -46,8 +46,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 4 — Viewer Polish & Quick Wins
-*Next*
+## Phase 4 — Viewer Polish & Quick Wins ✅
 
 - [x] **Live eval readout** in player strip during game (+1.2 / -0.8 centipawn number alongside ELO)
 - [x] **Annotated PGN export**: one-click download from the game-over overlay; reasoning as `{ }` comments, quality as `?/??/!/!!` glyphs — immediately openable in Lichess or any chess GUI
@@ -61,16 +60,15 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 5 — Model Cards & Achievements
-*Future*
+## Phase 5 — Model Cards & Achievements ✅
 
 - [x] **Model cards**: modal/panel that appears when a model is selected in the UI — displays name, ELO, W/D/L, games played, average move quality, personality summary, and metadata
-- [x] **Model metadata strategy**: LM Studio's `/models` returns IDs but not specs; options are (a) parse from filename conventions (`qwen3-30b-a3b@q4_k_m` → 30B params, Q4_K_M quant), (b) HuggingFace API lookup by model ID, (c) manual entry in a `model_profiles.json` sidecar — likely a combination
+- [x] **Model metadata strategy**: LM Studio's `/models` returns IDs but not specs; parse from filename conventions (`qwen3-30b-a3b@q4_k_m` → 30B params, Q4_K_M quant)
 - [x] **Metadata fields**: parameter count, architecture family, quantization, file size, context length, backend
 - [x] **Achievement / badge system**: new `achievements` DB table; conditions computed post-game (e.g. "Flawless Game" — zero blunders, "Comeback King" — won from -5cp deficit, "Theorist" — 10+ book moves before first deviation)
 - [x] **Trophy display**: badges shown on model cards, player strips during games, and leaderboard rows
 - [x] **Model comparison view**: side-by-side stat comparison of any two models
-- [x] **Model profile pictures**: generate a chess grandmaster portrait per model via Google AI Studio (Imagen 3); prompt seeded deterministically from the model ID so the same model always gets the same character; stored in `portraits/` + path in DB; displayed on model cards, comparison view, and player strip avatars during games — each model family gets a distinct illustrated character (Qwen → imperial strategist, Llama → armoured knight, Gemma → crystalline sorceress, Mistral → French musketeer, etc.)
+- [x] **Model profile pictures**: generate a chess grandmaster portrait per model via Google AI Studio (Imagen 3); prompt seeded deterministically from the model ID so the same model always gets the same character; stored in `portraits/` + path in DB; displayed on model cards, comparison view, and player strip avatars during games
 
 ### Achievement ideas
 | Badge | Condition |
@@ -86,7 +84,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 6 — Tournament Brackets
+## Phase 6 — Tournament Brackets ✅
 *v6 release*
 
 - [x] **Multi-player arena**: register N models; round-robin and gauntlet formats; PlayerSpec model; dynamic player list in UI
@@ -101,8 +99,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 7 — Smarter Lessons
-*Future*
+## Phase 7 — Smarter Lessons ✅
 
 - [x] **Lesson compression / strategic profile**: every 5 games once 10+ lessons are stored, tutor distils all raw lessons into a strategic profile (2–4 persistent weaknesses, 1–3 consistent strengths); profile replaces the raw list in the system prompt (+ 3 most recent lessons for recency); displayed in model card under "Strategic profile"
 - [x] **Opening awareness**: ECO code + opening name passed to lesson prompt — "In the Sicilian Najdorf, your knight retreat on move 14 ignored the standard d5 break"
@@ -111,7 +108,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 8 — Customization & Themes
+## Phase 8 — Customization & Themes ✅
 *v8 release*
 
 - [x] **Board themes**: 6 preset color schemes (Wood, Green, Blue, Walnut, Contrast, Midnight) using `--sq-light`/`--sq-dark` CSS custom properties; one-click swatch selection
@@ -121,15 +118,14 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 - [x] **Font & typography controls**: Mono (JetBrains Mono) / System (system-ui sans-serif) selector; `--ui-font` CSS variable propagates to all panel inputs and controls
 - [x] **Settings persistence**: all appearance prefs stored in `localStorage` under `nimzo_settings`; restored on load
 - [x] **Animated piece moves**: 180ms CSS keyframe `pieceArrive` slides the piece in from its source square on each `move` event; offset computed from UCI move coordinates
-- [ ] **UI framework consideration**: current hand-crafted CSS is lean and custom; evaluate if component count grows significantly
 
 ---
 
-## Phase 9 — Testing & Infrastructure
+## Phase 9 — Testing & Infrastructure ✅
 *v9 release*
 
 - [x] **Unit test suite** (`pytest`): 142 tests across ELO, dynamic K-factor, `_parse_lessons`, response parsing in both player backends, `build_quality_summary`, achievements, model profiles, metadata parsing, and DB operations
-- [x] **JS unit tests**: `extractModelName`, `parseFen`, `uciToSquares`, `buildSparkline`, `computeCaptures`, `escHtml` — 45 tests using Node's built-in `node:test` runner (zero npm dependencies); pure functions extracted to `js/viewer_utils.js`; JS test job added to CI
+- [x] **JS unit tests**: `extractModelName`, `parseFen`, `uciToSquares`, `buildSparkline`, `computeCaptures`, `escHtml` — 45 tests using Node's built-in `node:test` runner (zero npm dependencies); pure functions extracted to `static/viewer_utils.js`; JS test job added to CI
 - [x] **Mock clients**: `unittest.mock` + `pytest-mock` for LM Studio and Anthropic player tests; zero real API calls in CI
 - [x] **Test fixture library**: `tests/fixtures/pgns.py` (Scholar's mate, Fool's mate, stalemate, midgame resign, opening starts) and `tests/fixtures/positions.py` (FEN strings, candidate builders)
 - [x] **GitHub Actions CI**: `.github/workflows/ci.yml` — runs pytest + coverage on every push/PR to main; blocks merge on failure
@@ -137,7 +133,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 10 — Qwen & Model-Specific Handling
+## Phase 10 — Qwen & Model-Specific Handling ✅
 *v10 release*
 
 - [x] **Deep Qwen thinking audit**: instrument API calls with elapsed time + token counts; warn to console when `<think>` blocks appear or timing/token heuristics suggest thinking is active despite `enable_thinking=false`
@@ -148,7 +144,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 11 — Human Play & Advanced Metrics
+## Phase 11 — Human Play & Advanced Metrics ✅
 *v11 release*
 
 - [x] **Human vs LLM**: click-on-board move input for human turns; `human` backend in `build_player()`; ELO stored by username; legal move highlighting on square click
@@ -158,7 +154,7 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 12 — Scale & Export
+## Phase 12 — Scale & Export ✅
 *v12 release*
 
 - [x] **Batch / headless mode**: run games without real-time broadcast for fast benchmarking; results written to DB only
@@ -168,47 +164,179 @@ AI chess tournament system where locally-hosted LLMs compete in guided mode agai
 
 ---
 
-## Phase 13 — Standalone App & Distribution
-*Future*
-
-- [ ] **Tauri wrapper**: package the FastAPI + HTML SPA as a native desktop app (Mac/Windows/Linux); Tauri is significantly lighter than Electron — no bundled Chromium; the existing web frontend needs no changes
-- [ ] **Python runtime bundling**: bundle the Python backend using PyInstaller or `uv` standalone builds so users don't need a Python install; Stockfish binary included as a sidecar asset
-- [ ] **OS-native file dialogs**: replace browser download links with native save-file dialogs for PGN export and DB backup — Tauri's `dialog` plugin handles this
-- [ ] **Auto-update**: ship an update manifest; Tauri's updater plugin can pull new releases from GitHub releases on startup
-- [ ] **Installer / release packaging**: GitHub Actions workflow to build platform-specific installers (`.dmg`, `.exe`, `.AppImage`) on tag push
-- [ ] **App icon & branding**: design a Nimzo app icon; register as a protocol handler so `nimzo://` links can deep-link into specific tournaments or model cards
-
----
-
 ## Phase 14 — Board Rendering Upgrade ✅
 *v14 release*
 
-- [x] **Migrate to cm-chessboard**: replace the hand-rolled SVG board in `viewer.html` with [cm-chessboard](https://github.com/shaack/cm-chessboard) — loaded from jsDelivr CDN via dynamic ES module imports; board renders SVG pieces from the Wikimedia standard set
-- [x] **Piece sets**: cm-chessboard uses the standard SVG sprite (Wikimedia CC BY-SA 3.0); the Unicode/Letters buttons remain in the settings panel but no longer affect the board (SVG-only)
-- [x] **Drag-and-drop move input**: replaced click-click human input with native drag-and-drop via cm-chessboard's `enableMoveInput()` / `INPUT_EVENT_TYPE.validateMoveInput` handler; `onHumanSquareClick()` removed entirely
-- [x] **Legal move markers**: cm-chessboard `autoMarkers: MARKER_TYPE.frame` highlights legal drag sources automatically; last-move squares marked via `MARKER_TYPE.square` (gold tint via CSS override)
-- [x] **Promotion picker**: cm-chessboard handles promotion UI natively; auto-queen fallback preserved via `promotions.find(u => u.endsWith('q'))` in the validate handler
-- [x] **Smooth animations**: cm-chessboard handles piece slide animations natively (180ms); removed custom `pieceArrive` CSS keyframe and hand-rolled animation offset computation
-- [x] **Arrow overlays**: Stockfish candidate arrows drawn on `thinking` events using cm-chessboard's Arrows extension — `ARROW_TYPE.default` for the top candidate, `ARROW_TYPE.secondary` for the rest; cleared on `move` and `game_over`
+- [x] **Migrate to cm-chessboard**: replace the hand-rolled SVG board with [cm-chessboard](https://github.com/shaack/cm-chessboard) — loaded from jsDelivr CDN via dynamic ES module imports
+- [x] **Drag-and-drop move input**: replaced click-click human input with native drag-and-drop via cm-chessboard's `enableMoveInput()` handler
+- [x] **Legal move markers**: cm-chessboard `autoMarkers: MARKER_TYPE.frame` highlights legal drag sources automatically; last-move squares marked via `MARKER_TYPE.square`
+- [x] **Promotion picker**: cm-chessboard handles promotion UI natively; auto-queen fallback preserved
+- [x] **Smooth animations**: cm-chessboard handles piece slide animations natively (180ms); removed custom animation code
+- [x] **Arrow overlays**: Stockfish candidate arrows drawn on `thinking` events using cm-chessboard's Arrows extension
 - [x] **Mobile touch support**: cm-chessboard handles touch events natively; human play works on phones/tablets
 
 ---
 
-## Phase 15 — Competitive Depth
+## Phase 15 — Competitive Depth ✅
+*v15 release*
+
+- [x] **Player personality styles**: `style` field in `PlayerConfig` injected into system prompt — `"aggressive"` → prefers open games, sacrifices material for initiative; `"positional"` → favours closed structures, outpost control; `"defensive"` → consolidates before attacking, trades pieces when ahead
+- [x] **Move-quality analytics endpoint**: `GET /api/models/{model_id}/quality` returning blunder rate, avg centipawn loss, avg candidate rank, and inaccuracy rate
+- [x] **Adaptive difficulty**: dynamically adjusts `candidate_count` based on a model's rolling performance — weaker models get more candidates; stronger models get fewer; configurable `_ADAPT_WIN_RATE_HIGH/LOW` thresholds (0.65/0.35)
+
+---
+
+## Phase 16 — Cloud Backends & Code Health ✅
+
+- [x] **Cloud provider registry** (`providers.py`): OpenAI, DeepSeek, Qwen (Dashscope), Google Gemini, xAI — each usable as player, tutor, or judge; API keys drawn from env vars
+- [x] **`/api/providers` endpoint**: returns registry with `configured: bool` per provider; viewer populates backend dropdowns dynamically
+- [x] **Portrait rate limiting**: 60s per-model cooldown; HTTP 429 on rapid re-requests; quota-exhausted detection skips retries for the session when free tier is drained
+- [x] **JS constant extraction**: `DEFAULT_LMSTUDIO_URL` extracted from 4+ hardcoded occurrences in viewer.js
+- [x] **Docstring sweep**: PEP 257 docstrings added to all previously undocumented public functions and classes across 11 files
+- [x] **Frontend asset consolidation**: `js/viewer_utils.js` → `static/viewer_utils.js`; `/js` StaticFiles mount removed
+
+---
+
+## Phase 17 — Theme Expansion & App Identity
+*Next*
+
+### Goals
+Extend the appearance system beyond board colors to full UI color schemes, add a light mode, and give the app a proper visual identity.
+
+- [ ] **Terminal color scheme presets**: Solarized Dark, Solarized Light, Catppuccin Mocha, Catppuccin Latte, Nord, Dracula — each defines a full set of UI CSS variables (`--bg`, `--panel-bg`, `--text`, `--text-dim`, `--accent`, `--border`), not just board squares. Added as palette swatches alongside the existing board themes.
+- [ ] **Light/dark mode toggle**: derive all UI colors from a `data-theme` attribute on `<body>`; `prefers-color-scheme` media query as default; one-click toggle button in the Appearance panel. Most existing dark values become the dark-theme base; a complementary light palette is defined.
+- [ ] **Theme import**: parse a subset of the `terminalcolors.com` JSON export format (16-color ANSI → map to Nimzo's 8 CSS variables); import via file upload or URL in the Appearance panel. Graceful fallback if the format doesn't match.
+- [ ] **Favicon**: add `<link rel="icon">` to `viewer.html` pointing to a SVG favicon in `static/`; chess-knight or Nimzo "N" monogram design.
+- [ ] **GitHub logo / social card**: fix the broken image in `.github/` — add a proper social preview image and update `.github/` references.
+
+### Implementation notes
+- All new theme variables extend the existing `nimzo_settings` localStorage key (no migration needed).
+- The Appearance panel gains a "UI Theme" section separate from the existing "Board Colors" section.
+- Light mode requires auditing ~40 CSS custom properties; the dark defaults stay unchanged.
+- terminalcolors.com exports as `{ "color_01": "#...", ... }` — map `color_00`→`--bg`, `color_07`→`--text`, `color_08`→`--text-dim`, `color_15`→`--panel-bg`, and use the dominant accent color for `--accent`.
+
+---
+
+## Phase 18 — Layout & Visual Customization
 *Future*
 
-- [ ] **Player personality styles**: `style` field in `PlayerConfig` injected into system prompt — e.g. `"aggressive"` → "prefer open games, sacrifice material for initiative, never trade queens early"; `"positional"` → "favour closed structures, outpost control, long-term pawn majorities"; `"defensive"` → "consolidate before attacking, trade pieces when ahead, avoid complications"; styles make multi-game tournaments visually distinct and stress-test how well models follow strategic directives
-- [ ] **Move-quality analytics endpoint**: `GET /api/models/{model_id}/quality` returning blunder rate, avg centipawn loss, avg candidate rank, and inaccuracy rate — the DB already has all this data; the endpoint just needs to aggregate it and the leaderboard panel needs a column
-- [ ] **Adaptive difficulty**: dynamically adjust `candidate_count` (and optionally `candidate_depth`) based on a model's rolling performance — weaker models get more candidates to keep games interesting; stronger models get fewer to stress-test their reasoning; configurable target win-rate band (e.g. 40–60%)
+### Goals
+Give users meaningful control over the page layout and let them bring in their own visual assets.
+
+- [ ] **Collapsible side panels**: each panel on the right sidebar (Appearance, Leaderboard, Recent Games, Tournament) gets an independent collapse chevron; collapsed state persists to `localStorage`; board area expands to fill freed space via CSS flexbox reflow. Allows shrinking the window without the board becoming tiny.
+- [ ] **Graveyard expansion**: move the captured-pieces display from the slim inline strip into a dedicated area below each player's name bar; larger piece icons (24–32px vs current 14px); show piece count per type (♙×3 style); material imbalance stays as a single score line. Requires rethinking the player strip layout.
+- [ ] **Custom piece PNG import**: file upload (12 files: K Q R B N P × 2 colors) in the Appearance panel; piece images stored as data-URLs in `localStorage`; a CSS filter + `background-image` approach layers custom images over cm-chessboard's SVG sprites (avoids re-creating the board). Alternatively explore cm-chessboard's `spriteUrl` option for a full swap.
+- [ ] **Background image upload**: single file upload stored as `localStorage` data-URL; applied as `background-image` on the `.board-wrapper` or `body`; opacity slider for transparency control; "clear" button to revert.
+
+### Implementation notes
+- Panel collapse: CSS `grid-template-rows: 0fr` transition (smoother than `max-height`); chevron rotates 90° via CSS transform; `aria-expanded` attribute for accessibility.
+- Graveyard rewrite touches `renderGraveyards()` in `viewer_utils.js` and the corresponding HTML structure in `viewer.html`; the `computeCaptures()` logic is unchanged.
+- Custom pieces: cm-chessboard re-renders on each `_cmcbRender()` call — the overlay must be re-applied after each render. A `MutationObserver` on the board container is the cleanest hook.
+
+---
+
+## Phase 19 — Model Identity & Cards
+*Future*
+
+### Goals
+Rich per-model stat cards surfaced inline during games and in the leaderboard; smarter metadata from HuggingFace; user-controlled portrait images.
+
+- [ ] **Toggleable model stat cards**: collapsible panel above each player strip (toggle with a ▲/▼ chevron or click on the player name). Card shows: ELO + sparkline, W/D/L record, blunder rate, avg move quality, avg candidate deviation, personality style badge, current series score vs opponent, all-time head-to-head vs this specific opponent. "Sports chyron" aesthetic — dense horizontal stat row, no scrolling.
+- [ ] **Current-tournament stats injection**: while a bracket tournament is running, the card also shows the model's position in the standings, points, and games remaining — updated via `game_over` WS events.
+- [ ] **HuggingFace metadata integration**: `GET https://huggingface.co/api/models/{model_id}` for models that look like HF paths (contain `/`); parse `safetensors.total` for size, `cardData.language` / `tags` for family confirmation; cache results in the existing `hf_metadata_cache.json` with a 24h TTL. Falls back to filename-parse for non-HF IDs.
+- [ ] **User photo upload for model portraits**: file input (accepts PNG/JPEG/WebP, max 2 MB) in the model card or portrait area; uploaded to `POST /api/models/{id}/portrait/upload` (multipart); server saves to `portraits/` with the same `portrait_filename()` hash path; marks record as `user_provided=True` in DB so it isn't overwritten by Gemini auto-generation. UI shows a "📷 Upload photo" button and a "↺ Regenerate AI portrait" button.
+- [ ] **Portrait quota-exhaustion handling**: once all Gemini models return 429 with free-tier limit exhausted, set a session-level flag and display a "Portrait generation unavailable (API quota)" notice in the UI rather than silent repeated failures in the console.
+
+### Implementation notes
+- HuggingFace API calls run in `asyncio.to_thread()` and are cached locally; no key required for public models.
+- Portrait upload endpoint: `POST /api/models/{id}/portrait/upload` with `multipart/form-data`; validates MIME type + file size; stores alongside Gemini-generated portraits in the same directory.
+- Stat cards are pure frontend (all data already available via existing `/api/models/{id}` endpoint); no new backend needed beyond the upload endpoint.
+- `user_provided` flag in `players` table requires a schema migration (additive `ALTER TABLE`).
+
+---
+
+## Phase 20 — Gameplay Rules & Blind Mode
+*Future*
+
+### Goals
+Give more control over game rules and let models play their opening moves from their own chess knowledge rather than always following Stockfish's guidance.
+
+- [ ] **Opening blind mode**: new `blind_opening_moves: int` setting per player (default: 0; UI toggle in player config). For the first N full moves (each player), Stockfish candidates are withheld — the model receives only the board FEN and game PGN and must supply a `MOVE:` UCI response from its own knowledge. Parse via the same 4-tier fallback; default to a random legal move if parsing fails in blind mode (not Stockfish's top pick, since that defeats the purpose). Each model's opening repertoire becomes a genuine expression of its training.
+- [ ] **Turn cap / move limit draw**: new `max_moves: int` setting (default: 500 half-moves = 250 per side; configurable in UI and TOML). When `board.ply() >= max_moves`, the game is declared a draw with termination `"move limit reached"`. Displayed in the game-over overlay and stored in the `termination` column.
+- [ ] **Blind mode toggle in UI**: checkbox in each player's config card; also supported in `tournament.toml` via `blind_opening_moves = 3`; shown as a badge on the player strip during the opening phase.
+
+### Implementation notes
+- `blind_opening_moves` is added to `PlayerConfig` (default 0 = always use Stockfish candidates); `game.py`'s `play_game()` checks `board.fullmove_number <= player.config.blind_opening_moves` to decide whether to pass candidates.
+- The prompt `build_prompt()` in `base.py` gets a `has_candidates: bool` argument; when False, the candidates section is replaced with "Play your best opening move from your chess knowledge."
+- Turn cap is a single `if board.ply() >= game_config.max_moves: break` in the main game loop; the result is set to `"1/2-1/2"` with the special termination string.
+- Both settings are surfaced in the TOML schema via `config_loader.py`.
+
+---
+
+## Phase 21 — Tutor UX & Learning Improvements
+*Future*
+
+### Goals
+Make lesson generation visible to the viewer, improve compression quality, and fix ELO seeding for new players.
+
+- [ ] **Lesson generation splash screen**: when `generate_lessons()` begins, broadcast a `lesson_generating` WS event (`{player, tutor_model}`); the viewer shows a centered overlay with a chess-piece spinner, the tutor model name, and "Generating lessons…" When `lessons_saved` is broadcast, the overlay dismisses and the lessons panel updates. Purely frontend — no blocking change to the Python side.
+- [ ] **Semantic similarity lesson compression**: replace the fixed game-count trigger with a per-lesson deduplication pass using word-overlap Jaccard similarity (no external embedding API). When a new lesson is ≥ 0.75 similar to an existing one, merge them (keep the more specific phrasing). Full compression still triggers at 10+ lessons, but now produces tighter profiles. Implemented in `analysis.py`'s `compress_lessons()`.
+- [ ] **ELO seeding improvements**: new players start at 1200 with `K_PROVISIONAL = 40` for their first 5 games, then transition to the existing K-factor schedule. A small model-family prior (`±15 ELO` based on known family strength order) is applied only as a validated starting offset with a decay factor — it washes out within ~8 games. Thresholds and priors defined as named constants in `analysis.py`.
+
+### Implementation notes
+- WS events `lesson_generating` / `lessons_saved` are cheap — no new DB columns needed; viewer stores no state beyond showing/hiding the overlay.
+- Jaccard similarity: `len(words_a & words_b) / len(words_a | words_b)` on lowercased token sets; fast for the ~50-word lesson strings.
+- ELO seeding: `players` table gains `provisional_games_remaining INT DEFAULT 5`; decremented by `calculate_elos()` until 0, at which point K-factor steps down to the standard schedule.
 
 ---
 
 ## Open Questions
 
-- **Browser vs standalone**: stay browser-based (zero install friction, easy updates) vs Tauri desktop app (native dialogs, no Python required for end users, distributable to non-technical users) — not mutually exclusive; browser mode can remain the dev/power-user path
-- **Model metadata source**: parse filename vs HuggingFace API vs manual sidecar — what's the right default?
-- **Lesson compression trigger**: fixed game count, lesson list length threshold, or semantic similarity check?
-- **ELO floor/seeding**: start new players at 1200 or seed by model family/size?
-- **Tutor async**: lesson generation currently blocks between games; worth making non-blocking?
-- **Parallel games in brackets**: run multiple games simultaneously for speed, or keep sequential for simplicity?
-- **Qwen `/no_think`**: does it need to be the literal first token, or anywhere in the system prompt?
+*Resolved questions are struck through and answered below.*
+
+~~**Browser vs standalone**~~: keep browser as the primary interface; Tauri packaging moves to [Future Considerations](#future-considerations).
+
+~~**Model metadata source**~~: HuggingFace API for models with a `/` in their ID (e.g. `mistralai/ministral-3-3b`); filename parsing for local LM Studio IDs. Implemented in Phase 19.
+
+~~**Lesson compression trigger**~~: semantic similarity check (Jaccard ≥ 0.75 for deduplication) + 10-lesson threshold for full compression. Implemented in Phase 21.
+
+~~**ELO floor/seeding**~~: start at 1200 with `K_PROVISIONAL = 40` for first 5 games; model-family prior ±15 ELO that decays within ~8 games. Implemented in Phase 21.
+
+~~**Tutor async**~~: keep blocking between games for now; non-blocking tutor is a [Future Consideration](#future-considerations).
+
+~~**Parallel games in brackets**~~: keep sequential for simplicity; parallel scheduling is a [Future Consideration](#future-considerations).
+
+~~**Qwen `/no_think`**~~: addressed in Phase 10. Belt-and-suspenders approach: `no_think_prefix` in profile prepends `/no_think\n` and also sets `enable_thinking=false` in `extra_body`.
+
+---
+
+### Open Questions — New
+
+- **Custom piece PNGs**: can we import PNGs for custom piece sets? Targeted for Phase 18 — see implementation notes.
+- **Background image**: user-uploaded board backgrounds? Targeted for Phase 18 — CSS `background-image` on the board wrapper.
+- **Turn cap**: introduce a draw rule at 250 moves per player (500 half-moves)? Targeted for Phase 20.
+- **Favicon & logo**: add a chess-knight favicon + fix broken GitHub social image? Targeted for Phase 17.
+
+---
+
+## Future Considerations
+
+Items that are well-defined but deferred due to complexity, scope, or dependencies on earlier phases.
+
+### Standalone App & Distribution
+*(originally Phase 13)*
+
+- **Tauri wrapper**: package the FastAPI + HTML SPA as a native desktop app (Mac/Windows/Linux); Tauri is significantly lighter than Electron — no bundled Chromium; the existing web frontend needs no changes
+- **Python runtime bundling**: bundle the Python backend using PyInstaller or `uv` standalone builds so users don't need a Python install; Stockfish binary included as a sidecar asset
+- **OS-native file dialogs**: replace browser download links with native save-file dialogs for PGN export and DB backup — Tauri's `dialog` plugin handles this
+- **Auto-update**: ship an update manifest; Tauri's updater plugin can pull new releases from GitHub releases on startup
+- **Installer / release packaging**: GitHub Actions workflow to build platform-specific installers (`.dmg`, `.exe`, `.AppImage`) on tag push
+- **App icon & branding**: design a Nimzo app icon; register as a protocol handler so `nimzo://` links can deep-link into specific tournaments or model cards
+
+### Other Deferred Items
+
+- **Non-blocking tutor**: move lesson generation to a background task so the next game starts immediately; broadcast `lesson_generating` / `lessons_saved` WS events while the game runs (partial overlap with Phase 21's splash screen)
+- **Parallel bracket games**: run simultaneous games in a bracket round for speed; requires scoped `_state` per game, multiple Stockfish engine instances, and careful WebSocket multiplexing
+- **arena.py code split**: at 1600+ lines, splitting into `arena/api.py` (HTTP/WS endpoints), `arena/runners.py` (game loop, tournament runners), and `arena/cli.py` (argparse + entry point) would significantly improve navigability
+- **Structured logging**: replace `print(...)` throughout with Python's `logging` module (levels: DEBUG/INFO/WARNING/ERROR); enables log-level filtering and log file output without changing any call sites
+- **aiosqlite / thread isolation**: all `database.*` calls currently block the asyncio event loop briefly; routing them through `asyncio.to_thread()` or migrating to `aiosqlite` would be the correct fix at any meaningful scale

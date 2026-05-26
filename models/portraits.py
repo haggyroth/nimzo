@@ -237,6 +237,11 @@ _IMAGE_MODELS = [
     "gemini-3-pro-image-preview",
 ]
 
+# Session-level flag: set to True the first time every model returns 429 with
+# a free-tier quota exhaustion message.  Subsequent calls are skipped silently
+# rather than hammering the API and flooding the console.
+_quota_exhausted: bool = False
+
 
 def generate_portrait(
     model_id: str,
@@ -254,6 +259,11 @@ def generate_portrait(
 
     Intentionally synchronous — the caller should run this in an executor.
     """
+    global _quota_exhausted
+
+    if _quota_exhausted:
+        return None
+
     try:
         from google import genai  # type: ignore[import]
         from google.genai import types  # type: ignore[import]
@@ -275,6 +285,7 @@ def generate_portrait(
 
     client = genai.Client(api_key=api_key)
 
+    quota_failures = 0
     for model_name in _IMAGE_MODELS:
         try:
             response = client.models.generate_content(
@@ -303,8 +314,24 @@ def generate_portrait(
             return f"portraits/{filename}"
 
         except Exception as exc:
-            print(f"[portraits] {model_name} failed for {model_id!r}: {exc}")
+            exc_str = str(exc)
+            # Detect free-tier quota exhaustion — all three models will fail with
+            # RESOURCE_EXHAUSTED and "limit: 0".  Once we see this pattern, set
+            # the session flag so we stop hammering the API for the rest of the run.
+            if "RESOURCE_EXHAUSTED" in exc_str and ("limit: 0" in exc_str or "free_tier" in exc_str.lower()):
+                quota_failures += 1
+            else:
+                print(f"[portraits] {model_name} failed for {model_id!r}: {exc}")
             continue  # try next model
 
-    print(f"[portraits] All models failed for {model_id!r}")
+    if quota_failures == len(_IMAGE_MODELS):
+        _quota_exhausted = True
+        print(
+            "[portraits] ⚠  Gemini free-tier quota exhausted — portrait generation "
+            "disabled for this session. Upload a photo via the UI or wait 24 h for quota reset."
+        )
+    elif quota_failures > 0:
+        print(f"[portraits] All models failed for {model_id!r}")
+    else:
+        print(f"[portraits] All models failed for {model_id!r}")
     return None
