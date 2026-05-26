@@ -16,6 +16,20 @@ are cleared before binding.
 
 from __future__ import annotations
 
+# ── Direct-run compatibility ──────────────────────────────────────────────────
+# When arena.py is the entry point (`python arena.py`), Python loads it as
+# '__main__', not 'arena'.  game.py does `import arena as _arena` at its top,
+# which would NOT find 'arena' in sys.modules and would re-execute arena.py,
+# hitting the `from game import` line again while game.py is still mid-load —
+# causing "cannot import name 'play_game' from partially initialized module".
+#
+# Registering the running module as 'arena' early prevents the re-execution.
+# When arena.py is imported normally (by pytest etc.), __name__ == 'arena'
+# so the setdefault is a no-op.
+import sys as _sys
+if __name__ == '__main__':
+    _sys.modules.setdefault('arena', _sys.modules['__main__'])
+
 import os
 import asyncio
 import json
