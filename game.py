@@ -32,6 +32,7 @@ from models.base import ChessPlayer, MoveDecision, PlayerConfig
 from models.anthropic_player import AnthropicPlayer
 from models.lmstudio_player import LMStudioPlayer
 from models.human_player import HumanPlayer
+from providers import CLOUD_PROVIDERS
 from analysis import (
     TutorConfig,
     JudgeConfig,
@@ -774,7 +775,8 @@ def build_player(
 
     Loads any existing lesson memory and strategic profile from the DB if
     a player record already exists.  Supports backends: ``"lmstudio"``,
-    ``"anthropic"``, and ``"human"``.
+    ``"anthropic"``, ``"human"``, and any key in ``CLOUD_PROVIDERS``
+    (``"openai"``, ``"deepseek"``, ``"qwen"``, ``"gemini"``, ``"xai"``).
     """
     db_exists = (Path(__file__).parent / "nimzo.db").exists()
     config = PlayerConfig(
@@ -795,6 +797,12 @@ def build_player(
         player = LMStudioPlayer(config)
     elif backend == "human":
         player = HumanPlayer(config)
+    elif backend in CLOUD_PROVIDERS:
+        import os
+        info = CLOUD_PROVIDERS[backend]
+        config.base_url = base_url or info["base_url"]
+        config.api_key  = os.environ.get(info["key_env"], "")
+        player = LMStudioPlayer(config)
     else:
         raise ValueError(f"Unknown backend: {backend!r}")
 

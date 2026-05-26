@@ -34,6 +34,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from models.human_player import HumanPlayer
+from providers import CLOUD_PROVIDERS
 from analysis import (
     TutorConfig,
     JudgeConfig,
@@ -571,6 +572,7 @@ async def api_human_move(body: HumanMoveRequest):
 
 @app.get("/api/models")
 async def api_models(url: str = _DEFAULT_LMSTUDIO_URL):
+    """Proxy GET /models to a local OpenAI-compatible server and return the result."""
     import httpx
     try:
         async with httpx.AsyncClient(timeout=4.0) as client:
@@ -578,6 +580,26 @@ async def api_models(url: str = _DEFAULT_LMSTUDIO_URL):
             return resp.json()
     except Exception as exc:
         return {"data": [], "error": str(exc)}
+
+
+@app.get("/api/providers")
+async def api_providers():
+    """
+    Return the cloud provider registry with a ``configured`` flag per entry.
+
+    ``configured`` is True when the provider's API key env var is set (non-empty),
+    letting the viewer show which providers are ready to use without exposing
+    the actual key values.
+    """
+    return {
+        name: {
+            "label":      info["label"],
+            "base_url":   info["base_url"],
+            "models":     info["models"],
+            "configured": bool(os.environ.get(info["key_env"])),
+        }
+        for name, info in CLOUD_PROVIDERS.items()
+    }
 
 
 class PlayerSpec(BaseModel):
