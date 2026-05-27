@@ -13,10 +13,13 @@ UI just shows a placeholder avatar.
 from __future__ import annotations
 
 import hashlib
+import logging
 from pathlib import Path
 from typing import Optional
 
 from models.metadata import parse_model_id
+
+logger = logging.getLogger(__name__)
 
 
 # ── Character concept library ─────────────────────────────────────────────
@@ -268,7 +271,7 @@ def generate_portrait(
         from google import genai  # type: ignore[import]
         from google.genai import types  # type: ignore[import]
     except ImportError:
-        print("[portraits] google-genai not installed — skipping portrait generation")
+        logger.warning("google-genai not installed — skipping portrait generation")
         return None
 
     portraits_dir.mkdir(parents=True, exist_ok=True)
@@ -280,8 +283,8 @@ def generate_portrait(
         return f"portraits/{filename}"
 
     prompt = build_portrait_prompt(model_id)
-    print(f"[portraits] Generating portrait for {model_id!r}")
-    print(f"[portraits] Prompt: {prompt[:120]}…")
+    logger.info("Generating portrait for %r", model_id)
+    logger.debug("Portrait prompt: %s…", prompt[:120])
 
     client = genai.Client(api_key=api_key)
 
@@ -306,11 +309,14 @@ def generate_portrait(
                     break
 
             if not img_bytes:
-                print(f"[portraits] {model_name}: no image in response — skipping")
+                logger.debug("%s: no image in response — skipping", model_name)
                 continue
 
             dest.write_bytes(img_bytes)
-            print(f"[portraits] Saved portrait via {model_name} → {dest} ({len(img_bytes)//1024} KB)")
+            logger.info(
+                "Saved portrait via %s → %s (%d KB)",
+                model_name, dest, len(img_bytes) // 1024,
+            )
             return f"portraits/{filename}"
 
         except Exception as exc:
@@ -321,17 +327,15 @@ def generate_portrait(
             if "RESOURCE_EXHAUSTED" in exc_str and ("limit: 0" in exc_str or "free_tier" in exc_str.lower()):
                 quota_failures += 1
             else:
-                print(f"[portraits] {model_name} failed for {model_id!r}: {exc}")
+                logger.warning("%s failed for %r: %s", model_name, model_id, exc)
             continue  # try next model
 
     if quota_failures == len(_IMAGE_MODELS):
         _quota_exhausted = True
-        print(
-            "[portraits] ⚠  Gemini free-tier quota exhausted — portrait generation "
-            "disabled for this session. Upload a photo via the UI or wait 24 h for quota reset."
+        logger.warning(
+            "Gemini free-tier quota exhausted — portrait generation disabled "
+            "for this session. Upload a photo via the UI or wait 24 h for quota reset."
         )
-    elif quota_failures > 0:
-        print(f"[portraits] All models failed for {model_id!r}")
     else:
-        print(f"[portraits] All models failed for {model_id!r}")
+        logger.warning("All portrait models failed for %r", model_id)
     return None

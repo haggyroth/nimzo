@@ -4,11 +4,14 @@ arena/models.py — Pydantic models: PlayerSpec, TournamentStartConfig, HumanMov
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from arena.state import _DEFAULT_LMSTUDIO_URL, _DEFAULT_LMSTUDIO_URL_2
+
+# Valid personality style values (empty string = no style override)
+_STYLE_VALUES = {"", "aggressive", "positional", "defensive"}
 
 
 class HumanMoveRequest(BaseModel):
@@ -23,9 +26,15 @@ class PlayerSpec(BaseModel):
     model_id: str = ""
     url: str = _DEFAULT_LMSTUDIO_URL
     thinking: bool = False
-    candidate_count: Optional[int] = None   # override default 5; None = use default
-    style: str = ""                         # "aggressive" | "positional" | "defensive" | ""
-    blind_opening_moves: int = 0            # withhold Stockfish candidates for first N full moves
+    candidate_count: Optional[int] = Field(
+        default=None, ge=1, le=20,
+        description="Stockfish candidates shown to the model (1–20). None = use server default.",
+    )
+    style: Literal["", "aggressive", "positional", "defensive"] = ""
+    blind_opening_moves: int = Field(
+        default=0, ge=0, le=40,
+        description="Withhold Stockfish candidates for the first N full moves.",
+    )
 
 
 class TournamentStartConfig(BaseModel):
@@ -53,22 +62,22 @@ class TournamentStartConfig(BaseModel):
     judge_backend: str = "lmstudio"
     judge_model: str = ""
     judge_url: str = _DEFAULT_LMSTUDIO_URL
-    games: int = 10
+    games: int = Field(default=10, ge=1, le=1000)
     # Time control: seconds per move, 0 = no limit
-    move_timeout: int = 0
+    move_timeout: int = Field(default=0, ge=0, le=3600)
     # Human-play settings
     human_assisted: bool = True    # True = show Stockfish candidates; False = blind
     # Personality styles for 2-player mode
-    white_style: str = ""          # "aggressive" | "positional" | "defensive" | ""
-    black_style: str = ""
+    white_style: Literal["", "aggressive", "positional", "defensive"] = ""
+    black_style: Literal["", "aggressive", "positional", "defensive"] = ""
     # Opening blind mode: withhold Stockfish candidates for first N full moves
-    white_blind_opening_moves: int = 0
-    black_blind_opening_moves: int = 0
+    white_blind_opening_moves: int = Field(default=0, ge=0, le=40)
+    black_blind_opening_moves: int = Field(default=0, ge=0, le=40)
     # Turn cap: declare draw after this many half-moves (plies); 0 = no limit
-    max_moves: int = 0
+    max_moves: int = Field(default=0, ge=0, le=1000)
     # Multi-player tournament fields (len >= 2 activates bracket mode)
     players: list[PlayerSpec] = []
-    format: str = "round_robin"   # "round_robin" | "gauntlet"
-    games_per_pair: int = 2       # games per head-to-head matchup
+    format: Literal["match", "round_robin", "gauntlet"] = "round_robin"
+    games_per_pair: int = Field(default=2, ge=1, le=100)
     # Adaptive difficulty: auto-adjust candidate_count based on rolling win rate
     adaptive_difficulty: bool = False

@@ -21,8 +21,14 @@ class AnthropicPlayer(ChessPlayer):
 
     def __init__(self, config: PlayerConfig):
         super().__init__(config)
+        api_key = config.api_key or os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "Anthropic backend selected but no API key found. "
+                "Set the ANTHROPIC_API_KEY environment variable or pass api_key in PlayerConfig."
+            )
         self.client = anthropic.Anthropic(
-            api_key=config.api_key or os.environ["ANTHROPIC_API_KEY"],
+            api_key=api_key,
             timeout=DEFAULT_REQUEST_TIMEOUT_S,
         )
 

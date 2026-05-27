@@ -9,10 +9,13 @@ Model-specific behaviour is controlled by model_profiles.json:
   - max_tokens_thinking / max_tokens_default: override per-state token limits
 """
 
+import logging
 import os
 import random
 import re
 import time
+
+logger = logging.getLogger(__name__)
 import chess
 from openai import OpenAI
 
@@ -115,11 +118,11 @@ class LMStudioPlayer(ChessPlayer):
             usage = getattr(response, "usage", None)
             total_tokens = getattr(usage, "total_tokens", None)
             if thinking_found or (elapsed > 15 and total_tokens and total_tokens > 800):
-                print(
-                    f"  ⚠  [{self.config.model_id}] thinking appears active despite "
-                    f"enable_thinking=false  "
-                    f"(elapsed={elapsed:.1f}s, tokens={total_tokens}, "
-                    f"<think>={'yes' if thinking_found else 'no'})"
+                logger.warning(
+                    "[%s] thinking appears active despite enable_thinking=false "
+                    "(elapsed=%.1fs, tokens=%s, <think>=%s)",
+                    self.config.model_id, elapsed, total_tokens,
+                    "yes" if thinking_found else "no",
                 )
 
         return self._parse_response(raw, candidates, board)
