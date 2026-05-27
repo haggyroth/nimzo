@@ -100,11 +100,14 @@ class AnthropicPlayer(ChessPlayer):
 
         # 1. Explicit MOVE field
         if move_match:
-            uci  = move_match.group(1).lower()
-            move = chess.Move.from_uci(uci)
-            if move in board.legal_moves:
-                rank = next((i + 1 for i, (c, _) in enumerate(candidates) if c == move), 0)
-                return MoveDecision(uci, reasoning, rank, raw, thinking_content)
+            uci = move_match.group(1).lower()
+            try:
+                move = chess.Move.from_uci(uci)
+                if move in board.legal_moves:
+                    rank = next((i + 1 for i, (c, _) in enumerate(candidates) if c == move), 0)
+                    return MoveDecision(uci, reasoning, rank, raw, thinking_content)
+            except ValueError:
+                pass  # fall through to CHOICE / scan strategies
 
         # 2. CHOICE number
         if choice_match:

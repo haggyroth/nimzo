@@ -161,7 +161,7 @@ class TestPlayGame:
         assert len(moves) >= 1
 
     def test_move_quality_labels_are_valid(self):
-        valid = {"best", "excellent", "good", "inaccuracy", "mistake", "blunder"}
+        valid = {"best", "excellent", "good", "inaccuracy", "mistake", "blunder", "unknown"}
         summary = self._run()
         moves = database.get_game_moves(summary["game_id"])
         for m in moves:

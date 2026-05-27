@@ -152,7 +152,9 @@ class StockfishEngine:
             return "best"
 
         if top_score is None or chosen_score is None:
-            return "good"
+            # Move was outside the candidate list (e.g. blind-mode play).
+            # Returning "good" would mask real blunders — be honest instead.
+            return "unknown"
 
         loss = top_score - chosen_score  # centipawns lost
 

@@ -9,6 +9,7 @@ import logging
 import os
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
@@ -179,12 +180,36 @@ async def api_h2h(model_id_a: str, model_id_b: str):
     return database.get_h2h_record(model_id_a, model_id_b)
 
 
+# Hosts allowed for the /api/models proxy.  Prevents SSRF when the server is
+# exposed on a LAN (NIMZO_HOST=0.0.0.0).  Extend via the env var if you run
+# LM Studio on a remote host inside your trusted network.
+_PROXY_ALLOWED_HOSTS: frozenset[str] = frozenset({
+    "localhost", "127.0.0.1", "::1", "0.0.0.0",
+    *filter(None, os.environ.get("NIMZO_ALLOWED_MODEL_HOSTS", "").split(",")),
+})
+
+
+def _check_proxy_url(url: str) -> None:
+    """Raise HTTPException(403) if *url* points to a host outside the allowlist."""
+    host = (urlparse(url).hostname or "").lower().strip("[]")  # strip IPv6 brackets
+    if host not in _PROXY_ALLOWED_HOSTS:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Host {host!r} is not in the proxy allowlist. "
+                "Add it to the NIMZO_ALLOWED_MODEL_HOSTS env var (comma-separated) "
+                "to permit requests to that host."
+            ),
+        )
+
+
 @router.get("/api/models")
 async def api_models(url: str = _DEFAULT_LMSTUDIO_URL):
     """Proxy GET /models to a local OpenAI-compatible server and return the result."""
+    _check_proxy_url(url)
     import httpx
     try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
+        async with httpx.AsyncClient(timeout=4.0, follow_redirects=False) as client:
             resp = await client.get(f"{url.rstrip('/')}/models")
             return resp.json()
     except Exception as exc:
