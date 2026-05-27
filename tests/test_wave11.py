@@ -7,8 +7,6 @@ import asyncio
 import sys
 from pathlib import Path
 
-import pytest
-
 # Ensure project root is on sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -21,7 +19,6 @@ class TestLeaderboardCache:
 
     def _fresh_db(self, tmp_path):
         """Return a db module wired to a throwaway SQLite file."""
-        import importlib
         import db as database
 
         db_path = tmp_path / "test.db"
@@ -37,7 +34,7 @@ class TestLeaderboardCache:
 
     def test_get_leaderboard_populates_cache(self, tmp_path):
         db = self._fresh_db(tmp_path)
-        result = db.get_leaderboard()
+        db.get_leaderboard()
         assert db._leaderboard_cache is not None
         # Cache should be a list (empty if no players)
         assert isinstance(db._leaderboard_cache, list)
