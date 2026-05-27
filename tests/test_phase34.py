@@ -127,7 +127,7 @@ class TestLatencyFormatting:
             fen_after="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
             elapsed_ms=3456,
         )
-        moves = db.get_game_moves(game_id) if False else database.get_game_moves(game_id)
+        moves = database.get_game_moves(game_id)
         assert isinstance(moves[0]["elapsed_ms"], int)
         # 3456 ms → 3.456 s; viewer shows (elapsed_ms / 1000).toFixed(1) = "3.5s"
         assert round(moves[0]["elapsed_ms"] / 1000, 1) == 3.5
