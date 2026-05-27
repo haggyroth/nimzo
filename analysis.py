@@ -283,7 +283,7 @@ def score_reasoning_coherence(
 
     # Format candidates as text
     cand_lines = []
-    for i, (mv, cp) in enumerate(candidates[:5], 1):
+    for i, (mv, cp) in enumerate(candidates, 1):
         san = chess.Board(board_fen).san(mv) if hasattr(mv, "uci") else str(mv)
         score_str = f"{cp / 100:+.2f}" if cp is not None else "?"
         cand_lines.append(f"  {i}. {san} (eval: {score_str})")

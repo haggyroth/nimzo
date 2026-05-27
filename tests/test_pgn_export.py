@@ -167,10 +167,13 @@ class TestBuildGamePgnComments:
         assert "(human move)" not in pgn
 
     def test_braces_in_reasoning_escaped(self):
+        """Curly braces in reasoning are stripped (not converted to parens) for
+        PGN safety — MN-14 fix: stripping preserves readability and avoids the
+        false-positive suppression caused by the old { → ( replacement."""
         moves = [_move(1, "e4", reasoning="A {good} move.")]
         pgn = _build_game_pgn(GAME_ROW, moves)
-        assert "{good}" not in pgn     # braces replaced with parens
-        assert "(good)" in pgn
+        assert "{good}" not in pgn     # literal braces must not appear in comment
+        assert "A good move." in pgn   # content preserved after stripping braces
 
     def test_no_comment_block_when_no_content(self):
         """Rank=0, quality=good, no reasoning → no comment at all."""

@@ -20,10 +20,10 @@ from __future__ import annotations
 import json
 import re
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Optional
+
+import httpx
 
 
 # Anchor cache to repo root regardless of CWD (see REVIEW.md MN-1)
@@ -175,12 +175,13 @@ def fetch_hf_metadata(model_id: str) -> dict:
 
     data: dict = {}
     try:
-        req = urllib.request.Request(
-            _HF_API.format(repo=repo),
-            headers={"User-Agent": "nimzo-chess-arena"},
-        )
-        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT) as resp:
-            raw = json.loads(resp.read().decode("utf-8"))
+        with httpx.Client(timeout=_REQUEST_TIMEOUT, follow_redirects=True) as client:
+            resp = client.get(
+                _HF_API.format(repo=repo),
+                headers={"User-Agent": "nimzo-chess-arena"},
+            )
+            resp.raise_for_status()
+            raw = resp.json()
 
         # Cherry-pick the bits we want; the full response is huge
         data["hf_repo"] = repo
@@ -227,7 +228,7 @@ def fetch_hf_metadata(model_id: str) -> dict:
         if raw.get("downloads"):
             data["downloads"] = raw["downloads"]
 
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+    except (httpx.HTTPError, TimeoutError, json.JSONDecodeError, OSError):
         # Network / parse / DNS failure — just leave data empty
         pass
 

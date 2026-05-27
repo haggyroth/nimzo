@@ -54,7 +54,13 @@ def _build_game_pgn(game_row: dict, moves: list[dict], round_number: Optional[in
         num   = m["move_number"]
         san   = m["move_san"]
         glyph = _QUALITY_GLYPH.get(m["quality"] or "", "")
-        reason = (m["reasoning"] or "").strip().replace("{", "(").replace("}", ")")
+        raw_reason = (m["reasoning"] or "").strip()
+        # Sanitize for PGN: strip curly braces (PGN comment delimiters) from
+        # the text that goes into the comment block.  Check startswith("(")
+        # on the *raw* reason so automated fallback messages (which start with
+        # an opening paren by convention) are still suppressed even if the
+        # model itself produced a brace-prefixed reasoning string (MN-14).
+        reason = raw_reason.replace("{", "").replace("}", "")
         rank  = m["candidate_rank"]
 
         if num % 2 == 1:
@@ -63,7 +69,7 @@ def _build_game_pgn(game_row: dict, moves: list[dict], round_number: Optional[in
         tokens.append(san + glyph)
 
         comment_parts = []
-        if reason and not reason.startswith("("):
+        if reason and not raw_reason.startswith("("):
             comment_parts.append(reason)
         if m["quality"] and m["quality"] != "good":
             comment_parts.append(m["quality"].capitalize())
