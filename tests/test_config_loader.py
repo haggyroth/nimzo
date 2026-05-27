@@ -30,6 +30,7 @@ class _PlayerSpec:
     url: str = "http://localhost:1234/v1"
     thinking: bool = False
     candidate_count: Optional[int] = None
+    style: str = ""
     blind_opening_moves: int = 0
 
 
@@ -40,12 +41,14 @@ class _TournamentStartConfig:
     white_model: str = ""
     white_url: str = "http://localhost:1234/v1"
     white_thinking: bool = False
+    white_style: str = ""
     white_blind_opening_moves: int = 0
     black_backend: str = "lmstudio"
     black_name: str = "Black"
     black_model: str = ""
     black_url: str = "http://localhost:1235/v1"
     black_thinking: bool = False
+    black_style: str = ""
     black_blind_opening_moves: int = 0
     tutor_backend: str = "lmstudio"
     tutor_model: str = ""
@@ -59,6 +62,7 @@ class _TournamentStartConfig:
     move_timeout: int = 0
     max_moves: int = 0
     human_assisted: bool = True
+    adaptive_difficulty: bool = False
     players: list = field(default_factory=list)
 
 
@@ -343,3 +347,73 @@ class TestHumanAssisted:
         p = _write_toml(tmp_path, toml)
         cfg = _load(p)
         assert cfg.human_assisted is True
+
+
+# ---------------------------------------------------------------------------
+# Tests: load_config — new M-4 fields: style and adaptive_difficulty
+# ---------------------------------------------------------------------------
+
+class TestStyleAndAdaptiveDifficulty:
+    """Regression for REVIEW.md M-4: config_loader was not parsing style or
+    adaptive_difficulty from TOML, despite both being documented."""
+
+    def test_white_style_parsed(self, tmp_path):
+        toml = (
+            "[match]\n[white]\nname='A'\nmodel='m'\nstyle='aggressive'\n"
+            "[black]\nname='B'\nmodel='n'\n"
+        )
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.white_style == "aggressive"
+
+    def test_black_style_parsed(self, tmp_path):
+        toml = (
+            "[match]\n[white]\nname='A'\nmodel='m'\n"
+            "[black]\nname='B'\nmodel='n'\nstyle='defensive'\n"
+        )
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.black_style == "defensive"
+
+    def test_style_defaults_to_empty(self, tmp_path):
+        toml = "[match]\n[white]\nname='A'\nmodel='m'\n[black]\nname='B'\nmodel='n'\n"
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.white_style == ""
+        assert cfg.black_style == ""
+
+    def test_adaptive_difficulty_parsed(self, tmp_path):
+        toml = (
+            "[match]\nadaptive_difficulty = true\n"
+            "[white]\nname='A'\nmodel='m'\n[black]\nname='B'\nmodel='n'\n"
+        )
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.adaptive_difficulty is True
+
+    def test_adaptive_difficulty_defaults_false(self, tmp_path):
+        toml = "[match]\n[white]\nname='A'\nmodel='m'\n[black]\nname='B'\nmodel='n'\n"
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.adaptive_difficulty is False
+
+    def test_player_style_parsed_in_multi_player_mode(self, tmp_path):
+        toml = (
+            "[match]\nformat = 'round_robin'\ngames = 1\n"
+            "[[players]]\nname='A'\nmodel='m'\nstyle='positional'\n"
+            "[[players]]\nname='B'\nmodel='n'\n"
+        )
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.players[0].style == "positional"
+        assert cfg.players[1].style == ""
+
+    def test_adaptive_difficulty_in_multi_player_mode(self, tmp_path):
+        toml = (
+            "[match]\nformat = 'round_robin'\ngames = 1\nadaptive_difficulty = true\n"
+            "[[players]]\nname='A'\nmodel='m'\n"
+            "[[players]]\nname='B'\nmodel='n'\n"
+        )
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.adaptive_difficulty is True

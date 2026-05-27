@@ -100,6 +100,8 @@ def load_config(path: str | Path):
     move_timeout = int(match_cfg.get("move_timeout", 0))
     max_moves    = int(match_cfg.get("max_moves", 0))
 
+    adaptive_difficulty = bool(match_cfg.get("adaptive_difficulty", False))
+
     # ── Multi-player bracket mode ─────────────────────────────────────────
     if len(players_list) >= 2:
         players = [
@@ -110,23 +112,25 @@ def load_config(path: str | Path):
                 url                 = p.get("url", "http://localhost:1234/v1"),
                 thinking            = bool(p.get("thinking", False)),
                 candidate_count     = int(p.get("candidate_count", 5)) or None,
+                style               = p.get("style", ""),
                 blind_opening_moves = int(p.get("blind_opening_moves", 0)),
             )
             for p in players_list
         ]
         return TournamentStartConfig(
-            tutor_backend  = tutor_cfg.get("backend", "lmstudio"),
-            tutor_model    = tutor_cfg.get("model", ""),
-            tutor_url      = tutor_cfg.get("url", "http://localhost:1234/v1"),
-            judge_backend  = judge_cfg.get("backend", tutor_cfg.get("backend", "lmstudio")),
-            judge_model    = judge_cfg.get("model", tutor_cfg.get("model", "")),
-            judge_url      = judge_cfg.get("url", tutor_cfg.get("url", "http://localhost:1234/v1")),
-            players        = players,
-            format         = fmt,
-            games_per_pair = int(match_cfg.get("games", 2)),
-            move_timeout   = move_timeout,
-            max_moves      = max_moves,
-            human_assisted = bool(match_cfg.get("human_assisted", True)),
+            tutor_backend       = tutor_cfg.get("backend", "lmstudio"),
+            tutor_model         = tutor_cfg.get("model", ""),
+            tutor_url           = tutor_cfg.get("url", "http://localhost:1234/v1"),
+            judge_backend       = judge_cfg.get("backend", tutor_cfg.get("backend", "lmstudio")),
+            judge_model         = judge_cfg.get("model", tutor_cfg.get("model", "")),
+            judge_url           = judge_cfg.get("url", tutor_cfg.get("url", "http://localhost:1234/v1")),
+            players             = players,
+            format              = fmt,
+            games_per_pair      = int(match_cfg.get("games", 2)),
+            move_timeout        = move_timeout,
+            max_moves           = max_moves,
+            human_assisted      = bool(match_cfg.get("human_assisted", True)),
+            adaptive_difficulty = adaptive_difficulty,
         )
 
     # ── 2-player match mode ───────────────────────────────────────────────
@@ -136,12 +140,14 @@ def load_config(path: str | Path):
         white_model                 = white_cfg.get("model", ""),
         white_url                   = white_cfg.get("url", "http://localhost:1234/v1"),
         white_thinking              = bool(white_cfg.get("thinking", False)),
+        white_style                 = white_cfg.get("style", ""),
         white_blind_opening_moves   = int(white_cfg.get("blind_opening_moves", 0)),
         black_backend               = black_cfg.get("backend", "lmstudio"),
         black_name                  = black_cfg.get("name", "Black"),
         black_model                 = black_cfg.get("model", ""),
         black_url                   = black_cfg.get("url", "http://localhost:1235/v1"),
         black_thinking              = bool(black_cfg.get("thinking", False)),
+        black_style                 = black_cfg.get("style", ""),
         black_blind_opening_moves   = int(black_cfg.get("blind_opening_moves", 0)),
         tutor_backend               = tutor_cfg.get("backend", "lmstudio"),
         tutor_model                 = tutor_cfg.get("model", ""),
@@ -153,4 +159,5 @@ def load_config(path: str | Path):
         move_timeout                = move_timeout,
         max_moves                   = max_moves,
         human_assisted              = bool(match_cfg.get("human_assisted", True)),
+        adaptive_difficulty         = adaptive_difficulty,
     )

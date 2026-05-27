@@ -407,10 +407,12 @@ def _parse_lessons(raw: str) -> dict[str, list[str]]:
         elif re.match(r"STRENGTH", clean):
             section = "strength"
         elif section:
-            # Accept lines starting with -, *, •, numbers, or letters as bullets
-            bullet = re.match(r"^[-*•]|^\d+[.)]\s|^[a-z][.)]\s", stripped, re.IGNORECASE)
+            # Accept lines starting with -, *, •, numbers, or letters as bullets.
+            # The substitution strips the full matched prefix (e.g. "1) ", "a. ",
+            # "- ") so we don't leave stray ")" characters in the lesson text.
+            bullet = re.match(r"^(?:[-*•]\s*|\d+[.)]\s+|[a-z][.)]\s+)", stripped, re.IGNORECASE)
             if bullet:
-                text_part = re.sub(r"^[-*•\d.)(a-z]\s*", "", stripped, count=1, flags=re.IGNORECASE).strip()
+                text_part = stripped[bullet.end():].strip()
                 if text_part:
                     if section == "improve":
                         improve.append(text_part)
