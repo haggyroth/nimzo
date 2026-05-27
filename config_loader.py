@@ -114,6 +114,7 @@ def load_config(path: str | Path):
                 candidate_count     = int(p.get("candidate_count", 5)) or None,
                 style               = p.get("style", ""),
                 blind_opening_moves = int(p.get("blind_opening_moves", 0)),
+                blind               = bool(p.get("blind", False)),
             )
             for p in players_list
         ]
@@ -142,6 +143,7 @@ def load_config(path: str | Path):
         white_thinking              = bool(white_cfg.get("thinking", False)),
         white_style                 = white_cfg.get("style", ""),
         white_blind_opening_moves   = int(white_cfg.get("blind_opening_moves", 0)),
+        white_blind                 = bool(white_cfg.get("blind", False)),
         black_backend               = black_cfg.get("backend", "lmstudio"),
         black_name                  = black_cfg.get("name", "Black"),
         black_model                 = black_cfg.get("model", ""),
@@ -149,6 +151,7 @@ def load_config(path: str | Path):
         black_thinking              = bool(black_cfg.get("thinking", False)),
         black_style                 = black_cfg.get("style", ""),
         black_blind_opening_moves   = int(black_cfg.get("blind_opening_moves", 0)),
+        black_blind                 = bool(black_cfg.get("blind", False)),
         tutor_backend               = tutor_cfg.get("backend", "lmstudio"),
         tutor_model                 = tutor_cfg.get("model", ""),
         tutor_url                   = tutor_cfg.get("url", "http://localhost:1234/v1"),

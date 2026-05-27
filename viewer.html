@@ -163,6 +163,9 @@
                 <span>Blind opening moves</span>
                 <input type="number" id="whiteBlindMoves" value="0" min="0" max="20" style="width:52px">
               </div>
+              <label class="toggle-row" title="Full-game blind mode: Stockfish candidates are never shown — the model plays purely from its own chess knowledge for every move">
+                <input type="checkbox" id="whiteBlind" onchange="onBlindChange('white')"> Blind game (all moves)
+              </label>
             </div>
 
             <hr class="divider">
@@ -194,6 +197,9 @@
                 <span>Blind opening moves</span>
                 <input type="number" id="blackBlindMoves" value="0" min="0" max="20" style="width:52px">
               </div>
+              <label class="toggle-row" title="Full-game blind mode: Stockfish candidates are never shown — the model plays purely from its own chess knowledge for every move">
+                <input type="checkbox" id="blackBlind" onchange="onBlindChange('black')"> Blind game (all moves)
+              </label>
             </div>
 
             <hr class="divider">

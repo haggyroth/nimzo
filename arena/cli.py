@@ -87,6 +87,10 @@ def main():
                         help="Per-move timeout in seconds (0 = no limit)")
     parser.add_argument("--thinking",      action="store_true", default=False,
                         help="Enable extended thinking for both players (LM Studio)")
+    parser.add_argument("--white-blind",   action="store_true", default=False,
+                        help="Full-game blind mode for white: no Stockfish candidates shown to the model")
+    parser.add_argument("--black-blind",   action="store_true", default=False,
+                        help="Full-game blind mode for black: no Stockfish candidates shown to the model")
     parser.add_argument("--headless",      action="store_true", default=False,
                         help="Run without HTTP server or browser — DB only, fast benchmarking")
     parser.add_argument("--port",          type=int, default=int(os.environ.get("PORT", _st._DEFAULT_PORT)))
@@ -129,11 +133,13 @@ def main():
                 white_model=args.white_model,
                 white_url=args.white_url,
                 white_thinking=args.thinking,
+                white_blind=args.white_blind,
                 black_backend=args.black_backend,
                 black_name=args.black_name or args.black_model.split("/")[-1].split("@")[0].split(":")[0],
                 black_model=args.black_model,
                 black_url=args.black_url,
                 black_thinking=args.thinking,
+                black_blind=args.black_blind,
                 tutor_backend=args.tutor_backend,
                 tutor_model=args.tutor_model,
                 tutor_url=args.tutor_url,
@@ -178,11 +184,13 @@ def main():
             white_model=args.white_model,
             white_url=args.white_url,
             white_thinking=args.thinking,
+            white_blind=args.white_blind,
             black_backend=args.black_backend,
             black_name=args.black_name or args.black_model.split("/")[-1].split("@")[0].split(":")[0],
             black_model=args.black_model,
             black_url=args.black_url,
             black_thinking=args.thinking,
+            black_blind=args.black_blind,
             tutor_backend=args.tutor_backend,
             tutor_model=args.tutor_model,
             tutor_url=args.tutor_url,

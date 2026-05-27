@@ -269,9 +269,11 @@ async def play_game(
 
         current_player = white if board.turn == chess.WHITE else black
 
-        # ── Blind-opening detection ───────────────────────────────────────
+        # ── Blind mode detection ─────────────────────────────────────────
+        # Full-game blind: config.blind = True (never show candidates).
+        # Opening blind: candidates withheld for first N full moves only.
         # board.fullmove_number counts full moves (1 after 1.e4, 2 after 1.e4 e5, etc.)
-        is_blind = (
+        is_blind = current_player.config.blind or (
             current_player.config.blind_opening_moves > 0
             and board.fullmove_number <= current_player.config.blind_opening_moves
         )
@@ -864,6 +866,7 @@ def build_player(
     move_timeout: int = 0,
     style: str = "",
     blind_opening_moves: int = 0,
+    blind: bool = False,
 ) -> ChessPlayer:
     """
     Construct the correct ``ChessPlayer`` subclass for the given backend.
@@ -884,6 +887,7 @@ def build_player(
         move_timeout=move_timeout,
         style=style,
         blind_opening_moves=blind_opening_moves,
+        blind=blind,
         lesson_memory=database.get_player_lessons(model_id) if db_exists else [],
         strategic_profile=database.get_strategic_profile(model_id) if db_exists else None,
     )
