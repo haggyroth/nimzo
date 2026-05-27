@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
@@ -124,11 +125,11 @@ async def api_games_export(model_id: Optional[str] = None, limit: int = 5000):
         moves = database.get_game_moves(row["id"])
         parts.append(_build_game_pgn(row, moves, round_number=i))
 
-    filename = "nimzo_export.pgn" if not model_id else f"nimzo_{model_id}_export.pgn"
-    filename = filename.replace("/", "_").replace(" ", "_")
+    raw_name = "nimzo_export.pgn" if not model_id else f"nimzo_{model_id}_export.pgn"
+    safe_name = quote(raw_name.replace(" ", "_"), safe="_-.")
     return PlainTextResponse(
         "\n".join(parts),
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}"},
     )
 
 
@@ -163,11 +164,12 @@ async def api_game_pgn(game_id: int):
         return PlainTextResponse("Game not found", status_code=404)
     moves = database.get_game_moves(game_id)
     pgn = _build_game_pgn(game_row, moves)
-    filename = (
+    raw_name = (
         f"nimzo_{game_row['white_name']}_vs_{game_row['black_name']}_{game_id}.pgn"
         .replace(" ", "_")
     )
+    safe_name = quote(raw_name, safe="_-.")
     return PlainTextResponse(
         pgn,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}"},
     )

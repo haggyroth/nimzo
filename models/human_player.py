@@ -5,6 +5,7 @@ rather than calling an LLM.  Used in Human vs LLM match mode.
 
 from __future__ import annotations
 
+import random
 import threading
 import chess
 
@@ -57,10 +58,18 @@ class HumanPlayer(ChessPlayer):
 
         # Wait up to 5 minutes for the human to move; time-out gracefully.
         if not self._move_ready.wait(timeout=300):
-            fallback = candidates[0][0].uci() if candidates else "0000"
+            if candidates:
+                fallback = candidates[0][0].uci()
+                reason = "(human timed out — fell back to top Stockfish candidate)"
+            else:
+                # No candidates (blind mode) — pick a random legal move rather
+                # than "0000" (the null move, illegal in normal play) (MN-11).
+                legal = list(board.legal_moves)
+                fallback = random.choice(legal).uci() if legal else "0000"
+                reason = "(human timed out — fell back to random legal move)"
             return MoveDecision(
                 move_uci=fallback,
-                reasoning="(human timed out — fell back to top Stockfish candidate)",
+                reasoning=reason,
                 candidate_rank=1,
                 raw_response="",
             )
@@ -70,10 +79,16 @@ class HumanPlayer(ChessPlayer):
             # _move_ready was set but no UCI was stored (shouldn't happen in
             # normal flow, but guards against a race where the WebSocket drops
             # between set() and the read here).
-            fallback = candidates[0][0].uci() if candidates else "0000"
+            if candidates:
+                fallback = candidates[0][0].uci()
+                reason = "(human move lost — fell back to top Stockfish candidate)"
+            else:
+                legal = list(board.legal_moves)
+                fallback = random.choice(legal).uci() if legal else "0000"
+                reason = "(human move lost — fell back to random legal move)"
             return MoveDecision(
                 move_uci=fallback,
-                reasoning="(human move lost — fell back to top Stockfish candidate)",
+                reasoning=reason,
                 candidate_rank=1,
                 raw_response="",
             )

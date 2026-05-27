@@ -138,33 +138,38 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {r["name"] for r in rows}
 
 
+# Module-level migration cache — cleared at the start of each _migrate() call
+# so consecutive init_db() calls in the same process (e.g. during testing)
+# always re-introspect the schema.  Using a module-level dict is cleaner than
+# the mutable-default-argument pattern (MN-5 in REVIEW.md).
+_migrate_column_cache: dict[str, set[str]] = {}
+
+
 def _add_column_if_missing(
     conn: sqlite3.Connection,
     table: str,
     column: str,
     definition: str,
-    _cache: dict[str, set[str]] = {},
 ) -> None:
     """ALTER TABLE … ADD COLUMN only when the column does not already exist.
 
     Uses PRAGMA table_info rather than try/except so that genuine SQL errors
     (wrong type, constraint violation, etc.) are not silently swallowed.
-    Results are cached per (table, column) pair within a single migration run.
+    Results are cached in ``_migrate_column_cache`` for the duration of a
+    single migration run (the caller resets it before the first call).
     """
-    key = table
-    if key not in _cache:
-        _cache[key] = _table_columns(conn, table)
-    if column not in _cache[key]:
+    if table not in _migrate_column_cache:
+        _migrate_column_cache[table] = _table_columns(conn, table)
+    if column not in _migrate_column_cache[table]:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-        _cache[key].add(column)
+        _migrate_column_cache[table].add(column)
 
 
 def _migrate(conn: sqlite3.Connection):
     """Non-destructive schema migrations for databases created before the
     current schema was finalised.  Each call is idempotent."""
-    # Flush the per-call column cache (the default-arg dict is shared across
-    # calls within the same process, so reset it at migration entry).
-    _add_column_if_missing.__defaults__[0].clear()  # type: ignore[index]
+    # Reset the per-call column cache so each migration run gets fresh data.
+    _migrate_column_cache.clear()
 
     _add_column_if_missing(conn, "lessons", "lesson_type",        "TEXT DEFAULT 'improve'")
     _add_column_if_missing(conn, "players", "portrait_path",       "TEXT")

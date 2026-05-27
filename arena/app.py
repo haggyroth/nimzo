@@ -70,11 +70,15 @@ async def _pregenerate_portraits():
         return
     logger.info("Pre-generating portraits for %d model(s)…", len(missing))
     loop = asyncio.get_running_loop()
+    # Limit concurrency to 3 so we don't exhaust the free Gemini Imagen quota
+    # when many players are missing portraits (P-3 in REVIEW.md).
+    sem = asyncio.Semaphore(3)
 
     async def _gen_one(mid: str) -> None:
-        path = await loop.run_in_executor(
-            None, generate_portrait, mid, api_key, _PORTRAITS_DIR
-        )
+        async with sem:
+            path = await loop.run_in_executor(
+                None, generate_portrait, mid, api_key, _PORTRAITS_DIR
+            )
         if path:
             database.set_portrait_path(mid, path)
             logger.info("Portrait generated: %s", mid)
