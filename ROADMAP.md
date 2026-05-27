@@ -296,6 +296,30 @@ Make lesson generation visible to the viewer, improve compression quality, and f
 
 ---
 
+## Phase 22 — Async Database (aiosqlite)
+
+### Goals
+All `database.*` calls currently run synchronous SQLite queries on the asyncio event loop, blocking it briefly on every game write, leaderboard poll, and stats request. At tournament scale (many games, large stats tables) this creates latency spikes visible to connected WebSocket clients. Migrating to `aiosqlite` or wrapping every call in `asyncio.to_thread()` eliminates the blocking.
+
+### Approach options
+
+| Approach | Effort | Notes |
+|---|---|---|
+| `asyncio.to_thread()` wrappers | Low — one decorator per call-site | No schema changes; no new dep; connection pool unchanged; easiest to review |
+| `aiosqlite` migration | Medium — rewrites all `db.py` functions to `async def` | Cleaner long-term; requires updating every call site in game.py / routes; adds `aiosqlite` to requirements.txt |
+| SQLAlchemy async | High | Overkill for SQLite-only project; not recommended |
+
+**Recommended**: `asyncio.to_thread()` wrappers on the call sites in `arena/routes/*` and `game.py` — preserves the existing synchronous `db.py` API (no churn on tests) while unblocking the event loop. Can be followed by a full `aiosqlite` rewrite in a later phase if profiling shows it's worthwhile.
+
+### Scope
+
+- Wrap all `database.*` calls in `game.py` and `arena/routes/` with `await asyncio.to_thread(database.fn, ...args)`
+- No changes to `db.py` function signatures
+- Update tests where relevant (calls that were sync become async)
+- Benchmark: measure average game-loop wall time before/after with `time.perf_counter()` around the write block
+
+---
+
 ## Future Considerations
 
 Items that are well-defined but deferred due to complexity, scope, or dependencies on earlier phases.
@@ -317,4 +341,4 @@ Items that are well-defined but deferred due to complexity, scope, or dependenci
 - **Parallel bracket games**: run simultaneous games in a bracket round for speed; requires scoped `_state` per game, multiple Stockfish engine instances, and careful WebSocket multiplexing
 - **arena.py code split**: at 1600+ lines, splitting into `arena/api.py` (HTTP/WS endpoints), `arena/runners.py` (game loop, tournament runners), and `arena/cli.py` (argparse + entry point) would significantly improve navigability
 - **Structured logging**: replace `print(...)` throughout with Python's `logging` module (levels: DEBUG/INFO/WARNING/ERROR); enables log-level filtering and log file output without changing any call sites
-- **aiosqlite / thread isolation**: all `database.*` calls currently block the asyncio event loop briefly; routing them through `asyncio.to_thread()` or migrating to `aiosqlite` would be the correct fix at any meaningful scale
+- **aiosqlite / thread isolation**: promoted to Phase 22 above.
