@@ -7,13 +7,19 @@ or any cloud provider listed in providers.CLOUD_PROVIDERS.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
+import os
+import re
 from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+
+import chess
+import chess.pgn
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +116,6 @@ def detect_opening_depth(pgn_string: str) -> tuple[str, str, int] | None:
     Like detect_opening but also returns the ply count at which theory was
     last matched. Useful for awarding 'Theorist' achievements.
     """
-    import chess
-    import chess.pgn
-    import io
-
     openings = _load_openings()
     if not openings:
         return None
@@ -273,8 +275,6 @@ def score_reasoning_coherence(
     move.  Returns a float 0.0–10.0, or None if the judge is unavailable /
     the player had no reasoning (human / API-error fallback).
     """
-    import re
-
     # Skip scoring for human moves and fallback moves
     if not reasoning or reasoning.startswith("("):
         return None
@@ -282,10 +282,9 @@ def score_reasoning_coherence(
         return None
 
     # Format candidates as text
-    import chess as _chess
     cand_lines = []
     for i, (mv, cp) in enumerate(candidates[:5], 1):
-        san = _chess.Board(board_fen).san(mv) if hasattr(mv, "uci") else str(mv)
+        san = chess.Board(board_fen).san(mv) if hasattr(mv, "uci") else str(mv)
         score_str = f"{cp / 100:+.2f}" if cp is not None else "?"
         cand_lines.append(f"  {i}. {san} (eval: {score_str})")
     candidates_text = "\n".join(cand_lines) if cand_lines else "  (none)"
@@ -325,7 +324,6 @@ def _call_tutor_like(
     ``CLOUD_PROVIDERS``, and sends ``extra_body={"enable_thinking": False}``
     only for ``backend="lmstudio"`` where LM Studio / Ollama accept it.
     """
-    import os
     from providers import CLOUD_PROVIDERS
 
     if cfg.backend == "anthropic":
@@ -388,8 +386,6 @@ def _parse_lessons(raw: str) -> dict[str, list[str]]:
     Handles: <think>…</think> blocks, markdown bold (**IMPROVE:**),
     numbered bullets (1.), lettered bullets, and mixed capitalisation.
     """
-    import re
-
     # Strip <think>…</think> reasoning blocks (Qwen3, DeepSeek-R1, etc.)
     text = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE).strip()
 
@@ -439,7 +435,6 @@ def _trim_pgn(pgn: str, max_full_moves: int = _LESSON_PGN_MAX_MOVES) -> str:
     unchanged.  Move-number prefixes are rewritten so the snippet starts at
     move 1 for readability.
     """
-    import re
     # Extract the moves section (everything after the last blank header line)
     # PGN headers end with a blank line before the move text.
     parts = re.split(r"\n\n", pgn, maxsplit=1)

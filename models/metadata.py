@@ -160,7 +160,7 @@ def _guess_hf_repo(model_id: str) -> Optional[str]:
 
 def fetch_hf_metadata(model_id: str) -> dict:
     """
-    Hit huggingface.co/api/models/{repo}. Cached on disk for 7 days.
+    Hit huggingface.co/api/models/{repo}. Cached on disk for 24 hours.
     Returns {} on any failure (network, 404, malformed response).
     """
     repo = _guess_hf_repo(model_id)
