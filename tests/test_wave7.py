@@ -17,9 +17,6 @@ import json
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-
 # ── T-5: WebSocket origin check ───────────────────────────────────────────────
 
 
