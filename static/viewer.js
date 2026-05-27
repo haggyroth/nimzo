@@ -1789,7 +1789,7 @@ function exportAllPgn(modelId) {
 const QUALITY_GLYPH = { best:'!!', excellent:'!', inaccuracy:'?!', mistake:'?', blunder:'??' };
 const QUALITY_COLOR = { best:'#ffd700', excellent:'#56c45a', good:'', inaccuracy:'#f0d030', mistake:'#f09020', blunder:'#e83030' };
 
-const replay = { moves: [], cursor: 0, meta: null };
+const replay = { moves: [], cursor: 0, meta: null, gameId: null };
 
 async function openReplay(gameId, meta) {
   try {
@@ -1801,6 +1801,7 @@ async function openReplay(gameId, meta) {
     replay.moves  = moves;
     replay.cursor = 0;
     replay.meta   = meta;
+    replay.gameId = gameId;
 
     // Populate player strips
     document.getElementById('rpNameWhite').textContent = meta.white_name;
@@ -1834,6 +1835,19 @@ async function openReplay(gameId, meta) {
 
 function closeReplay() {
   document.getElementById('replayModal').classList.remove('show');
+}
+
+function copyReplayLink() {
+  if (!replay.gameId) return;
+  const url = `${location.origin}/watch/${replay.gameId}`;
+  const btn = document.getElementById('rpShareBtn');
+  navigator.clipboard.writeText(url).then(() => {
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = '🔗'; }, 1400);
+  }).catch(() => {
+    // Fallback for insecure / older contexts
+    prompt('Copy this link:', url);
+  });
 }
 
 // ── Model card modal ──────────────────────────────────────────────────────
@@ -2319,4 +2333,11 @@ buildUiThemeSwatches();
     const el = document.getElementById(urlId);
     if (el) el.addEventListener('change', () => fetchModels(side));
   });
+
+  // Auto-open replay for /watch/<id> deep-links and ?game=<id> query params
+  (function _autoReplay() {
+    const pathMatch = location.pathname.match(/\/watch\/(\d+)$/);
+    const gameIdStr = pathMatch ? pathMatch[1] : new URLSearchParams(location.search).get('game');
+    if (gameIdStr) openReplay(parseInt(gameIdStr, 10));
+  })();
 })();
