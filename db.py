@@ -180,6 +180,8 @@ def _migrate(conn: sqlite3.Connection):
     _add_column_if_missing(conn, "moves",   "timed_out",           "INTEGER DEFAULT 0")
     _add_column_if_missing(conn, "players", "user_provided_portrait", "INTEGER DEFAULT 0")
     _add_column_if_missing(conn, "moves",   "elapsed_ms",          "INTEGER")
+    _add_column_if_missing(conn, "games",  "eco_code",            "TEXT")
+    _add_column_if_missing(conn, "games",  "opening_name",        "TEXT")
     # Create tournament tables for existing DBs (CREATE TABLE IF NOT EXISTS is idempotent
     # in the schema, but the schema only runs once so we ensure them here too)
     conn.executescript("""
@@ -356,6 +358,8 @@ def record_game(
     black_elo_before: float,
     white_elo_after: float,
     black_elo_after: float,
+    eco_code: Optional[str] = None,
+    opening_name: Optional[str] = None,
 ) -> int:
     with get_conn() as conn:
         white_id = conn.execute(
@@ -371,14 +375,16 @@ def record_game(
               (white_player_id, black_player_id, result, termination,
                total_moves, pgn,
                white_elo_before, black_elo_before,
-               white_elo_after,  black_elo_after)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               white_elo_after,  black_elo_after,
+               eco_code, opening_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 white_id, black_id, result, termination,
                 total_moves, pgn,
                 white_elo_before, black_elo_before,
                 white_elo_after,  black_elo_after,
+                eco_code, opening_name,
             ),
         )
         conn.execute("UPDATE players SET elo = ? WHERE model_id = ?", (white_elo_after, white_model_id))
@@ -565,6 +571,76 @@ def get_coherence_stats(model_id: str) -> dict:
             "total_moves":    total_row["total"] or 0,
             "timeout_count":  total_row["timeouts"] or 0,
         }
+
+
+def get_coherence_history(model_id: str) -> list[dict]:
+    """Per-game average coherence score for a model, ordered chronologically.
+
+    Returns a list of ``{game_id, game_number, avg_coherence}`` dicts.
+    Games with no scored moves are excluded.
+    """
+    with get_conn() as conn:
+        player = conn.execute(
+            "SELECT id FROM players WHERE model_id = ?", (model_id,)
+        ).fetchone()
+        if not player:
+            return []
+        rows = conn.execute(
+            """
+            SELECT g.id AS game_id,
+                   ROW_NUMBER() OVER (ORDER BY g.id) AS game_number,
+                   ROUND(AVG(m.coherence_score), 2)  AS avg_coherence
+            FROM games g
+            JOIN moves m ON m.game_id = g.id AND m.player_id = ?
+            WHERE m.coherence_score IS NOT NULL
+            GROUP BY g.id
+            HAVING COUNT(m.coherence_score) > 0
+            ORDER BY g.id
+            """,
+            (player["id"],),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_openings_for_model(model_id: str, limit: int = 8) -> list[dict]:
+    """W/D/L breakdown per opening for a model, ordered by games played.
+
+    Returns a list of ``{eco_code, opening_name, games, wins, draws, losses}``
+    dicts, capped at *limit* entries.  Only games with a recognised opening
+    (non-NULL ``eco_code``) are included.
+    """
+    with get_conn() as conn:
+        player = conn.execute(
+            "SELECT id FROM players WHERE model_id = ?", (model_id,)
+        ).fetchone()
+        if not player:
+            return []
+        pid = player["id"]
+        rows = conn.execute(
+            """
+            SELECT
+                g.eco_code,
+                g.opening_name,
+                COUNT(*)  AS games,
+                SUM(CASE
+                    WHEN (g.white_player_id = ? AND g.result = '1-0')
+                      OR (g.black_player_id = ? AND g.result = '0-1')
+                    THEN 1 ELSE 0 END) AS wins,
+                SUM(CASE WHEN g.result = '1/2-1/2' THEN 1 ELSE 0 END) AS draws,
+                SUM(CASE
+                    WHEN (g.white_player_id = ? AND g.result = '0-1')
+                      OR (g.black_player_id = ? AND g.result = '1-0')
+                    THEN 1 ELSE 0 END) AS losses
+            FROM games g
+            WHERE (g.white_player_id = ? OR g.black_player_id = ?)
+              AND g.eco_code IS NOT NULL
+            GROUP BY g.eco_code, g.opening_name
+            ORDER BY games DESC
+            LIMIT ?
+            """,
+            (pid, pid, pid, pid, pid, pid, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 # ── Lessons ──────────────────────────────────────────────────────────────

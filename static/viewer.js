@@ -1938,11 +1938,15 @@ async function regenPortrait(modelId) {
 async function openModelCard(modelId) {
   _mcCurrentModelId = modelId;
   try {
-    const [p, effectiveness] = await Promise.all([
+    const [p, effectiveness, coherenceHist, openings] = await Promise.all([
       fetch(`${API}/api/models/${encodeURIComponent(modelId)}/profile`).then(r => r.json()),
       fetch(`${API}/api/models/${encodeURIComponent(modelId)}/lesson-effectiveness`).then(r => r.json()).catch(() => []),
+      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/coherence-history`).then(r => r.json()).catch(() => []),
+      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/openings`).then(r => r.json()).catch(() => []),
     ]);
     p._effectiveness = effectiveness;
+    p._coherenceHist = coherenceHist;
+    p._openings = openings;
     renderModelCard(p);
     document.getElementById('modelModal').classList.add('show');
     // If no portrait yet and quota not exhausted, try to generate one
@@ -1986,6 +1990,22 @@ async function openModelCard(modelId) {
 
 function closeModelCard() {
   document.getElementById('modelModal').classList.remove('show');
+}
+
+// Generic sparkline from a plain array of numbers (used for coherence trend).
+function _buildValueSparkline(values, W, H, color) {
+  if (!values || values.length < 2) return '';
+  const pad = 1;
+  const lo = Math.min(...values), hi = Math.max(...values);
+  const range = hi - lo || 1;
+  const px = i => pad + (i / (values.length - 1)) * (W - pad * 2);
+  const py = v => H - pad - ((v - lo) / range) * (H - pad * 2);
+  const pts = values.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+  const fill = `${pts} ${(W - pad).toFixed(1)},${H} ${pad},${H}`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+    <polygon points="${fill}" fill="rgba(91,161,214,.14)" stroke="none"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
 }
 
 function renderModelCard(p) {
@@ -2051,6 +2071,40 @@ function renderModelCard(p) {
     ? `<div class="mc-profile">${escHtml(p.strategic_profile).replace(/\n/g,'<br>')}</div>`
     : null;
 
+  // Coherence trend sparkline
+  const cohHist = (p._coherenceHist || []);
+  const cohVals = cohHist.map(h => h.avg_coherence).filter(v => v != null);
+  const cohAvg  = cohVals.length ? (cohVals.reduce((s,v) => s+v, 0) / cohVals.length).toFixed(1) : null;
+  const cohSparkHtml = cohVals.length >= 2
+    ? _buildValueSparkline(cohVals, 90, 20, 'var(--accent)')
+    : '';
+  const cohSection = cohVals.length
+    ? `<div class="mc-section-head">Reasoning coherence${cohAvg ? ' · avg ' + cohAvg + '/10' : ''}</div>
+       <div class="mc-coherence-row">${cohSparkHtml}
+         <span class="mc-coherence-note">${cohHist.length} game${cohHist.length!==1?'s':''}</span>
+       </div>`
+    : '';
+
+  // Opening repertoire table
+  const openings = p._openings || [];
+  const openingRows = openings.map(o => {
+    const total = o.games || 0;
+    const wpct  = total ? Math.round(o.wins / total * 100) : 0;
+    return `<tr>
+      <td class="op-eco">${escHtml(o.eco_code || '?')}</td>
+      <td class="op-name">${escHtml(o.opening_name || 'Unknown')}</td>
+      <td class="op-games">${total}</td>
+      <td class="op-score" title="${o.wins}W ${o.draws}D ${o.losses}L">${wpct}%</td>
+    </tr>`;
+  }).join('');
+  const openingsSection = openingRows
+    ? `<div class="mc-section-head">Opening repertoire</div>
+       <table class="op-table">
+         <thead><tr><th>ECO</th><th>Opening</th><th>G</th><th>W%</th></tr></thead>
+         <tbody>${openingRows}</tbody>
+       </table>`
+    : '';
+
   const fmtScore = (w, d, t) => t ? `${(((w + 0.5*d)/t)*100).toFixed(0)}%` : '—';
 
   document.getElementById('mcBody').innerHTML = `
@@ -2091,6 +2145,9 @@ function renderModelCard(p) {
       <span class="lb-mistake">mistake ${m.q_mistake || 0}</span>
       <span class="lb-blunder">blunder ${m.q_blunder || 0}</span>
     </div>
+
+    ${openingsSection}
+    ${cohSection}
 
     <div class="mc-section-head">Achievements ${(p.achievements && p.achievements.length) ? '· ' + p.achievements.reduce((s,a)=>s+a.times, 0) : ''}</div>
     ${renderBadges(p.achievements)}

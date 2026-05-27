@@ -486,6 +486,8 @@ async def play_game(
         black_elo_before=b_elo_before,
         white_elo_after=w_elo_after,
         black_elo_after=b_elo_after,
+        eco_code=opening[0] if opening else None,
+        opening_name=opening[1] if opening else None,
     )
     for rec in move_records:
         database.record_move(
