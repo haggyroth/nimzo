@@ -35,6 +35,10 @@ class PlayerSpec(BaseModel):
         default=0, ge=0, le=40,
         description="Withhold Stockfish candidates for the first N full moves.",
     )
+    blind: bool = Field(
+        default=False,
+        description="Full-game blind mode: never show Stockfish candidates to the model.",
+    )
 
 
 class TournamentStartConfig(BaseModel):
@@ -73,6 +77,9 @@ class TournamentStartConfig(BaseModel):
     # Opening blind mode: withhold Stockfish candidates for first N full moves
     white_blind_opening_moves: int = Field(default=0, ge=0, le=40)
     black_blind_opening_moves: int = Field(default=0, ge=0, le=40)
+    # Full-game blind mode: never show Stockfish candidates to the model
+    white_blind: bool = False
+    black_blind: bool = False
     # Turn cap: declare draw after this many half-moves (plies); 0 = no limit
     max_moves: int = Field(default=0, ge=0, le=1000)
     # Multi-player tournament fields (len >= 2 activates bracket mode)

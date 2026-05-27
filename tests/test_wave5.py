@@ -482,3 +482,69 @@ class TestBuildQualitySummary:
         moves = [("e4", "unknown"), ("e5", "unknown")]
         result = build_quality_summary(moves)
         assert "unknown: 2" in result
+
+
+# ── Full-game blind mode (phase-28) ──────────────────────────────────────────
+
+
+class TestFullGameBlindMode:
+    """
+    Tests for PlayerConfig.blind = True (full-game blind mode).
+
+    The is_blind flag in game.py is computed as:
+        is_blind = player.config.blind or (blind_opening_moves > 0 and ...)
+
+    We test the PlayerConfig field and the build_prompt response for the
+    blind case (no candidates) using the ChessPlayer.build_prompt helper.
+    """
+
+    def test_player_config_blind_default_false(self):
+        cfg = PlayerConfig(name="A", model_id="m", backend="lmstudio")
+        assert cfg.blind is False
+
+    def test_player_config_blind_set_true(self):
+        cfg = PlayerConfig(name="A", model_id="m", backend="lmstudio", blind=True)
+        assert cfg.blind is True
+
+    def test_blind_flag_independent_of_blind_opening_moves(self):
+        """blind=True and blind_opening_moves are orthogonal settings."""
+        cfg = PlayerConfig(
+            name="A", model_id="m", backend="lmstudio",
+            blind=True, blind_opening_moves=5,
+        )
+        assert cfg.blind is True
+        assert cfg.blind_opening_moves == 5
+
+    def test_build_prompt_blind_no_candidates(self):
+        """Empty candidates list produces the blind prompt (not the guided prompt)."""
+        from models.lmstudio_player import LMStudioPlayer
+
+        cfg = PlayerConfig(name="Bot", model_id="m", backend="lmstudio", blind=True)
+        player = LMStudioPlayer.__new__(LMStudioPlayer)
+        player.config = cfg
+
+        board = chess.Board()
+        prompt = player.build_prompt(board, [], "")
+
+        # Should NOT include the CHOICE field (guided-mode format)
+        assert "CHOICE:" not in prompt
+        # Should include the MOVE field (blind format)
+        assert "MOVE:" in prompt
+        assert "REASONING:" in prompt
+        # Should describe blind mode
+        assert "No Stockfish candidates" in prompt
+
+    def test_build_prompt_guided_includes_choice(self):
+        """Non-empty candidates list produces the guided prompt with CHOICE."""
+        from models.lmstudio_player import LMStudioPlayer
+
+        cfg = PlayerConfig(name="Bot", model_id="m", backend="lmstudio", blind=False)
+        player = LMStudioPlayer.__new__(LMStudioPlayer)
+        player.config = cfg
+
+        board = chess.Board()
+        cands = [(_move("e2e4"), 50), (_move("d2d4"), 30)]
+        prompt = player.build_prompt(board, cands, "")
+
+        assert "CHOICE:" in prompt
+        assert "Stockfish" in prompt

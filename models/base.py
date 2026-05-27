@@ -30,6 +30,7 @@ class PlayerConfig:
     move_timeout: int = 0              # Seconds per move, 0 = no limit
     style: str = ""                    # Play style: "aggressive" | "positional" | "defensive" | ""
     blind_opening_moves: int = 0       # Withhold Stockfish candidates for this many full moves
+    blind: bool = False                # Full-game blind mode: never show Stockfish candidates
     lesson_memory: list[str] = field(default_factory=list)
     strategic_profile: Optional[str] = None   # Compressed multi-game coaching profile
 
@@ -79,15 +80,18 @@ class ChessPlayer(ABC):
 
         # ── Blind mode: no candidates provided ───────────────────────────────
         if not candidates:
+            blind_note = (
+                "No Stockfish candidates are provided — play your best move "
+                "from your own chess knowledge."
+            )
             return (
                 f"You are playing chess as {color}.\n\n"
                 f"Current position (FEN): {fen}\n\n"
                 f"Game so far (PGN):\n{game_history_pgn or '(game just started)'}\n\n"
-                "You are in the opening phase. No Stockfish candidates are provided — "
-                "play your best move from your chess knowledge.\n\n"
+                f"{blind_note}\n\n"
                 "Respond in this exact format:\n"
                 "MOVE: <UCI notation, e.g. e2e4>\n"
-                "REASONING: <1-2 sentences on why this move fits your opening plan>"
+                "REASONING: <1-2 sentences on why this move fits your plan>"
             )
 
         candidate_lines = []

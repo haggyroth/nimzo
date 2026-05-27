@@ -32,6 +32,7 @@ class _PlayerSpec:
     candidate_count: Optional[int] = None
     style: str = ""
     blind_opening_moves: int = 0
+    blind: bool = False
 
 
 @dataclass
@@ -43,6 +44,7 @@ class _TournamentStartConfig:
     white_thinking: bool = False
     white_style: str = ""
     white_blind_opening_moves: int = 0
+    white_blind: bool = False
     black_backend: str = "lmstudio"
     black_name: str = "Black"
     black_model: str = ""
@@ -50,6 +52,7 @@ class _TournamentStartConfig:
     black_thinking: bool = False
     black_style: str = ""
     black_blind_opening_moves: int = 0
+    black_blind: bool = False
     tutor_backend: str = "lmstudio"
     tutor_model: str = ""
     tutor_url: str = "http://localhost:1234/v1"
@@ -417,3 +420,58 @@ class TestStyleAndAdaptiveDifficulty:
         p = _write_toml(tmp_path, toml)
         cfg = _load(p)
         assert cfg.adaptive_difficulty is True
+
+
+# ---------------------------------------------------------------------------
+# Tests: load_config — full-game blind mode (phase-28)
+# ---------------------------------------------------------------------------
+
+class TestBlindMode:
+    """Regression tests for TOML blind = true in 2-player and multi-player modes."""
+
+    def test_white_blind_parsed(self, tmp_path):
+        toml = (
+            "[match]\n[white]\nname='A'\nmodel='m'\nblind=true\n"
+            "[black]\nname='B'\nmodel='n'\n"
+        )
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.white_blind is True
+
+    def test_black_blind_parsed(self, tmp_path):
+        toml = (
+            "[match]\n[white]\nname='A'\nmodel='m'\n"
+            "[black]\nname='B'\nmodel='n'\nblind=true\n"
+        )
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.black_blind is True
+
+    def test_blind_defaults_false(self, tmp_path):
+        toml = "[match]\n[white]\nname='A'\nmodel='m'\n[black]\nname='B'\nmodel='n'\n"
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.white_blind is False
+        assert cfg.black_blind is False
+
+    def test_player_blind_parsed_in_multi_player_mode(self, tmp_path):
+        toml = (
+            "[match]\nformat = 'round_robin'\ngames = 1\n"
+            "[[players]]\nname='A'\nmodel='m'\nblind=true\n"
+            "[[players]]\nname='B'\nmodel='n'\n"
+        )
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.players[0].blind is True
+        assert cfg.players[1].blind is False
+
+    def test_blind_and_opening_moves_coexist(self, tmp_path):
+        """blind and blind_opening_moves are independent TOML fields."""
+        toml = (
+            "[match]\n[white]\nname='A'\nmodel='m'\nblind=true\nblind_opening_moves=5\n"
+            "[black]\nname='B'\nmodel='n'\n"
+        )
+        p = _write_toml(tmp_path, toml)
+        cfg = _load(p)
+        assert cfg.white_blind is True
+        assert cfg.white_blind_opening_moves == 5

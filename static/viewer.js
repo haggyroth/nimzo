@@ -1009,6 +1009,8 @@ async function startTournament() {
     adaptive_difficulty:      document.getElementById('adaptiveDifficulty') ? document.getElementById('adaptiveDifficulty').checked : false,
     white_blind_opening_moves: parseInt(document.getElementById('whiteBlindMoves')?.value) || 0,
     black_blind_opening_moves: parseInt(document.getElementById('blackBlindMoves')?.value) || 0,
+    white_blind: document.getElementById('whiteBlind')?.checked ?? false,
+    black_blind: document.getElementById('blackBlind')?.checked ?? false,
     max_moves:                parseInt(document.getElementById('maxMoves')?.value) || 0,
   };
 
@@ -1250,6 +1252,19 @@ function onBackendChange(side) {
     }
     if (urlRow) urlRow.style.display = 'none';
   }
+}
+
+// ── Blind game checkbox handler ───────────────────────────────────────────
+// When the full-game blind checkbox is ticked, disable (but don't clear) the
+// blind opening moves counter — the two modes are mutually exclusive since
+// full-game blind already covers every move.
+function onBlindChange(side) {
+  const blindChecked = document.getElementById(side + 'Blind')?.checked;
+  const blindMovesInput = document.getElementById(side + 'BlindMoves');
+  if (!blindMovesInput) return;
+  blindMovesInput.disabled = !!blindChecked;
+  if (blindChecked) blindMovesInput.title = 'Disabled — full-game blind mode is active';
+  else blindMovesInput.title = '';
 }
 
 // ── WebSocket event dispatch ──────────────────────────────────────────────

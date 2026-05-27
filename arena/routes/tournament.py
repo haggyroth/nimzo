@@ -98,7 +98,8 @@ async def api_start(config: TournamentStartConfig):
         players = [
             build_player(ps.backend, ps.name or ps.model_id.split("/")[-1].split("@")[0],
                          ps.model_id, ps.url, ps.thinking, move_timeout=config.move_timeout,
-                         style=ps.style, blind_opening_moves=ps.blind_opening_moves)
+                         style=ps.style, blind_opening_moves=ps.blind_opening_moves,
+                         blind=ps.blind)
             for ps in seeded
         ]
         pairings = generate_pairings(seeded, config.format, config.games_per_pair)
@@ -148,8 +149,8 @@ async def api_start(config: TournamentStartConfig):
         return {"ok": True}
 
     # ── Classic 2-player match mode ───────────────────────────────────
-    white = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking, move_timeout=config.move_timeout, style=config.white_style, blind_opening_moves=config.white_blind_opening_moves)
-    black = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking, move_timeout=config.move_timeout, style=config.black_style, blind_opening_moves=config.black_blind_opening_moves)
+    white = build_player(config.white_backend, config.white_name, config.white_model, config.white_url, config.white_thinking, move_timeout=config.move_timeout, style=config.white_style, blind_opening_moves=config.white_blind_opening_moves, blind=config.white_blind)
+    black = build_player(config.black_backend, config.black_name, config.black_model, config.black_url, config.black_thinking, move_timeout=config.move_timeout, style=config.black_style, blind_opening_moves=config.black_blind_opening_moves, blind=config.black_blind)
 
     # Register any human players so /api/human-move can reach them.
     _st._active_human_players.clear()
