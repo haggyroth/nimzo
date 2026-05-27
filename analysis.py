@@ -300,9 +300,12 @@ def score_reasoning_coherence(
         # Thinking-capable models need more tokens to emit the think block before
         # producing the final integer; 600 is safe for all backends.
         raw = _call_tutor_like(judge, prompt, system=_JUDGE_SYSTEM, max_tokens=600)
-        # Strip think blocks, then extract first integer 0–10
+        # Strip think blocks, then extract first integer 0–10.
+        # Use negative lookbehind for '/' and digits so that "110/10" does not
+        # match as 10 — the '/' before '10' is a non-word char that would
+        # otherwise create a false \b boundary (MN-12).
         raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE).strip()
-        m = re.search(r"\b(10|[0-9])\b", raw)
+        m = re.search(r"(?<![/\d])\b(10|[0-9])\b", raw)
         if m:
             return float(m.group(1))
     except Exception as exc:
