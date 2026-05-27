@@ -247,7 +247,7 @@ async def play_game(
 
         # Pause / stop checks
         await _arena._pause_event.wait()
-        if _arena._stop_requested:
+        if _arena._stop["requested"]:
             raise _arena.TournamentAborted()
 
         current_player = white if board.turn == chess.WHITE else black
@@ -319,7 +319,7 @@ async def play_game(
             # Model was unloaded, connection dropped, or API error mid-inference.
             # If a stop was requested, honour it cleanly; otherwise fall back so
             # the game can continue.
-            if _arena._stop_requested:
+            if _arena._stop["requested"]:
                 raise _arena.TournamentAborted()
             fallback_move = random.choice(list(board.legal_moves)) if is_blind else candidates[0][0]
             logger.warning("%s API error (%s): %s — falling back to %s", current_player.config.name, type(exc).__name__, exc, "random move" if is_blind else "top candidate")
@@ -330,7 +330,7 @@ async def play_game(
                 raw_response="",
             )
 
-        if _arena._stop_requested:
+        if _arena._stop["requested"]:
             raise _arena.TournamentAborted()
 
         chosen_move  = chess.Move.from_uci(decision.move_uci)
@@ -407,7 +407,7 @@ async def play_game(
             "fen":            board.fen(),
         })
 
-        if not _arena._headless:
+        if not _arena._mode["headless"]:
             await asyncio.sleep(0.05)   # pacing for live viewer
 
     # ── Game over ──────────────────────────────────────────────────────
@@ -672,7 +672,7 @@ async def run_bracket_tournament(
     with StockfishEngine() as stockfish:
         for idx, (white_spec, black_spec) in enumerate(pairings, start=1):
             await _arena._pause_event.wait()
-            if _arena._stop_requested:
+            if _arena._stop["requested"]:
                 break
 
             # Skip if series already clinched for this pair
@@ -803,7 +803,7 @@ async def run_tournament(
     with StockfishEngine() as stockfish:
         for i in range(1, n_games + 1):
             await _arena._pause_event.wait()
-            if _arena._stop_requested:
+            if _arena._stop["requested"]:
                 break
 
             _arena._state.update({"game_number": i, "white_elo": round(white.elo), "black_elo": round(black.elo)})
@@ -820,7 +820,7 @@ async def run_tournament(
             logger.info("ELO -> %s: %d | %s: %d", white.config.name, round(white.elo), black.config.name, round(black.elo))
 
             white, black = black, white   # alternate colors
-            if not _arena._headless:
+            if not _arena._mode["headless"]:
                 await asyncio.sleep(2)   # pause between games for live viewer
 
     _arena._state["status"] = "idle"

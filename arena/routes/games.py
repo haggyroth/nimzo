@@ -106,6 +106,41 @@ def _build_game_pgn(game_row: dict, moves: list[dict], round_number: Optional[in
     return "\n".join(tags) + body
 
 
+@router.get("/api/games/export")
+async def api_games_export(model_id: Optional[str] = None, limit: int = 5000):
+    """
+    Bulk PGN export — all games as a single annotated PGN file.
+
+    Query params:
+      model_id — restrict to games where this model played (optional)
+      limit    — max games to export (default 5 000)
+    """
+    rows = database.get_all_games(model_id=model_id, limit=limit)
+    if not rows:
+        return PlainTextResponse("# No games found\n", status_code=200)
+
+    parts: list[str] = []
+    for i, row in enumerate(rows, 1):
+        moves = database.get_game_moves(row["id"])
+        parts.append(_build_game_pgn(row, moves, round_number=i))
+
+    filename = "nimzo_export.pgn" if not model_id else f"nimzo_{model_id}_export.pgn"
+    filename = filename.replace("/", "_").replace(" ", "_")
+    return PlainTextResponse(
+        "\n".join(parts),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/api/games")
+async def api_games(limit: int = 20):
+    return database.get_recent_games(limit)
+
+
+# ── Per-game routes — parametric paths MUST come after static-prefix routes ──
+# (FastAPI matches in registration order; "export" above would 422 if these
+# were registered first — see REVIEW.md C-3.)
+
 @router.get("/api/games/{game_id}")
 async def api_game(game_id: int):
     """Return the game record for ``game_id``, or 404 if not found."""
@@ -136,34 +171,3 @@ async def api_game_pgn(game_id: int):
         pgn,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-@router.get("/api/games/export")
-async def api_games_export(model_id: Optional[str] = None, limit: int = 5000):
-    """
-    Bulk PGN export — all games as a single annotated PGN file.
-
-    Query params:
-      model_id — restrict to games where this model played (optional)
-      limit    — max games to export (default 5 000)
-    """
-    rows = database.get_all_games(model_id=model_id, limit=limit)
-    if not rows:
-        return PlainTextResponse("# No games found\n", status_code=200)
-
-    parts: list[str] = []
-    for i, row in enumerate(rows, 1):
-        moves = database.get_game_moves(row["id"])
-        parts.append(_build_game_pgn(row, moves, round_number=i))
-
-    filename = "nimzo_export.pgn" if not model_id else f"nimzo_{model_id}_export.pgn"
-    filename = filename.replace("/", "_").replace(" ", "_")
-    return PlainTextResponse(
-        "\n".join(parts),
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@router.get("/api/games")
-async def api_games(limit: int = 20):
-    return database.get_recent_games(limit)

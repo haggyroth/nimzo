@@ -3,7 +3,10 @@ Tests for PGN export:
   - _build_game_pgn()  — header tags, move body, quality glyphs, comment blocks,
                          round number, line wrapping, fallback reasoning suppression
   - db.get_all_games() — no filter, model_id filter, limit, ordering
+  - /api/games/export  — route reachable (regression for REVIEW.md C-3)
 """
+
+import pytest
 
 from arena import _build_game_pgn
 
@@ -259,3 +262,72 @@ class TestGetAllGames:
         row = tmp_db.get_all_games()[0]
         assert row["white_model_id"] == "model-w"
         assert row["black_model_id"] == "model-b"
+
+
+# ── Regression: /api/games/export route reachable (REVIEW.md C-3) ────────────
+
+class TestGamesExportRoute:
+    """
+    Verify that GET /api/games/export returns 200 and not 422.
+    Prior to Phase-23 the route was shadowed by /api/games/{game_id}, causing
+    FastAPI to try to coerce "export" to int and return 422.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _init_db(self, tmp_path, monkeypatch):
+        """Wire the db module to a fresh temp DB for every test in this class."""
+        import db as database
+        import sqlite3
+        from unittest.mock import patch
+        from contextlib import contextmanager
+
+        db_path = tmp_path / "export_test.db"
+
+        @contextmanager
+        def _patched_get_conn(db_path_arg=None):
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+        with patch.object(database, "get_conn", _patched_get_conn):
+            database.init_db(db_path)
+            yield
+
+    def test_export_route_returns_200_not_422(self):
+        from fastapi.testclient import TestClient
+        from arena import app
+        client = TestClient(app)
+        resp = client.get("/api/games/export?limit=1")
+        assert resp.status_code == 200, (
+            f"Expected 200 from /api/games/export, got {resp.status_code}. "
+            "Route ordering regression — export route must be registered before "
+            "{game_id} parametric routes."
+        )
+
+    def test_export_route_returns_plain_text(self):
+        from fastapi.testclient import TestClient
+        from arena import app
+        client = TestClient(app)
+        resp = client.get("/api/games/export?limit=1")
+        ct = resp.headers.get("content-type", "")
+        assert "text/plain" in ct, f"Expected text/plain content-type, got {ct!r}"
+
+    def test_export_route_content_disposition_when_games_exist(self):
+        """When games exist the response has a Content-Disposition attachment header."""
+        import db as database
+        _make_game(database, "w-model", "b-model")
+
+        from fastapi.testclient import TestClient
+        from arena import app
+        client = TestClient(app)
+        resp = client.get("/api/games/export?limit=10")
+        assert resp.status_code == 200
+        assert "attachment" in resp.headers.get("content-disposition", "")
