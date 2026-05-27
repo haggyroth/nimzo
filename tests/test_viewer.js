@@ -277,3 +277,32 @@ test('escHtml: coerces non-string to string', () => {
   assert.equal(escHtml(42), '42');
   assert.equal(escHtml(null), 'null');
 });
+
+// S-4 XSS audit — these tests document the specific injection vectors that were
+// audited and confirm escHtml correctly neutralises them.
+
+test('S-4: tournament title with HTML chars is safe (onTournamentComplete badge)', () => {
+  // d.title is derived from _WINNER_TITLES (server-controlled fixed list), but
+  // must still be escaped when embedded in innerHTML as defence-in-depth.
+  const title = '<script>alert(1)</script>';
+  const safe = `<div class="ov-title-badge">"${escHtml(title)}"</div>`;
+  assert.ok(!safe.includes('<script>'), 'raw script tag must not appear');
+  assert.ok(safe.includes('&lt;script&gt;'), 'must be HTML-entity escaped');
+});
+
+test('S-4: tournament format fallback with HTML chars is safe (loadTournamentHistory)', () => {
+  // fmtLabel[t.format]||t.format — when t.format is an unknown value it falls
+  // through to raw t.format; that value now passes through escHtml.
+  const fmt = '<img src=x onerror=alert(1)>';
+  const fmtLabel = { round_robin: 'Round Robin', gauntlet: 'Gauntlet', match: 'Match' };
+  const safe = escHtml(fmtLabel[fmt] || fmt);
+  assert.ok(!safe.includes('<img'), 'raw img tag must not appear');
+  assert.ok(safe.includes('&lt;img'), 'must be HTML-entity escaped');
+});
+
+test('S-4: known format labels pass through escHtml unchanged', () => {
+  // Valid format strings have no HTML-special characters — escHtml is a no-op.
+  assert.equal(escHtml('Round Robin'), 'Round Robin');
+  assert.equal(escHtml('Gauntlet'), 'Gauntlet');
+  assert.equal(escHtml('Match'), 'Match');
+});

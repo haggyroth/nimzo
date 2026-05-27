@@ -1508,7 +1508,7 @@ function onTournamentComplete(d) {
     document.getElementById('ovResult').textContent  = '🏆 Tournament Complete';
     document.getElementById('ovSub').textContent     = `Winner: ${d.winner.name}`;
     document.getElementById('ovOpening').textContent = '';
-    document.getElementById('ovElos').innerHTML = `<div class="ov-title-badge">"${d.title}"</div>`;
+    document.getElementById('ovElos').innerHTML = `<div class="ov-title-badge">"${escHtml(d.title)}"</div>`;
     document.getElementById('ovBadgesLabel').style.display = 'none';
     document.getElementById('ovBadges').innerHTML = '';
     document.getElementById('ovDownloadBtn').style.display = 'none';
@@ -1529,7 +1529,7 @@ async function loadTournamentHistory() {
       const date  = t.finished_at ? t.finished_at.slice(0,10) : (t.started_at||'').slice(0,10);
       const games = t.total_games || '?';
       return `<div class="th-row">
-        <span class="th-format">${fmtLabel[t.format]||t.format}</span>
+        <span class="th-format">${escHtml(fmtLabel[t.format]||t.format)}</span>
         <span class="th-winner">${escHtml(t.winner_name || '—')}</span>
         <span class="th-title">${t.title ? '"'+escHtml(t.title)+'"' : ''}</span>
         <span class="th-meta">${games}g · ${date}</span>
