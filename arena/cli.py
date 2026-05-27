@@ -105,14 +105,14 @@ def main():
         if args.move_timeout:
             _st._cli_config.move_timeout = args.move_timeout
         if args.headless:
-            _st._headless = True
+            _st._mode["headless"] = True
     else:
-        _st._headless = args.headless
+        _st._mode["headless"] = args.headless
 
     port = args.port
     host = args.listen
 
-    if _st._headless:
+    if _st._mode["headless"]:
         # ── Headless mode: skip uvicorn entirely ──────────────────────
         import db as database
 

@@ -35,7 +35,11 @@ _connected_clients: set[WebSocket] = set()
 _tournament_task: asyncio.Task | None = None
 _pause_event: asyncio.Event = asyncio.Event()
 _pause_event.set()   # set = running (not paused)
-_stop_requested: bool = False
+
+# Mutable containers so that re-exports in arena/__init__.py stay in sync.
+# Plain `bool` primitives would be re-bound in the submodule only when mutated,
+# leaving arena._stop["requested"] (read by game.py) stale. See REVIEW.md C-1/C-2.
+_stop: dict = {"requested": False}   # replaces the old _stop_requested bool
 
 _state: dict = {
     "status": "idle",       # idle | running | paused | stopping | stopped
@@ -58,8 +62,9 @@ _state: dict = {
 # Set from CLI args before server start; triggers auto-start in lifespan
 _cli_config: "TournamentStartConfig | None" = None  # noqa: F821 — forward ref
 
-# Headless mode: skip WebSocket server, remove per-move delays
-_headless: bool = False
+# Headless mode: skip WebSocket server, remove per-move delays.
+# Mutable container for the same reason as _stop above (REVIEW.md C-2).
+_mode: dict = {"headless": False}    # replaces the old _headless bool
 
 # Active human player registry — keyed by "white" or "black"
 _active_human_players: dict = {}
@@ -78,7 +83,7 @@ class TournamentAborted(Exception):
 
 async def broadcast(event: dict):
     """Serialise ``event`` to JSON and send it to every connected WebSocket client."""
-    if _headless or not _connected_clients:
+    if _mode["headless"] or not _connected_clients:
         return
     msg = json.dumps(event)
     dead = set()

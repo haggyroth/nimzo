@@ -18,10 +18,10 @@ from arena.state import (          # noqa: E402
     broadcast as broadcast,
     _state as _state,
     _pause_event as _pause_event,
-    _stop_requested as _stop_requested,
+    _stop as _stop,                          # mutable dict {"requested": bool}
+    _mode as _mode,                          # mutable dict {"headless": bool}
     TournamentAborted as TournamentAborted,
     _active_human_players as _active_human_players,
-    _headless as _headless,
     _connected_clients as _connected_clients,
     _tournament_task as _tournament_task,
     _cli_config as _cli_config,

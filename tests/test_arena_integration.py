@@ -106,16 +106,17 @@ def _tmp_db(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _reset_arena_state(monkeypatch):
+def _reset_arena_state():
     """
     Reset arena global state before each test so tests are independent.
-    Imports arena lazily to avoid circular import at module load time.
+    Uses the mutable container directly — monkeypatch on a dict key is not
+    needed and wouldn't survive the C-1 fix anyway.
     """
     import arena
-    monkeypatch.setattr(arena, "_stop_requested", False)
+    arena._stop["requested"] = False
     arena._pause_event.set()   # ensure unpaused
     yield
-    monkeypatch.setattr(arena, "_stop_requested", False)
+    arena._stop["requested"] = False
     arena._pause_event.set()
 
 
@@ -197,8 +198,13 @@ class TestPlayGame:
         lessons = database.get_player_lessons("white-bot")
         assert lessons == []
 
-    def test_stop_requested_raises_tournament_aborted(self, monkeypatch):
-        """Setting _stop_requested mid-game should raise TournamentAborted."""
+    def test_stop_requested_raises_tournament_aborted(self):
+        """Setting _stop["requested"] mid-game should raise TournamentAborted.
+
+        This test exercises the real production write path (mutating the dict)
+        rather than monkeypatching arena._stop_requested, which was the path
+        that masked the C-1 bug — see REVIEW.md.
+        """
         import arena
 
         call_count = 0
@@ -208,8 +214,8 @@ class TestPlayGame:
                 nonlocal call_count
                 call_count += 1
                 if call_count == 1:
-                    # Signal stop before the second move
-                    monkeypatch.setattr(arena, "_stop_requested", True)
+                    # Signal stop via the mutable container (production path)
+                    arena._stop["requested"] = True
                 return super().choose_move(board, candidates, pgn)
 
         w = StopAfterFirstMove(PlayerConfig(
@@ -313,3 +319,41 @@ class TestAdaptiveDifficulty:
 
         asyncio.run(_go())
         assert w.config.candidate_count == 5
+
+
+# ── Regression tests for Phase-23 critical fixes ─────────────────────────────
+
+class TestStopFlagAliasing:
+    """
+    Regression for REVIEW.md C-1: verify that writing to arena.state._stop
+    is visible to arena._stop (they must be the same dict object, not two
+    independent bool bindings created by `from arena.state import _stop_requested`).
+    """
+
+    def test_stop_dict_is_same_object_in_package_and_state(self):
+        """arena._stop and arena.state._stop must be the same dict."""
+        import arena
+        import arena.state as state
+        assert arena._stop is state._stop, (
+            "arena._stop is a different object from arena.state._stop — "
+            "the aliasing bug has returned."
+        )
+
+    def test_writing_via_state_visible_in_package(self):
+        """Writing state._stop['requested'] must be visible as arena._stop['requested']."""
+        import arena
+        import arena.state as state
+        state._stop["requested"] = True
+        try:
+            assert arena._stop["requested"] is True
+        finally:
+            state._stop["requested"] = False
+
+    def test_mode_dict_is_same_object_in_package_and_state(self):
+        """arena._mode and arena.state._mode must be the same dict (C-2)."""
+        import arena
+        import arena.state as state
+        assert arena._mode is state._mode, (
+            "arena._mode is a different object from arena.state._mode — "
+            "headless aliasing bug has returned."
+        )

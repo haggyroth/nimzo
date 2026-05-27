@@ -74,7 +74,7 @@ async def api_start(config: TournamentStartConfig):
     if _st._tournament_task and not _st._tournament_task.done():
         return {"error": "A tournament is already running"}
 
-    _st._stop_requested = False
+    _st._stop["requested"] = False
     _st._pause_event.set()
 
     tutor = TutorConfig(backend=config.tutor_backend, model_id=config.tutor_model, base_url=config.tutor_url)
@@ -136,7 +136,7 @@ async def api_start(config: TournamentStartConfig):
             except Exception as exc:
                 logger.info("Tournament ended: %s", type(exc).__name__)
             finally:
-                _st._stop_requested = False
+                _st._stop["requested"] = False
                 _st._pause_event.set()
                 _st._state["status"] = "idle"
                 try:
@@ -181,7 +181,7 @@ async def api_start(config: TournamentStartConfig):
         except Exception as exc:
             logger.info("Tournament ended: %s", type(exc).__name__)
         finally:
-            _st._stop_requested = False
+            _st._stop["requested"] = False
             _st._pause_event.set()
             _st._active_human_players.clear()
             _st._state.update({"status": "idle", "white_is_human": False, "black_is_human": False})
@@ -220,7 +220,7 @@ async def api_resume():
 @router.post("/api/tournament/stop")
 async def api_stop():
     """Request a graceful stop; the tournament finishes the current game then halts."""
-    _st._stop_requested = True
+    _st._stop["requested"] = True
     _st._pause_event.set()   # unblock if paused
     _st._state["status"] = "stopping"
     await _st.broadcast({"type": "tournament_status", **_st._state})
