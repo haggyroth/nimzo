@@ -1,23 +1,24 @@
 """
 game.py — Core game loop, tournament runners, and player builder.
 
-This module is imported by arena.py (which provides the WebSocket broadcast
-infrastructure and shared state).  The apparent circular import is intentional
-and safe: arena.py adds `from game import ...` at the very bottom of its module
-body, so by the time Python executes that line, every name this module reads via
-`import arena as _arena` is already defined.
+This module is part of the arena package. arena/__init__.py imports the public
+symbols (play_game, run_two_player_tournament, etc.) after all state symbols are
+already registered on the package object, making the circular import safe:
 
 Dependency map:
-    arena.py  ──imports──▶  game.py   (via `from game import ...` at bottom)
-    game.py   ──imports──▶  arena     (via `import arena as _arena` at top)
-                                       safe because arena defs precede the import
+    arena/__init__.py  ──imports──▶  game.py  (via routes/tournament.py)
+    game.py            ──imports──▶  arena    (via `import arena as _arena` at top)
+                                              safe — arena state is populated first
+                                              (see arena/__init__.py import order)
 """
 
 from __future__ import annotations  # PEP 563 — all annotations are strings at runtime
 
 import asyncio
+import hashlib
 import itertools
 import logging
+import os
 import random
 from datetime import datetime
 from pathlib import Path
@@ -57,6 +58,23 @@ if TYPE_CHECKING:
     from arena import PlayerSpec   # type-checker only; not imported at runtime
 
 
+# ── Per-model serialization lock (MN-10) ─────────────────────────────────
+# LM Studio / Ollama serves one request at a time per model.  When multiple
+# tournament games run concurrently (e.g. two WebSocket clients) they share the
+# same local endpoint.  Sending simultaneous requests causes timeouts and
+# duplicate replies.  We serialize by (base_url, model_id) pair so calls to
+# *different* models are still pipelined freely.
+_model_locks: dict[str, asyncio.Lock] = {}
+
+
+def _get_model_lock(base_url: str, model_id: str) -> asyncio.Lock:
+    """Return (creating if needed) the serialization lock for a model endpoint."""
+    key = f"{base_url}|{model_id}"
+    if key not in _model_locks:
+        _model_locks[key] = asyncio.Lock()
+    return _model_locks[key]
+
+
 # ── Adaptive difficulty constants ─────────────────────────────────────────
 # Also re-exported so arena.py (and CLAUDE.md) can reference them there.
 _ADAPT_CANDIDATE_MIN = 3
@@ -88,7 +106,6 @@ _WINNER_TITLES = [
 
 def pick_title(model_id: str, fmt: str) -> str:
     """Return a deterministic victory title for a model/format pair."""
-    import hashlib
     seed = hashlib.md5(f"{model_id}:{fmt}".encode()).digest()
     idx = int.from_bytes(seed[:4], "big") % len(_WINNER_TITLES)
     return _WINNER_TITLES[idx]
@@ -297,14 +314,21 @@ async def play_game(
         # Model receives empty candidate list in blind mode
         model_candidates = [] if is_blind else candidates
 
-        # Run blocking model API call in thread pool — this is the main blocker
+        # Run blocking model API call in thread pool — this is the main blocker.
+        # Acquire a per-model lock first so concurrent tournament games don't
+        # hammer the same LM Studio endpoint simultaneously (MN-10).
         timed_out = False
         timeout_secs = current_player.config.move_timeout or None
+        _lock = _get_model_lock(
+            current_player.config.base_url or "",
+            current_player.config.model_id,
+        )
         try:
-            coro = loop.run_in_executor(
-                None, current_player.choose_move, board, model_candidates, pgn_so_far
-            )
-            decision = await asyncio.wait_for(coro, timeout=timeout_secs)
+            async with _lock:
+                coro = loop.run_in_executor(
+                    None, current_player.choose_move, board, model_candidates, pgn_so_far
+                )
+                decision = await asyncio.wait_for(coro, timeout=timeout_secs)
         except asyncio.TimeoutError:
             logger.warning("%s timed out after %ss — %s", current_player.config.name, timeout_secs, "random (blind)" if is_blind else "top candidate used")
             fallback_move = random.choice(list(board.legal_moves)) if is_blind else candidates[0][0]
@@ -870,7 +894,6 @@ def build_player(
     elif backend == "human":
         player = HumanPlayer(config)
     elif backend in CLOUD_PROVIDERS:
-        import os
         info = CLOUD_PROVIDERS[backend]
         config.base_url = base_url or info["base_url"]
         config.api_key  = os.environ.get(info["key_env"], "")

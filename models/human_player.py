@@ -65,7 +65,18 @@ class HumanPlayer(ChessPlayer):
                 raw_response="",
             )
 
-        uci  = self._pending_uci
+        uci = self._pending_uci
+        if not uci:
+            # _move_ready was set but no UCI was stored (shouldn't happen in
+            # normal flow, but guards against a race where the WebSocket drops
+            # between set() and the read here).
+            fallback = candidates[0][0].uci() if candidates else "0000"
+            return MoveDecision(
+                move_uci=fallback,
+                reasoning="(human move lost — fell back to top Stockfish candidate)",
+                candidate_rank=1,
+                raw_response="",
+            )
         move = chess.Move.from_uci(uci)
 
         # Determine candidate rank (1-based); moves outside the list get N+1.
