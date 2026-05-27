@@ -7,7 +7,7 @@ Two sources combined into a single dict:
      for family, parameter count, and quantization. Always works offline.
 
   2. HuggingFace API — for `owner/repo` style IDs we hit the public API
-     (cached on disk for 7 days) to pull license, architecture, context
+     (cached on disk for 24 hours) to pull license, architecture, context
      length, and total file size. Best-effort; failures are silent.
 
 Backends like LM Studio expose the model ID as-is, so this lives close
@@ -26,8 +26,9 @@ from pathlib import Path
 from typing import Optional
 
 
-_CACHE_PATH = Path("hf_metadata_cache.json")
-_CACHE_TTL_SECONDS = 24 * 3600   # 24 hours
+# Anchor cache to repo root regardless of CWD (see REVIEW.md MN-1)
+_CACHE_PATH = Path(__file__).parent.parent / "hf_metadata_cache.json"
+_CACHE_TTL_SECONDS = 24 * 3600   # 24 hours (1 day)
 _HF_API = "https://huggingface.co/api/models/{repo}"
 _REQUEST_TIMEOUT = 4.0    # seconds — strict, this is a UI call
 

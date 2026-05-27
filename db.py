@@ -92,6 +92,16 @@ CREATE TABLE IF NOT EXISTS tournament_games (
     white_model_id  TEXT,
     black_model_id  TEXT
 );
+
+-- Indexes on frequently-queried foreign keys and sort columns (MN-3).
+-- IF NOT EXISTS makes these safe to add to an existing database.
+CREATE INDEX IF NOT EXISTS idx_moves_game      ON moves(game_id);
+CREATE INDEX IF NOT EXISTS idx_moves_player    ON moves(player_id);
+CREATE INDEX IF NOT EXISTS idx_games_white     ON games(white_player_id);
+CREATE INDEX IF NOT EXISTS idx_games_black     ON games(black_player_id);
+CREATE INDEX IF NOT EXISTS idx_games_played    ON games(played_at);
+CREATE INDEX IF NOT EXISTS idx_lessons_player  ON lessons(player_id);
+CREATE INDEX IF NOT EXISTS idx_tgames_tour     ON tournament_games(tournament_id);
 """
 
 
@@ -1239,21 +1249,33 @@ def get_tournament_history(limit: int = 20) -> list[dict]:
             (limit,),
         ).fetchall()
 
+        if not rows:
+            return []
+
+        # Pre-load all player names in a single query (avoids N+1 per-player
+        # lookups — previously: 20 tournaments × 6 players = 120 extra queries).
+        player_name_map: dict[str, str] = {
+            r["model_id"]: r["name"]
+            for r in conn.execute("SELECT model_id, name FROM players").fetchall()
+        }
+
+        # Pre-load game counts for all returned tournament IDs in one GROUP BY.
+        tour_ids = [r["id"] for r in rows]
+        placeholders = ",".join("?" * len(tour_ids))
+        game_counts: dict[int, int] = {
+            r["tournament_id"]: r["n"]
+            for r in conn.execute(
+                f"SELECT tournament_id, COUNT(*) AS n FROM tournament_games "
+                f"WHERE tournament_id IN ({placeholders}) GROUP BY tournament_id",
+                tour_ids,
+            ).fetchall()
+        }
+
         result = []
         for r in rows:
             rec = dict(r)
-            # Resolve player names from model_id list
             ids = json.loads(rec.get("player_ids") or "[]")
-            names = []
-            for mid in ids:
-                p = conn.execute(
-                    "SELECT name FROM players WHERE model_id = ?", (mid,)
-                ).fetchone()
-                names.append(p["name"] if p else mid)
-            rec["player_names"] = names
-            rec["game_count"] = conn.execute(
-                "SELECT COUNT(*) AS n FROM tournament_games WHERE tournament_id = ?",
-                (r["id"],),
-            ).fetchone()["n"]
+            rec["player_names"] = [player_name_map.get(mid, mid) for mid in ids]
+            rec["game_count"] = game_counts.get(r["id"], 0)
             result.append(rec)
         return result

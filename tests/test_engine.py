@@ -55,28 +55,36 @@ class TestEvaluateMoveQuality:
         cands = _cands(("e2e4", None), ("d2d4", 20))
         assert self.eng.evaluate_move_quality(self.board, _move("e2e4"), cands) == "best"
 
-    # ── None score guard ────────────────────────────────────────────────
+    # ── None score guard (MN-6: return "unknown" not "good") ────────────────
 
-    def test_none_top_score_returns_good(self):
+    def test_none_top_score_returns_unknown(self):
+        """No top score → can't rate the move honestly → 'unknown'."""
         cands = _cands(("e2e4", None), ("d2d4", 20))
-        assert self.eng.evaluate_move_quality(self.board, _move("d2d4"), cands) == "good"
+        assert self.eng.evaluate_move_quality(self.board, _move("d2d4"), cands) == "unknown"
 
-    def test_none_chosen_score_returns_good(self):
-        """Chosen move is in the list but has no score."""
+    def test_none_chosen_score_returns_unknown(self):
+        """Chosen move is in the list but has no score → 'unknown'."""
         cands = [(_move("e2e4"), 50), (_move("d2d4"), None)]
-        assert self.eng.evaluate_move_quality(self.board, _move("d2d4"), cands) == "good"
+        assert self.eng.evaluate_move_quality(self.board, _move("d2d4"), cands) == "unknown"
 
-    def test_both_scores_none_returns_good(self):
+    def test_both_scores_none_returns_unknown(self):
+        """Both scores missing → 'unknown'."""
         cands = _cands(("e2e4", None), ("d2d4", None))
-        assert self.eng.evaluate_move_quality(self.board, _move("d2d4"), cands) == "good"
+        assert self.eng.evaluate_move_quality(self.board, _move("d2d4"), cands) == "unknown"
+
+    def test_move_outside_candidates_returns_unknown(self):
+        """Move not in the candidate list at all (blind mode) → 'unknown'."""
+        cands = _cands(("e2e4", 50), ("d2d4", 40))
+        # g1f3 is not in the list
+        assert self.eng.evaluate_move_quality(self.board, _move("g1f3"), cands) == "unknown"
 
     # ── Move not in candidates list ──────────────────────────────────────
 
-    def test_move_not_in_candidates_uses_none_path(self):
-        """chosen_score will be None; function returns 'good'."""
+    def test_move_not_in_candidates_returns_unknown(self):
+        """Move not in candidates (blind-mode play) → 'unknown', not 'good'."""
         cands = _cands(("e2e4", 50), ("d2d4", 40))
         result = self.eng.evaluate_move_quality(self.board, _move("g1f3"), cands)
-        assert result == "good"
+        assert result == "unknown"
 
     # ── Centipawn loss boundaries ────────────────────────────────────────
 
