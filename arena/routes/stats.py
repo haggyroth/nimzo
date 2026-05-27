@@ -28,6 +28,16 @@ async def serve_viewer():
     return _VIEWER_HTML.read_text()
 
 
+@router.get("/watch/{game_id}", response_class=HTMLResponse)
+async def watch_game(game_id: int):
+    """Serve the viewer pre-seeded to a specific completed game in replay mode.
+
+    The JS detects ``/watch/<game_id>`` in the URL path on load and
+    automatically opens the replay modal for that game.
+    """
+    return _VIEWER_HTML.read_text()
+
+
 @router.get("/stats", response_class=HTMLResponse)
 async def stats_page():
     return _STATS_HTML.read_text()

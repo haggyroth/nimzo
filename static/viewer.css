@@ -672,6 +672,8 @@
     .rp-title   { font-family: 'Cinzel', serif; font-size: 13px; color: var(--gold); letter-spacing: .5px; }
     .rp-close   { font-size: 11px; color: var(--text-mid); cursor: pointer; letter-spacing: 1px; text-transform: uppercase; }
     .rp-close:hover { color: var(--gold); }
+    .rp-share   { font-size: 13px; color: var(--text-dim); cursor: pointer; margin-right: 8px; }
+    .rp-share:hover { color: var(--gold); }
 
     .rp-board-wrap {
       --rp-size: 420px;
