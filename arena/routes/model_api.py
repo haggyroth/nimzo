@@ -30,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Per-model locks for portrait generation (MN-10): prevents two concurrent
+# requests for the same model from both passing the cooldown check and both
+# calling the paid Gemini API.
+_portrait_locks: dict[str, asyncio.Lock] = {}
+
 
 @router.get("/api/models/{model_id:path}/profile")
 async def api_model_profile(model_id: str):
@@ -112,16 +117,20 @@ async def api_generate_portrait(model_id: str):
     if _portraits_module._quota_exhausted:
         return {"portrait_url": None, "quota_exhausted": True}
 
-    # Cooldown check — reject repeat calls within the window
-    now = time.monotonic()
-    last = _portrait_last_generated.get(model_id, 0.0)
-    if now - last < _PORTRAIT_COOLDOWN_S:
-        remaining = int(_PORTRAIT_COOLDOWN_S - (now - last))
-        raise HTTPException(
-            status_code=429,
-            detail=f"Portrait recently generated; retry in {remaining}s",
-        )
-    _portrait_last_generated[model_id] = now
+    # Per-model lock: serialises concurrent portrait requests so the cooldown
+    # check is atomic — two simultaneous callers can't both slip through (MN-10).
+    if model_id not in _portrait_locks:
+        _portrait_locks[model_id] = asyncio.Lock()
+    async with _portrait_locks[model_id]:
+        now = time.monotonic()
+        last = _portrait_last_generated.get(model_id, 0.0)
+        if now - last < _PORTRAIT_COOLDOWN_S:
+            remaining = int(_PORTRAIT_COOLDOWN_S - (now - last))
+            raise HTTPException(
+                status_code=429,
+                detail=f"Portrait recently generated; retry in {remaining}s",
+            )
+        _portrait_last_generated[model_id] = now
 
     loop = asyncio.get_running_loop()
     path = await loop.run_in_executor(
@@ -156,6 +165,17 @@ async def api_upload_portrait(model_id: str, file: UploadFile = File(...)):
         raise HTTPException(
             status_code=415,
             detail=f"Unsupported file type {content_type!r}. Use PNG, JPEG, or WebP.",
+        )
+
+    # Reject oversized uploads early using the Content-Length header before
+    # reading the body — avoids buffering a multi-MB payload just to discard
+    # it (S-2 in REVIEW.md).  Fall through to the post-read check as a
+    # defence-in-depth safety net for clients that omit Content-Length.
+    cl = file.size  # FastAPI / Starlette expose this from the Content-Length header
+    if cl is not None and cl > _MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large ({cl // 1024} KB declared). Maximum is 2 MB.",
         )
 
     data = await file.read()
