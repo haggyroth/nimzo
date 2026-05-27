@@ -18,6 +18,7 @@ import asyncio
 import hashlib
 import itertools
 import logging
+import time
 import os
 import random
 from datetime import datetime
@@ -325,6 +326,7 @@ async def play_game(
             current_player.config.base_url or "",
             current_player.config.model_id,
         )
+        _t0 = time.perf_counter()
         try:
             async with _lock:
                 coro = loop.run_in_executor(
@@ -355,6 +357,8 @@ async def play_game(
                 candidate_rank=0 if is_blind else 1,
                 raw_response="",
             )
+
+        elapsed_ms = round((time.perf_counter() - _t0) * 1000)
 
         if _arena._stop["requested"]:
             raise _arena.TournamentAborted()
@@ -413,6 +417,7 @@ async def play_game(
             "coherence_score": coherence_score,
             "timed_out":      timed_out,
             "is_blind_move":  is_blind,
+            "elapsed_ms":     elapsed_ms,
         })
 
         await _arena.broadcast({
@@ -430,6 +435,7 @@ async def play_game(
             "timed_out":      timed_out,
             "is_blind_move":  is_blind,
             "score_cp_white": score_cp_white,
+            "elapsed_ms":     elapsed_ms,
             "fen":            board.fen(),
         })
 
@@ -496,6 +502,7 @@ async def play_game(
             fen_after=rec["fen_after"],
             coherence_score=rec.get("coherence_score"),
             timed_out=rec.get("timed_out", False),
+            elapsed_ms=rec.get("elapsed_ms"),
         )
 
     # ── Achievements ───────────────────────────────────────────────────

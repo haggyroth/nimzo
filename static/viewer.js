@@ -704,8 +704,11 @@ function addMoveCard(data) {
     const cls = cs >= 7 ? 'hi' : cs <= 3 ? 'lo' : '';
     coherenceHtml = `<span class="move-coherence ${cls}" title="Reasoning coherence score">🎯 ${cs}/10</span>`;
   }
-  const timeoutHtml = data.timed_out ? `<span class="move-timeout" title="Model timed out">⏱ timeout</span>` : '';
-  const blindHtml   = data.is_blind_move ? `<span class="move-blind" title="Opening blind move — no Stockfish candidates provided">🎭 blind</span>` : '';
+  const timeoutHtml  = data.timed_out ? `<span class="move-timeout" title="Model timed out">⏱ timeout</span>` : '';
+  const blindHtml    = data.is_blind_move ? `<span class="move-blind" title="Opening blind move — no Stockfish candidates provided">🎭 blind</span>` : '';
+  const latencyHtml  = (data.elapsed_ms != null && !data.timed_out)
+    ? `<span class="move-latency" title="Model response time">${(data.elapsed_ms / 1000).toFixed(1)}s</span>`
+    : '';
 
   const card = document.createElement('div');
   card.className = `move-card ${q}`;
@@ -714,7 +717,7 @@ function addMoveCard(data) {
       <span class="move-num-label">${label}</span>
       <span class="move-san-text">${escHtml(data.san)}</span>
       <span class="move-badge ${q}">${q}</span>
-      ${coherenceHtml}${timeoutHtml}${blindHtml}
+      ${coherenceHtml}${timeoutHtml}${blindHtml}${latencyHtml}
     </div>
     ${rankStr && !data.is_blind_move ? `<div class="move-rank-text">${rankStr}</div>` : ''}
     ${showReason ? `<div class="move-reason">${escHtml(data.reasoning)}</div>` : ''}
@@ -824,6 +827,8 @@ async function loadHistory() {
         <span class="game-result">${res}</span>
         <span class="game-names">${escHtml(g.white_name)} vs ${escHtml(g.black_name)}</span>
         <span class="game-moves">${g.total_moves}m</span>
+        <a class="game-lichess" title="Analyse on Lichess" target="_blank" rel="noopener"
+           onclick="event.stopPropagation(); openLichessById(${g.id})">↗</a>
       </div>`;
     });
     body.innerHTML = html;
@@ -1405,6 +1410,7 @@ function onGameOver(d) {
   document.getElementById('ovOpening').textContent = d.opening_name
     ? `${d.opening_eco} · ${d.opening_name}` : '';
   document.getElementById('ovDownloadBtn').style.display = d.game_id ? '' : 'none';
+  document.getElementById('ovLichessBtn').style.display  = d.game_id ? '' : 'none';
 
   const eloHtml = `
     <div class="ov-elo-block"><div class="ov-elo-name">${escHtml(gameState.white.name)}</div>
@@ -1741,6 +1747,30 @@ function downloadPgn() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+async function _fetchAndOpenLichess(gameId) {
+  try {
+    // Fetch the annotated PGN, strip lengthy reasoning comments so the URL
+    // stays compact (Lichess only needs moves + glyphs for analysis).
+    const resp = await fetch(`${API}/api/games/${gameId}/pgn`);
+    let pgn = await resp.text();
+    // Remove { ... } comment blocks (reasoning text) but keep move glyphs
+    pgn = pgn.replace(/\{[^}]*\}/g, '').replace(/\s{2,}/g, ' ').trim();
+    window.open(`https://lichess.org/paste?pgn=${encodeURIComponent(pgn)}`, '_blank', 'noopener');
+  } catch(e) {
+    window.open('https://lichess.org/analysis', '_blank', 'noopener');
+  }
+}
+
+function openLichess() {
+  const id = gameState.lastGameId;
+  if (!id) return;
+  _fetchAndOpenLichess(id);
+}
+
+function openLichessById(gameId) {
+  _fetchAndOpenLichess(gameId);
 }
 
 function exportAllPgn(modelId) {

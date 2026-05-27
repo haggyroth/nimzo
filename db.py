@@ -179,6 +179,7 @@ def _migrate(conn: sqlite3.Connection):
     _add_column_if_missing(conn, "moves",   "coherence_score",     "REAL")
     _add_column_if_missing(conn, "moves",   "timed_out",           "INTEGER DEFAULT 0")
     _add_column_if_missing(conn, "players", "user_provided_portrait", "INTEGER DEFAULT 0")
+    _add_column_if_missing(conn, "moves",   "elapsed_ms",          "INTEGER")
     # Create tournament tables for existing DBs (CREATE TABLE IF NOT EXISTS is idempotent
     # in the schema, but the schema only runs once so we ensure them here too)
     conn.executescript("""
@@ -472,6 +473,7 @@ def record_move(
     thinking_content: str = "",
     coherence_score: Optional[float] = None,
     timed_out: bool = False,
+    elapsed_ms: Optional[int] = None,
 ):
     with get_conn() as conn:
         player_id = conn.execute(
@@ -482,14 +484,14 @@ def record_move(
             INSERT INTO moves
               (game_id, move_number, player_id, move_uci, move_san,
                candidate_rank, quality, score_cp, reasoning, fen_after,
-               thinking_content, coherence_score, timed_out)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               thinking_content, coherence_score, timed_out, elapsed_ms)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 game_id, move_number, player_id, move_uci, move_san,
                 candidate_rank, quality, score_cp, reasoning, fen_after,
                 thinking_content or "", coherence_score,
-                1 if timed_out else 0,
+                1 if timed_out else 0, elapsed_ms,
             ),
         )
 
@@ -517,7 +519,7 @@ def get_game_moves(game_id: int) -> list[dict]:
             """
             SELECT m.move_number, m.move_san, m.move_uci, m.quality,
                    m.candidate_rank, m.reasoning, m.score_cp, m.thinking_content,
-                   m.coherence_score, m.timed_out
+                   m.coherence_score, m.timed_out, m.elapsed_ms
             FROM moves m
             WHERE m.game_id = ?
             ORDER BY m.move_number ASC

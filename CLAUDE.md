@@ -145,7 +145,7 @@ The arena broadcasts JSON events to `ws://localhost:8765`. The visualizer connec
 |---|---|
 | `game_start` | `white`, `black`, `white_elo`, `black_elo`, `fen` |
 | `thinking` | `player`, `color`, `fen`, `candidates[]`, `is_human_turn` |
-| `move` | `san`, `uci`, `quality`, `candidate_rank`, `reasoning`, `coherence_score`, `fen` |
+| `move` | `san`, `uci`, `quality`, `candidate_rank`, `reasoning`, `coherence_score`, `elapsed_ms`, `fen` |
 | `game_over` | `result`, `termination`, `white_elo_after`, `black_elo_after` |
 
 ## Adaptive Learning Loop
@@ -164,7 +164,7 @@ If both models are local and no Anthropic key is set, disable lesson generation 
 
 - `players` — name, model_id, backend, current ELO, portrait_path
 - `games` — result, termination, PGN, ELO before/after for both players
-- `moves` — per-move record with quality, candidate rank, reasoning, coherence score, FEN after
+- `moves` — per-move record with quality, candidate rank, reasoning, coherence score, elapsed_ms (model response time in ms), FEN after
 - `lessons` — per-player lessons linked to the game that generated them
 - `tournaments` — bracket/round-robin tournament records
 
