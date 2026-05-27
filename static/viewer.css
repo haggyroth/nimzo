@@ -859,6 +859,20 @@
     .mc-qbar-legend .lb-mistake    ::before { background: #c46d3a; }
     .mc-qbar-legend .lb-blunder    ::before { background: #b04a3a; }
 
+    /* Opening repertoire table */
+    .op-table { width: 100%; border-collapse: collapse; font-size: 10px; margin: 4px 0 8px; }
+    .op-table th { font-size: 9px; color: var(--text-dim); text-align: left; padding: 1px 4px; letter-spacing: .5px; }
+    .op-table td { padding: 2px 4px; }
+    .op-eco   { color: var(--text-dim); width: 28px; font-size: 9px; }
+    .op-name  { color: var(--text-mid); }
+    .op-games { color: var(--text-dim); text-align: right; width: 20px; }
+    .op-score { color: var(--gold); text-align: right; width: 30px; font-weight: 600; }
+    .op-table tr:hover td { background: var(--bg-raised); }
+
+    /* Coherence trend */
+    .mc-coherence-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+    .mc-coherence-note { font-size: 9px; color: var(--text-dim); }
+
     .mc-profile {
       font-size: 10px; color: var(--text-mid); line-height: 1.6;
       padding: 8px 10px; background: var(--bg-raised);

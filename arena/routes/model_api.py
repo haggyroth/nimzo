@@ -73,6 +73,18 @@ async def api_coherence_stats(model_id: str):
     return database.get_coherence_stats(model_id)
 
 
+@router.get("/api/models/{model_id:path}/coherence-history")
+async def api_coherence_history(model_id: str):
+    """Per-game average coherence score for a model, ordered chronologically."""
+    return database.get_coherence_history(model_id)
+
+
+@router.get("/api/models/{model_id:path}/openings")
+async def api_model_openings(model_id: str):
+    """W/D/L breakdown per opening for a model, ordered by games played."""
+    return database.get_openings_for_model(model_id)
+
+
 @router.get("/api/models/{model_id:path}/quality")
 async def api_model_quality(model_id: str):
     """
