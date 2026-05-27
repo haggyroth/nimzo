@@ -72,6 +72,11 @@ _active_human_players: dict = {}
 # Per-model portrait generation cooldown tracker: model_id → epoch time
 _portrait_last_generated: dict[str, float] = {}
 
+# Last successfully broadcast JSON string.  Identical consecutive messages are
+# suppressed — prevents redundant sends during client reconnects or accidental
+# double-fires from game code without affecting the normal distinct-event stream.
+_last_broadcast_msg: str | None = None
+
 
 # ── Tournament abort signal ───────────────────────────────────────────────
 
@@ -82,10 +87,18 @@ class TournamentAborted(Exception):
 # ── Broadcast ────────────────────────────────────────────────────────────
 
 async def broadcast(event: dict):
-    """Serialise ``event`` to JSON and send it to every connected WebSocket client."""
+    """Serialise ``event`` to JSON and send it to every connected WebSocket client.
+
+    Identical consecutive messages (same JSON as the previous broadcast) are
+    suppressed as a no-op — useful for deduplicating spurious double-fires.
+    """
+    global _last_broadcast_msg
     if _mode["headless"] or not _connected_clients:
         return
     msg = json.dumps(event)
+    if msg == _last_broadcast_msg:
+        return
+    _last_broadcast_msg = msg
     dead = set()
     for ws in list(_connected_clients):
         try:
