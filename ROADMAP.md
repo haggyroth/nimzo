@@ -327,10 +327,10 @@ All `database.*` calls currently run synchronous SQLite queries on the asyncio e
 ### Goals
 Surface the data that already exists in the DB but isn't yet visualised, and add the one missing dimension (move latency) that requires a small instrumentation change.
 
-- [ ] **Move latency tracking**: record wall-clock time per move — `time.perf_counter()` around each `choose_move()` call; store in a new `moves.elapsed_ms` column. Surfaces inference speed vs quality tradeoffs per model; shown in move cards and as an aggregate stat ("avg ms/move") in the model card and leaderboard. A genuinely novel LLM comparison axis.
+- [x] **Move latency tracking**: record wall-clock time per move — `time.perf_counter()` around each `choose_move()` call; store in a new `moves.elapsed_ms` column. Surfaces inference speed vs quality tradeoffs per model; shown in move cards and as an aggregate stat ("avg ms/move") in the model card and leaderboard. A genuinely novel LLM comparison axis.
 - [ ] **Opening repertoire stats**: store the ECO code and opening name per game (python-chess can derive from PGN; already passed to the lesson prompt). Add a `games.eco_code` + `games.opening_name` column. New `/api/models/{id}/openings` endpoint returns win/draw/loss breakdown per opening family. Shown in the model card as a "Favourite openings" table.
 - [ ] **Reasoning coherence trend**: coherence scores are stored per move but there's no longitudinal view. Add a per-game average coherence score and plot it as a sparkline in the model card alongside the ELO sparkline. Shows whether a model's reasoning integrity improves after lessons or degrades under context pressure.
-- [ ] **Lichess analysis link**: "Open in Lichess ↗" button in the game-over overlay and game history panel. Constructs `https://lichess.org/paste?pgn=<encoded-pgn>` — one URL parameter, zero backend work. Lets players instantly deep-dive any game in Lichess's analysis board.
+- [x] **Lichess analysis link**: "Open in Lichess ↗" button in the game-over overlay and game history panel. Constructs `https://lichess.org/paste?pgn=<encoded-pgn>` — one URL parameter, zero backend work. Lets players instantly deep-dive any game in Lichess's analysis board.
 - [ ] **Shareable game URL**: `/watch/<game_id>` route that serves the viewer pre-seeded to a specific completed game in replay mode. Makes it easy to link a notable game without the recipient needing to find it in the history panel.
 
 ### Implementation notes
