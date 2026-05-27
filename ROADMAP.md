@@ -249,11 +249,13 @@ Give more control over game rules and let models play their opening moves from t
 - [ ] **Opening blind mode**: new `blind_opening_moves: int` setting per player (default: 0; UI toggle in player config). For the first N full moves (each player), Stockfish candidates are withheld — the model receives only the board FEN and game PGN and must supply a `MOVE:` UCI response from its own knowledge. Parse via the same 4-tier fallback; default to a random legal move if parsing fails in blind mode (not Stockfish's top pick, since that defeats the purpose). Each model's opening repertoire becomes a genuine expression of its training.
 - [ ] **Turn cap / move limit draw**: new `max_moves: int` setting (default: 500 half-moves = 250 per side; configurable in UI and TOML). When `board.ply() >= max_moves`, the game is declared a draw with termination `"move limit reached"`. Displayed in the game-over overlay and stored in the `termination` column.
 - [ ] **Blind mode toggle in UI**: checkbox in each player's config card; also supported in `tournament.toml` via `blind_opening_moves = 3`; shown as a badge on the player strip during the opening phase.
+- [ ] **Forced opening prefix**: supply a PGN move sequence in the TOML config (`opening_pgn = "1. e4 e5 2. Nf3 Nc6"`); both models are stepped through those moves automatically before guided play begins. Lets you study how models handle specific structures they were trained on (Sicilian, King's Indian, etc.) without relying on blind-mode chance to reach those positions.
 
 ### Implementation notes
 - `blind_opening_moves` is added to `PlayerConfig` (default 0 = always use Stockfish candidates); `game.py`'s `play_game()` checks `board.fullmove_number <= player.config.blind_opening_moves` to decide whether to pass candidates.
 - The prompt `build_prompt()` in `base.py` gets a `has_candidates: bool` argument; when False, the candidates section is replaced with "Play your best opening move from your chess knowledge."
 - Turn cap is a single `if board.ply() >= game_config.max_moves: break` in the main game loop; the result is set to `"1/2-1/2"` with the special termination string.
+- Forced opening prefix: `chess.Board` replays the supplied PGN moves before the main loop; the viewer shows those moves as greyed-out "book" moves in the move history.
 - Both settings are surfaced in the TOML schema via `config_loader.py`.
 
 ---
@@ -320,6 +322,42 @@ All `database.*` calls currently run synchronous SQLite queries on the asyncio e
 
 ---
 
+## Phase 23 — Analytics Depth
+
+### Goals
+Surface the data that already exists in the DB but isn't yet visualised, and add the one missing dimension (move latency) that requires a small instrumentation change.
+
+- [ ] **Move latency tracking**: record wall-clock time per move — `time.perf_counter()` around each `choose_move()` call; store in a new `moves.elapsed_ms` column. Surfaces inference speed vs quality tradeoffs per model; shown in move cards and as an aggregate stat ("avg ms/move") in the model card and leaderboard. A genuinely novel LLM comparison axis.
+- [ ] **Opening repertoire stats**: store the ECO code and opening name per game (python-chess can derive from PGN; already passed to the lesson prompt). Add a `games.eco_code` + `games.opening_name` column. New `/api/models/{id}/openings` endpoint returns win/draw/loss breakdown per opening family. Shown in the model card as a "Favourite openings" table.
+- [ ] **Reasoning coherence trend**: coherence scores are stored per move but there's no longitudinal view. Add a per-game average coherence score and plot it as a sparkline in the model card alongside the ELO sparkline. Shows whether a model's reasoning integrity improves after lessons or degrades under context pressure.
+- [ ] **Lichess analysis link**: "Open in Lichess ↗" button in the game-over overlay and game history panel. Constructs `https://lichess.org/paste?pgn=<encoded-pgn>` — one URL parameter, zero backend work. Lets players instantly deep-dive any game in Lichess's analysis board.
+- [ ] **Shareable game URL**: `/watch/<game_id>` route that serves the viewer pre-seeded to a specific completed game in replay mode. Makes it easy to link a notable game without the recipient needing to find it in the history panel.
+
+### Implementation notes
+- `elapsed_ms`: nullable INTEGER column added via `_add_column_if_missing`; timer wraps the `await player.choose_move(...)` call in `game.py`; broadcast in the `move` WS event.
+- ECO lookup: `chess.pgn.Game` exposes `headers["ECO"]` and `headers["Opening"]` after calling `chess.polyglot` or the eco lookup in python-chess; store on `record_game()`.
+- Coherence trend: compute `AVG(coherence_score)` per game in a new DB query; no new columns needed.
+- `/watch/<game_id>`: serve `viewer.html` with a `?game=<id>` query param; JS detects it and immediately enters replay mode for that game on load.
+
+---
+
+## Phase 24 — Tournament Formats & Scheduling
+
+### Goals
+Add the elimination bracket format that rounds out the tournament system, a puzzle gauntlet for direct capability benchmarking, handicap matches for cross-tier comparisons, and scheduled/queued tournament runs.
+
+- [ ] **Elimination bracket**: single-elimination (and optionally double-elimination) format alongside round-robin and gauntlet. `generate_pairings()` produces a bracket tree; `compute_standings()` tracks advancement. Winner overlay shows the bracket path. Seeded by ELO at tournament start.
+- [ ] **Puzzle gauntlet mode**: feed models a curated set of standard positions (mate-in-2s, endgame studies, tactical puzzles) from a `positions.toml` file instead of full games. Each model gets the same position and the same candidate list; score is fraction of puzzles solved (correct move chosen) and average candidate rank on near-misses. Bypasses ELO noise — a direct capability benchmark. Very fast to run (no full games).
+- [ ] **Handicap matches**: `candidate_count` can be set asymmetrically per player for a single match — e.g. weaker model sees 8 candidates, stronger model sees 3. Configurable in the UI per-player or via TOML `handicap_candidates`. Makes cross-tier matchups competitive and lets you find the "fair" candidate split between two models.
+- [ ] **Scheduled / queued tournaments**: `run_at` field in the TOML config (ISO datetime or `+Nh` offset). The arena accepts the config, parks it in a queue, and starts it at the specified time. Enables "start this overnight benchmark at 2am" workflows without leaving a terminal session open. Queued tournaments shown in the UI with a countdown.
+
+### Implementation notes
+- Elimination bracket: add `"elimination"` to the `format` enum in `TournamentStartConfig`; `generate_pairings()` returns first-round pairs; after each game `advance_bracket()` updates a `bracket_tree` stored in `tournaments.bracket_json` (JSON column).
+- Puzzle gauntlet: `positions.toml` schema — `[[puzzle]] fen = "..." solution_uci = "e2e4" description = "..."`. Game loop variant: one move per position, no board advancement, score logged to a new `puzzle_results` table.
+- Scheduled tournaments: `apscheduler` (already in FastAPI ecosystem) or a simple `asyncio.sleep(delta)` task registered on config upload; stored in a `scheduled_tournaments` DB table so it survives restart.
+
+---
+
 ## Future Considerations
 
 Items that are well-defined but deferred due to complexity, scope, or dependencies on earlier phases.
@@ -336,6 +374,7 @@ Items that are well-defined but deferred due to complexity, scope, or dependenci
 
 ### Other Deferred Items
 
+- **Engine-free mode**: remove Stockfish from the loop entirely — models generate their own UCI move from the FEN + PGN with no candidate list. Evaluated afterward by Stockfish for quality scoring. Tests raw chess ability rather than candidate-selection ability; a genuinely different capability dimension from guided mode. Requires a new prompt variant, a fallback for illegal-move responses (re-prompt up to 3×, then random legal move), and careful framing so models don't treat it as a trick question. Deferred because guided mode is Nimzo's core differentiator — engine-free is a separate product mode.
 - **Custom piece PNG import**: file upload (12 files: K Q R B N P × 2 colors); cm-chessboard re-renders via SVG sprites — a `MutationObserver` + CSS `background-image` overlay approach is workable but fiddly; deferred from Phase 18
 - **Non-blocking tutor**: move lesson generation to a background task so the next game starts immediately; broadcast `lesson_generating` / `lessons_saved` WS events while the game runs (partial overlap with Phase 21's splash screen)
 - **Parallel bracket games**: run simultaneous games in a bracket round for speed; requires scoped `_state` per game, multiple Stockfish engine instances, and careful WebSocket multiplexing
