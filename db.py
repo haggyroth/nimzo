@@ -220,7 +220,9 @@ def upsert_player(model_id: str, name: str, backend: str, elo: float = 1200.0) -
             (model_id, name, backend, elo),
         )
         row = conn.execute("SELECT id FROM players WHERE model_id = ?", (model_id,)).fetchone()
-        return row["id"]
+        player_id = row["id"]
+    invalidate_leaderboard_cache()
+    return player_id
 
 
 def player_exists(model_id: str) -> bool:
@@ -380,7 +382,8 @@ def record_game(
         )
         conn.execute("UPDATE players SET elo = ? WHERE model_id = ?", (white_elo_after, white_model_id))
         conn.execute("UPDATE players SET elo = ? WHERE model_id = ?", (black_elo_after, black_model_id))
-        return cur.lastrowid
+    invalidate_leaderboard_cache()
+    return cur.lastrowid
 
 
 def get_all_games(
@@ -693,12 +696,30 @@ def get_lesson_effectiveness(model_id: str, lookback_games: int = 3) -> list[dic
 
 # ── Leaderboard ───────────────────────────────────────────────────────────
 
+# Invalidation-based in-memory cache for the leaderboard query.
+# Set to None whenever any game is recorded; repopulated on next read.
+# This prevents re-running the heavy 3-CTE query on every /api/leaderboard poll.
+_leaderboard_cache: list[dict] | None = None
+
+
+def invalidate_leaderboard_cache() -> None:
+    """Mark the leaderboard cache as stale. Called after any write that changes standings."""
+    global _leaderboard_cache
+    _leaderboard_cache = None
+
+
 def get_leaderboard() -> list[dict]:
     """
     Leaderboard rows include each player's 'best game' score —
     the highest per-game average move quality (mapped to 0..100)
     across all games with ≥5 quality-scored moves.
+
+    Results are cached in-process and invalidated automatically when
+    ``record_game()`` commits new data.
     """
+    global _leaderboard_cache
+    if _leaderboard_cache is not None:
+        return _leaderboard_cache
     with get_conn() as conn:
         rows = conn.execute(
             """
@@ -756,7 +777,8 @@ def get_leaderboard() -> list[dict]:
             ORDER BY p.elo DESC
             """,
         ).fetchall()
-        return [dict(r) for r in rows]
+        _leaderboard_cache = [dict(r) for r in rows]
+        return _leaderboard_cache
 
 
 def get_elo_history(model_id: str) -> list[dict]:
@@ -1099,6 +1121,7 @@ def record_achievements(player_model_id: str, game_id: int, codes: list[str]):
                 )
             except sqlite3.IntegrityError:
                 pass  # already awarded this code on this game
+    invalidate_leaderboard_cache()
 
 
 def get_player_achievements(model_id: str) -> list[dict]:
