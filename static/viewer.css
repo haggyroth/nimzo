@@ -1721,3 +1721,41 @@
       transition: color .15s, border-color .15s;
     }
     .rp-pgn-dl:hover { color: var(--gold); border-color: var(--gold); }
+
+    /* ── Wave D: ELO delta chip in game-over overlay ────────────────────── */
+    .ov-elo-delta {
+      display: inline-block; margin-left: 5px;
+      font-size: 10px; font-weight: 700; padding: 1px 5px;
+      border-radius: 3px; vertical-align: middle;
+      font-variant-numeric: tabular-nums;
+    }
+    .ov-elo-delta.pos  { background: rgba(80,180,80,.22);  color: #6ddd6d; }
+    .ov-elo-delta.neg  { background: rgba(200,60,60,.22);  color: #e07070; }
+    .ov-elo-delta.zero { background: var(--bg-input);      color: var(--text-dim); }
+
+    /* ── Wave D: Recent form dots in leaderboard ─────────────────────────── */
+    .lb-form { white-space: nowrap; }
+    .form-dot {
+      display: inline-block; width: 7px; height: 7px;
+      border-radius: 50%; margin: 0 1px;
+      vertical-align: middle;
+    }
+    .form-dot.win  { background: var(--q-best); }
+    .form-dot.loss { background: var(--q-blunder); }
+    .form-dot.draw { background: var(--text-dim); }
+
+    /* ── Wave D: Sortable leaderboard column headers ─────────────────────── */
+    .lb-sortable {
+      cursor: pointer; user-select: none;
+      transition: color .15s;
+    }
+    .lb-sortable:hover { color: var(--gold); }
+
+    /* ── Wave D: Load-more button in history panel ───────────────────────── */
+    .hist-more-btn {
+      text-align: center; padding: 7px 0; font-size: 10px;
+      color: var(--text-dim); cursor: pointer;
+      border-top: 1px solid var(--border);
+      transition: color .15s;
+    }
+    .hist-more-btn:hover { color: var(--gold); }
