@@ -982,11 +982,20 @@ function initTrnPlayers() {
   trnAddPlayer();
 }
 
+function onTrnFormatChange() {
+  const fmt = document.getElementById('trnFormat');
+  const pairRow = document.getElementById('trnGamesPairRow');
+  if (fmt && pairRow) {
+    pairRow.style.display = fmt.value === 'elimination' ? 'none' : '';
+  }
+  renderTrnPlayerList();
+}
+
 // Re-render when format changes (to update "Champion" label)
 document.addEventListener('DOMContentLoaded', () => {
   initTrnPlayers();
   const fmt = document.getElementById('trnFormat');
-  if (fmt) fmt.addEventListener('change', renderTrnPlayerList);
+  if (fmt) fmt.addEventListener('change', onTrnFormatChange);
 });
 
 // ── Tournament controls ───────────────────────────────────────────────────
@@ -1515,8 +1524,61 @@ function onStandingsUpdate(d) {
   renderStandings(d.standings);
 }
 
+// ── Elimination bracket ───────────────────────────────────────────────────
+
+function renderBracket(bracket) {
+  const sec  = document.getElementById('bracketSection');
+  const body = document.getElementById('bracketBody');
+  if (!bracket || !bracket.rounds || !bracket.rounds.length) {
+    if (sec) sec.style.display = 'none';
+    return;
+  }
+  if (sec) sec.style.display = '';
+
+  const rounds = bracket.rounds;
+  let html = '<div class="bracket-wrap">';
+
+  rounds.forEach((round, rIdx) => {
+    const isLast = rIdx === rounds.length - 1;
+    html += `<div class="bracket-round">
+      <div class="bracket-round-name">${escHtml(round.name)}</div>`;
+
+    round.matches.forEach((m, mIdx) => {
+      const wWon = m.winner && m.winner === m.white;
+      const bWon = m.winner && m.winner === m.black;
+      const isBye = m.bye;
+      const pending = !m.winner && !isBye;
+
+      html += `<div class="bracket-match${pending ? ' pending' : ''}${isBye ? ' bye' : ''}">`;
+      html += `<div class="bracket-player${wWon ? ' winner' : bWon ? ' loser' : ''}">${escHtml(m.white_name || 'TBD')}</div>`;
+      html += `<div class="bracket-vs">${isBye ? '—' : 'vs'}</div>`;
+      html += `<div class="bracket-player${bWon ? ' winner' : wWon ? ' loser' : ''}">${escHtml(m.black_name || 'TBD')}</div>`;
+      if (m.winner) {
+        const wname = wWon ? (m.white_name || '') : (m.black_name || '');
+        html += `<div class="bracket-winner-tag">▶ ${escHtml(wname)}</div>`;
+      }
+      html += '</div>';
+
+      // Connector line between matches (except last round)
+      if (!isLast && mIdx % 2 === 0 && mIdx + 1 < round.matches.length) {
+        html += '<div class="bracket-connector"></div>';
+      }
+    });
+
+    html += '</div>'; // .bracket-round
+  });
+
+  html += '</div>'; // .bracket-wrap
+  body.innerHTML = html;
+}
+
+function onBracketUpdate(d) {
+  renderBracket(d.bracket);
+}
+
 function onTournamentComplete(d) {
   renderStandings(d.standings);
+  if (d.bracket) renderBracket(d.bracket);
   loadLeaderboard();
   loadTournamentHistory();
   // Show winner title in game-over overlay style
@@ -1541,7 +1603,7 @@ async function loadTournamentHistory() {
       body.innerHTML = '<div class="lb-empty">No tournaments yet</div>';
       return;
     }
-    const fmtLabel = { round_robin: 'Round Robin', gauntlet: 'Gauntlet', match: 'Match' };
+    const fmtLabel = { round_robin: 'Round Robin', gauntlet: 'Gauntlet', match: 'Match', elimination: 'Elimination' };
     body.innerHTML = history.map(t => {
       const date  = t.finished_at ? t.finished_at.slice(0,10) : (t.started_at||'').slice(0,10);
       const games = t.total_games || '?';
@@ -1577,8 +1639,14 @@ function onTournamentStatus(d) {
   }
   // Show/hide live standings
   if (d.standings) renderStandings(d.standings);
-  else if (d.format === 'match' || !d.format) {
+  else if (d.format === 'match' || d.format === 'elimination' || !d.format) {
     document.getElementById('standingsSection').style.display = 'none';
+  }
+  // Show/hide bracket (elimination format)
+  if (d.bracket) renderBracket(d.bracket);
+  else if (d.format !== 'elimination') {
+    const bsec = document.getElementById('bracketSection');
+    if (bsec) bsec.style.display = 'none';
   }
   updatePlayers();
   updateAnalysis();
@@ -1588,6 +1656,7 @@ function onTournamentStatus(d) {
 function onInitialState(d) {
   updateTournamentUI(d.status || 'idle', d.game_number || 0, d.total_games || 0);
   if (d.standings) renderStandings(d.standings);
+  if (d.bracket)   renderBracket(d.bracket);
   loadTournamentHistory();
 }
 
@@ -1722,6 +1791,7 @@ function dispatch(msg) {
       case 'tournament_status':      onTournamentStatus(d);      break;
       case 'standings_update':       onStandingsUpdate(d);       break;
       case 'tournament_complete':    onTournamentComplete(d);    break;
+      case 'bracket_update':         onBracketUpdate(d);         break;
       case 'state':                  onInitialState(d);          break;
       case 'puzzle_gauntlet_start':  onPuzzleGauntletStart(d);  break;
       case 'puzzle_thinking':        onPuzzleThinking(d);        break;

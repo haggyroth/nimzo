@@ -20,10 +20,12 @@ from models.human_player import HumanPlayer
 # arena/__init__.py, all state symbols are already on the arena package object.
 from game import (
     run_bracket_tournament,
+    run_elimination_tournament,
     run_tournament,
     build_player,
     generate_pairings,
     compute_standings,
+    build_bracket,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,6 +104,53 @@ async def api_start(config: TournamentStartConfig):
                          blind=ps.blind)
             for ps in seeded
         ]
+        player_map = {ps.model_id: pl for ps, pl in zip(seeded, players)}
+
+        if config.format == "elimination":
+            # Elimination bracket: n-1 games total; no pre-computed pairings
+            bracket    = build_bracket(seeded)
+            total_games = len(seeded) - 1
+            _st._state.update({
+                "status":        "running",
+                "game_number":   0,
+                "total_games":   total_games,
+                "white":         None,
+                "black":         None,
+                "white_elo":     None,
+                "black_elo":     None,
+                "format":        "elimination",
+                "standings":     None,
+                "bracket":       bracket,
+                "tournament_id": None,
+            })
+            await _st.broadcast({"type": "tournament_status", **_st._state})
+
+            async def _run_elimination_and_catch():
+                try:
+                    await run_elimination_tournament(
+                        player_specs=seeded,
+                        player_map=player_map,
+                        tutor=tutor,
+                        judge=judge,
+                        adaptive_difficulty=config.adaptive_difficulty,
+                        max_moves=config.max_moves,
+                        opening_pgn=config.opening_pgn,
+                    )
+                except Exception as exc:
+                    logger.info("Elimination tournament ended: %s", type(exc).__name__)
+                finally:
+                    _st._stop["requested"] = False
+                    _st._pause_event.set()
+                    _st._state["status"] = "idle"
+                    try:
+                        await _st.broadcast({"type": "tournament_status", **_st._state})
+                    except Exception:
+                        pass
+
+            _st._tournament_task = asyncio.create_task(_run_elimination_and_catch())
+            return {"ok": True}
+
+        # ── Round-robin / gauntlet ────────────────────────────────────────
         pairings = generate_pairings(seeded, config.format, config.games_per_pair)
         total_games = len(pairings)
         standings = compute_standings(seeded, [])
@@ -119,8 +168,6 @@ async def api_start(config: TournamentStartConfig):
             "tournament_id": None,
         })
         await _st.broadcast({"type": "tournament_status", **_st._state})
-
-        player_map = {ps.model_id: pl for ps, pl in zip(seeded, players)}
 
         async def _run_bracket_and_catch():
             try:

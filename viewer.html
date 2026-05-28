@@ -272,14 +272,15 @@
             <!-- Format -->
             <div class="games-row">
               <span>Format</span>
-              <select class="ctrl-select" id="trnFormat" style="width:120px">
+              <select class="ctrl-select" id="trnFormat" style="width:120px" onchange="onTrnFormatChange()">
                 <option value="round_robin">Round Robin</option>
                 <option value="gauntlet">Gauntlet</option>
+                <option value="elimination">Elimination</option>
               </select>
             </div>
 
-            <!-- Games per pair -->
-            <div class="games-row">
+            <!-- Games per pair (hidden for elimination) -->
+            <div class="games-row" id="trnGamesPairRow">
               <span>Games / pair</span>
               <input type="number" id="trnGamesPair" value="2" min="1" max="20">
             </div>
@@ -378,6 +379,14 @@
         Live Standings <span class="chevron">▾</span>
       </div>
       <div id="standingsBody"></div>
+    </div>
+
+    <!-- Elimination bracket (shown during/after elimination tournament) -->
+    <div class="ctrl-section" id="bracketSection" style="display:none">
+      <div class="ctrl-head" onclick="toggleSection('bracketSection')">
+        Bracket <span class="chevron">▾</span>
+      </div>
+      <div id="bracketBody" style="overflow-x:auto"></div>
     </div>
 
     <!-- Puzzle scoreboard (shown during/after gauntlet) -->
