@@ -912,7 +912,38 @@ def get_leaderboard() -> list[dict]:
             ORDER BY p.elo DESC
             """,
         ).fetchall()
-        _leaderboard_cache = [dict(r) for r in rows]
+        result = [dict(r) for r in rows]
+
+        # Append recent form (last 5 results, oldest→newest) for each player.
+        # Uses a window-function query so we only hit the DB once for all players.
+        form_rows = conn.execute(
+            """
+            SELECT
+                p.model_id,
+                CASE WHEN g.white_player_id = p.id AND g.result = '1-0'  THEN 'W'
+                     WHEN g.black_player_id = p.id AND g.result = '0-1'  THEN 'W'
+                     WHEN g.result = '1/2-1/2'                           THEN 'D'
+                     ELSE                                                      'L'
+                END AS outcome,
+                ROW_NUMBER() OVER (
+                    PARTITION BY p.id ORDER BY g.played_at DESC
+                ) AS rn
+            FROM players p
+            JOIN games g ON (g.white_player_id = p.id OR g.black_player_id = p.id)
+            """,
+        ).fetchall()
+        # Collect per-player: keep only the 5 most recent (rn ≤ 5)
+        from collections import defaultdict
+        _form_map: dict[str, list[tuple[int, str]]] = defaultdict(list)
+        for fr in form_rows:
+            if fr["rn"] <= 5:
+                _form_map[fr["model_id"]].append((fr["rn"], fr["outcome"]))
+        # Sort by rn descending → oldest-first chronological display
+        for row_dict in result:
+            items = sorted(_form_map.get(row_dict["model_id"], []), key=lambda x: -x[0])
+            row_dict["recent_form"] = [o for _, o in items]
+
+        _leaderboard_cache = result
         return _leaderboard_cache
 
 

@@ -774,57 +774,105 @@ function renderLessons() {
 // buildSparkline() — defined in js/viewer_utils.js
 
 // ── Leaderboard ───────────────────────────────────────────────────────────
+let _lbRows = [];            // cached full leaderboard data
+let _lbHistories = [];       // ELO sparkline data per row
+let _lbSortCol = 'elo';      // current sort column key
+let _lbSortDir = -1;         // -1 = desc, +1 = asc
+
+function _lbSortFn(col) {
+  // Toggle direction if same column, else default to desc
+  if (_lbSortCol === col) _lbSortDir *= -1;
+  else { _lbSortCol = col; _lbSortDir = -1; }
+  _renderLeaderboard();
+}
+
+function _lbVal(r, col) {
+  if (col === 'elo')    return r.elo ?? 0;
+  if (col === 'wins')   return r.wins ?? 0;
+  if (col === 'losses') return r.losses ?? 0;
+  if (col === 'draws')  return r.draws ?? 0;
+  if (col === 'wdl')    return (r.wins ?? 0) / Math.max(r.total_games ?? 1, 1);
+  if (col === 'best')   return r.best_game_score ?? -1;
+  if (col === 'games')  return r.total_games ?? 0;
+  return 0;
+}
+
+function _renderLeaderboard() {
+  const body = document.getElementById('leaderboardBody');
+  if (!_lbRows.length) { body.innerHTML = '<div class="lb-empty">No games yet</div>'; return; }
+
+  const sorted = [..._lbRows].sort((a, b) => _lbSortDir * (_lbVal(b, _lbSortCol) - _lbVal(a, _lbSortCol)));
+  const arrow = col => _lbSortCol === col ? (_lbSortDir < 0 ? ' ▼' : ' ▲') : '';
+  const th = (col, label, title='') =>
+    `<th class="lb-sortable" title="${title}" onclick="_lbSortFn('${col}')">${label}${arrow(col)}</th>`;
+
+  let html = `<table class="lb-table"><thead><tr>
+    <th>#</th>
+    ${th('elo','Name','Sort by name')}
+    ${th('elo','ELO','Sort by ELO')}
+    ${th('wdl','W/D/L','Sort by win rate')}
+    ${th('best','Best','Best game quality score. Click to replay.')}
+    <th title="Achievement badges">★</th>
+    <th>Form</th>
+    <th></th>
+  </tr></thead><tbody>`;
+
+  sorted.forEach((r, i) => {
+    const histIdx = _lbRows.indexOf(r);
+    const spark = buildSparkline(_lbHistories[histIdx] || []);
+    const bestScore = r.best_game_score;
+    const bestId    = r.best_game_id;
+    const bestCell  = (bestScore != null && bestId != null)
+      ? `<td class="lb-best" title="Replay best game (#${bestId})" onclick="openReplay(${bestId})">${Math.round(bestScore)}</td>`
+      : `<td class="lb-best dim">—</td>`;
+    const badgeCell = r.achievement_count > 0
+      ? `<td class="lb-badges-cell" title="${r.achievement_count} achievements — click name for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${r.achievement_count}</td>`
+      : `<td class="lb-badges-cell dim">—</td>`;
+    // Recent form dots
+    const formDots = (r.recent_form || []).map(o => {
+      const cls = o === 'W' ? 'win' : o === 'L' ? 'loss' : 'draw';
+      return `<span class="form-dot ${cls}" title="${o}"></span>`;
+    }).join('');
+    html += `<tr>
+      <td class="lb-rank">${i+1}</td>
+      <td class="lb-name" title="${escHtml(r.model_id)} — click for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${escHtml(r.name)}</td>
+      <td class="lb-elo">${r.elo}</td>
+      <td class="lb-wdl">${r.wins}/${r.draws}/${r.losses}</td>
+      ${bestCell}
+      ${badgeCell}
+      <td class="lb-form">${formDots || '<span class="dim">—</span>'}</td>
+      <td class="lb-spark">${spark}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  body.innerHTML = html;
+
+  // Populate H2H dropdowns with the players we just rendered
+  const selA = document.getElementById('h2hPlayerA');
+  const selB = document.getElementById('h2hPlayerB');
+  if (selA && selB) {
+    let optsHtml = '';
+    _lbRows.forEach(r => {
+      optsHtml += `<option value="${escHtml(r.model_id)}">${escHtml(r.name)}</option>`;
+    });
+    selA.innerHTML = '<option value="">— Player A —</option>' + optsHtml;
+    selB.innerHTML = '<option value="">— Player B —</option>' + optsHtml;
+  }
+}
+
 async function loadLeaderboard() {
   try {
     const rows = await fetch(`${API}/api/leaderboard`).then(r=>r.json());
-    const body = document.getElementById('leaderboardBody');
-    if (!rows.length) { body.innerHTML='<div class="lb-empty">No games yet</div>'; return; }
-
-    // Fetch ELO history for all players in parallel
-    const histories = await Promise.all(
+    if (!rows.length) {
+      document.getElementById('leaderboardBody').innerHTML = '<div class="lb-empty">No games yet</div>';
+      return;
+    }
+    _lbRows = rows;
+    _lbHistories = await Promise.all(
       rows.map(r => fetch(`${API}/api/elo-history/${encodeURIComponent(r.model_id)}`)
         .then(res => res.json()).catch(() => []))
     );
-
-    let html = `<table class="lb-table"><thead><tr>
-      <th>#</th><th>Name</th><th>ELO</th><th>W/D/L</th><th title="Best game score (avg move quality, 0–100). Click to replay.">Best</th><th title="Achievement badges">★</th><th></th>
-    </tr></thead><tbody>`;
-    rows.forEach((r, i) => {
-      const spark = buildSparkline(histories[i]);
-      const bestScore = r.best_game_score;
-      const bestId    = r.best_game_id;
-      const bestCell  = (bestScore != null && bestId != null)
-        ? `<td class="lb-best" title="Replay best game (#${bestId})" onclick="openReplay(${bestId})">${Math.round(bestScore)}</td>`
-        : `<td class="lb-best dim">—</td>`;
-      const badgeCell = r.achievement_count > 0
-        ? `<td class="lb-badges-cell" title="${r.achievement_count} achievements — click name for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${r.achievement_count}</td>`
-        : `<td class="lb-badges-cell dim">—</td>`;
-      html += `<tr>
-        <td class="lb-rank">${i+1}</td>
-        <td class="lb-name" title="${escHtml(r.model_id)} — click for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${escHtml(r.name)}</td>
-        <td class="lb-elo">${r.elo}</td>
-        <td class="lb-wdl">${r.wins}/${r.draws}/${r.losses}</td>
-        ${bestCell}
-        ${badgeCell}
-        <td class="lb-spark">${spark}</td>
-      </tr>`;
-    });
-    html += '</tbody></table>';
-    body.innerHTML = html;
-
-    // Populate H2H dropdowns with the players we just loaded
-    const selA = document.getElementById('h2hPlayerA');
-    const selB = document.getElementById('h2hPlayerB');
-    if (selA && selB) {
-      const keep = '<option value="">— Player A —</option>';
-      const keepB = '<option value="">— Player B —</option>';
-      let optsHtml = '';
-      rows.forEach(r => {
-        optsHtml += `<option value="${escHtml(r.model_id)}">${escHtml(r.name)}</option>`;
-      });
-      selA.innerHTML = keep + optsHtml;
-      selB.innerHTML = keepB + optsHtml;
-    }
+    _renderLeaderboard();
   } catch(e) { /* server not ready yet */ }
 }
 
@@ -896,15 +944,17 @@ async function runH2H() {
 }
 
 // ── Recent games ──────────────────────────────────────────────────────────
-async function loadHistory() {
+let _historyLimit = 10;
+
+async function loadHistory(append = false) {
   try {
-    const games = await fetch(`${API}/api/games?limit=10`).then(r=>r.json());
+    const games = await fetch(`${API}/api/games?limit=${_historyLimit}`).then(r=>r.json());
     const body  = document.getElementById('historyBody');
     if (!games.length) { body.innerHTML='<div class="lb-empty">No games yet</div>'; return; }
     let html = '';
     const resultLabel = { '1-0':'1-0','0-1':'0-1','1/2-1/2':'½-½' };
     // Store game metadata keyed by id for click handler
-    window._recentGamesMeta = {};
+    window._recentGamesMeta = window._recentGamesMeta || {};
     games.forEach(g => { window._recentGamesMeta[g.id] = g; });
 
     games.forEach(g => {
@@ -923,6 +973,10 @@ async function loadHistory() {
         <button class="game-pgn-btn" title="Download PGN" onclick="event.stopPropagation(); downloadGamePgn(${g.id})">↓</button>
       </div>`;
     });
+    // Show "load more" button if we got a full page (could be more)
+    if (games.length >= _historyLimit) {
+      html += `<div class="hist-more-btn" onclick="_historyLimit+=10; loadHistory(true)">↓ load more</div>`;
+    }
     body.innerHTML = html;
   } catch(e) {}
 }
@@ -1558,11 +1612,20 @@ function onGameOver(d) {
   document.getElementById('ovDownloadBtn').style.display = d.game_id ? '' : 'none';
   document.getElementById('ovLichessBtn').style.display  = d.game_id ? '' : 'none';
 
+  // ELO delta — compute before gameState.white/black.elo is updated below
+  function _eloDeltaChip(before, after) {
+    if (before == null || after == null) return '';
+    const delta = Math.round(after - before);
+    if (delta === 0) return `<span class="ov-elo-delta zero">±0</span>`;
+    const sign = delta > 0 ? '+' : '';
+    const cls  = delta > 0 ? 'pos' : 'neg';
+    return `<span class="ov-elo-delta ${cls}">${sign}${delta}</span>`;
+  }
   const eloHtml = `
     <div class="ov-elo-block"><div class="ov-elo-name">${escHtml(gameState.white.name)}</div>
-      <div class="ov-elo-val">${d.white_elo_after!=null?Math.round(d.white_elo_after):'—'}</div></div>
+      <div class="ov-elo-val">${d.white_elo_after!=null?Math.round(d.white_elo_after):'—'}${_eloDeltaChip(gameState.white.elo, d.white_elo_after)}</div></div>
     <div class="ov-elo-block"><div class="ov-elo-name">${escHtml(gameState.black.name)}</div>
-      <div class="ov-elo-val">${d.black_elo_after!=null?Math.round(d.black_elo_after):'—'}</div></div>`;
+      <div class="ov-elo-val">${d.black_elo_after!=null?Math.round(d.black_elo_after):'—'}${_eloDeltaChip(gameState.black.elo, d.black_elo_after)}</div></div>`;
   document.getElementById('ovElos').innerHTML = eloHtml;
 
   // Freshly-earned achievements
