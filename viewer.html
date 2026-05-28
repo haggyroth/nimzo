@@ -602,10 +602,13 @@
     </div>
     <!-- Reasoning panel for current move -->
     <div class="rp-reasoning" id="rpReasoning"></div>
+    <!-- Eval chart — centipawn evaluation across the whole game -->
+    <div class="rp-eval-chart" id="rpEvalChart"></div>
     <!-- Header + close (below controls to not crowd board) -->
     <div class="rp-header" style="padding-top:6px">
       <span class="rp-title" id="rpTitle"></span>
       <span class="rp-share" id="rpShareBtn" onclick="copyReplayLink()" title="Copy shareable link">🔗</span>
+      <span class="rp-pgn-dl" onclick="if(replay.gameId) downloadGamePgn(replay.gameId)" title="Download PGN">↓ PGN</span>
       <span class="rp-close" onclick="closeReplay()">✕ close</span>
     </div>
   </div>

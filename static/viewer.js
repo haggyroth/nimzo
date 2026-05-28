@@ -2060,9 +2060,31 @@ async function openReplay(gameId, meta) {
     document.getElementById('rpEloBlack').textContent  = `ELO ${Math.round(meta.black_elo_before)} → ${Math.round(meta.black_elo_after)}`;
     document.getElementById('rpTitle').textContent     = `${meta.white_name} vs ${meta.black_name}  ·  ${meta.result}`;
 
+    // Build per-player quality summary
+    const wSum = {blunder:0, mistake:0, inaccuracy:0};
+    const bSum = {blunder:0, mistake:0, inaccuracy:0};
+    moves.forEach(m => {
+      const s = m.move_number % 2 === 1 ? wSum : bSum;
+      if (m.quality === 'blunder')    s.blunder++;
+      else if (m.quality === 'mistake')    s.mistake++;
+      else if (m.quality === 'inaccuracy') s.inaccuracy++;
+    });
+    function _summaryChips(s) {
+      const parts = [];
+      if (s.blunder)    parts.push(`<span class="rp-sum-chip blunder">${s.blunder}??</span>`);
+      if (s.mistake)    parts.push(`<span class="rp-sum-chip mistake">${s.mistake}?</span>`);
+      if (s.inaccuracy) parts.push(`<span class="rp-sum-chip inaccuracy">${s.inaccuracy}?!</span>`);
+      return parts.join('') || '<span class="rp-sum-chip clean">clean</span>';
+    }
+    const summaryHtml = `<div class="rp-summary">
+      <span class="rp-sum-label">${escHtml(meta.white_name)}</span>${_summaryChips(wSum)}
+      <span class="rp-sum-sep">·</span>
+      <span class="rp-sum-label">${escHtml(meta.black_name)}</span>${_summaryChips(bSum)}
+    </div>`;
+
     // Build move list
     const list = document.getElementById('rpMoveList');
-    let listHtml = `<div class="rp-move-item" data-idx="0" onclick="rpGo(0)" style="color:var(--text-dim);font-style:italic">
+    let listHtml = summaryHtml + `<div class="rp-move-item" data-idx="0" onclick="rpGo(0)" style="color:var(--text-dim);font-style:italic">
       <span class="rp-move-num"></span><span class="rp-move-san">start</span>
     </div>`;
     moves.forEach((m, i) => {
@@ -2072,17 +2094,20 @@ async function openReplay(gameId, meta) {
       const color    = QUALITY_COLOR[m.quality] || 'var(--text)';
       const latency  = (m.elapsed_ms != null && !m.timed_out)
         ? `<span class="rp-elapsed">${(m.elapsed_ms/1000).toFixed(1)}s</span>` : '';
+      const evalBadge = m.score_cp != null
+        ? `<span class="rp-eval-badge">${m.score_cp > 0 ? '+' : ''}${(m.score_cp/100).toFixed(2)}</span>` : '';
       listHtml += `<div class="rp-move-item" data-idx="${i+1}" onclick="rpGo(${i+1})">
         <span class="rp-move-num">${numLabel}</span>
         <span class="rp-move-san" style="color:${color}">${m.move_san}${glyph}</span>
         <span class="rp-move-qual" style="color:${color}">${glyph}</span>
-        ${latency}
+        ${latency}${evalBadge}
       </div>`;
     });
     list.innerHTML = listHtml;
 
     document.getElementById('replayModal').classList.add('show');
     rpRender();
+    rpRenderEvalChart();
   } catch(e) { console.error('Replay load failed', e); }
 }
 
@@ -2508,6 +2533,9 @@ function rpRender() {
   // Update autoplay button label
   const playBtn = document.getElementById('rpPlay');
   if (playBtn) playBtn.textContent = _rpAutoplayTimer ? '⏸' : '▶';
+
+  // Update eval chart cursor
+  rpRenderEvalChart();
 }
 
 function rpDrawBoard(fen, lastUci) {
@@ -2524,6 +2552,71 @@ function rpDrawBoard(fen, lastUci) {
 
   // Refresh captured-pieces graveyards for replay
   renderGraveyards(fen, { white: 'rpGraveyardWhite', black: 'rpGraveyardBlack' });
+}
+
+// ── Replay eval chart ─────────────────────────────────────────────────────
+function rpRenderEvalChart() {
+  const el = document.getElementById('rpEvalChart');
+  if (!el) return;
+  const { moves, cursor } = replay;
+  const hasEval = moves.some(m => m.score_cp != null);
+  if (!hasEval || moves.length < 2) { el.style.display = 'none'; return; }
+  el.style.display = '';
+
+  const W    = el.clientWidth || 240;
+  const H    = 44;
+  const pad  = 2;
+  const MAX  = 600;   // clamp at ±6 pawns
+
+  // Index 0 = start (eval 0), index i+1 = after move i
+  const rawEvals = [0, ...moves.map(m => m.score_cp)];
+  // Forward-fill nulls from previous known value
+  for (let i = 1; i < rawEvals.length; i++) {
+    if (rawEvals[i] == null) rawEvals[i] = rawEvals[i - 1] ?? 0;
+  }
+  const n = rawEvals.length;
+
+  const px = i => pad + (i / (n - 1)) * (W - pad * 2);
+  const py = v => {
+    const c = Math.max(-MAX, Math.min(MAX, v));
+    return pad + (1 - (c + MAX) / (2 * MAX)) * (H - pad * 2);
+  };
+  const mid = py(0);
+
+  // White-advantage fill (above midline) and black-advantage fill (below)
+  const whiteD = `M ${px(0).toFixed(1)},${mid.toFixed(1)} ` +
+    rawEvals.map((v, i) => `L ${px(i).toFixed(1)},${Math.min(py(v), mid).toFixed(1)}`).join(' ') +
+    ` L ${px(n - 1).toFixed(1)},${mid.toFixed(1)} Z`;
+  const blackD = `M ${px(0).toFixed(1)},${mid.toFixed(1)} ` +
+    rawEvals.map((v, i) => `L ${px(i).toFixed(1)},${Math.max(py(v), mid).toFixed(1)}`).join(' ') +
+    ` L ${px(n - 1).toFixed(1)},${mid.toFixed(1)} Z`;
+
+  const pts = rawEvals.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+
+  // Cursor vertical line
+  const cIdx = Math.min(cursor, n - 1);
+  const cx   = px(cIdx).toFixed(1);
+
+  // Clickable transparent rects — one per inter-move segment
+  const stepW = n > 1 ? (W - pad * 2) / (n - 1) : W;
+  const clicks = rawEvals.map((_, i) => {
+    const x = (px(i) - stepW / 2).toFixed(1);
+    return `<rect x="${x}" y="${pad}" width="${stepW.toFixed(1)}" height="${H - pad * 2}"
+              fill="transparent" style="cursor:pointer" onclick="rpGo(${i})"/>`;
+  }).join('');
+
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="display:block;width:100%">
+    <rect x="${pad}" y="${pad}" width="${W - pad * 2}" height="${H - pad * 2}" fill="var(--bg-sidebar)" rx="2"/>
+    <path d="${whiteD}" fill="rgba(220,220,220,0.18)"/>
+    <path d="${blackD}" fill="rgba(20,20,20,0.40)"/>
+    <polyline points="${pts}" fill="none" stroke="var(--text-mid)" stroke-width="1"
+              stroke-linejoin="round" stroke-linecap="round"/>
+    <line x1="${pad}" y1="${mid.toFixed(1)}" x2="${W - pad}" y2="${mid.toFixed(1)}"
+          stroke="var(--border)" stroke-width="0.5" stroke-dasharray="2,2"/>
+    <line x1="${cx}" y1="${pad}" x2="${cx}" y2="${H - pad}"
+          stroke="var(--gold)" stroke-width="1.5" opacity="0.85"/>
+    ${clicks}
+  </svg>`;
 }
 
 // Keyboard navigation for replay
