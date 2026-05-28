@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from contextlib import contextmanager
-from unittest.mock import patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock
 
 import chess
 
@@ -153,7 +153,7 @@ class TestPlayGameOpeningPrefix:
         sf = _fake_stockfish()
 
         with patch.object(_arena, "broadcast", side_effect=fake_broadcast), \
-             patch.object(_arena._pause_event, "wait", new=asyncio.coroutine(lambda: None)), \
+             patch.object(_arena._pause_event, "wait", new=AsyncMock(return_value=None)), \
              patch.dict(_arena._stop, {"requested": False}), \
              patch.dict(_arena._mode, {"headless": True}):
             try:
@@ -184,7 +184,7 @@ class TestPlayGameOpeningPrefix:
         sf = _fake_stockfish()
 
         with patch.object(_arena, "broadcast", side_effect=fake_broadcast), \
-             patch.object(_arena._pause_event, "wait", new=asyncio.coroutine(lambda: None)), \
+             patch.object(_arena._pause_event, "wait", new=AsyncMock(return_value=None)), \
              patch.dict(_arena._stop, {"requested": True}), \
              patch.dict(_arena._mode, {"headless": True}):
             try:
@@ -220,7 +220,7 @@ class TestPlayGameOpeningPrefix:
         bad_pgn = "1. e4 e5 2. Ke2 Ke7 3. Kxe5"  # Kxe5 captures own piece — illegal
         # Only e4, e5, Ke2, Ke7 should be pushed; Kxe5 is illegal
         with patch.object(_arena, "broadcast", side_effect=fake_broadcast), \
-             patch.object(_arena._pause_event, "wait", new=asyncio.coroutine(lambda: None)), \
+             patch.object(_arena._pause_event, "wait", new=AsyncMock(return_value=None)), \
              patch.dict(_arena._stop, {"requested": False}), \
              patch.dict(_arena._mode, {"headless": True}):
             try:
@@ -248,7 +248,7 @@ class TestPlayGameOpeningPrefix:
         sf = _fake_stockfish()
 
         with patch.object(_arena, "broadcast", side_effect=fake_broadcast), \
-             patch.object(_arena._pause_event, "wait", new=asyncio.coroutine(lambda: None)), \
+             patch.object(_arena._pause_event, "wait", new=AsyncMock(return_value=None)), \
              patch.dict(_arena._stop, {"requested": False}), \
              patch.dict(_arena._mode, {"headless": True}):
             try:
@@ -275,7 +275,7 @@ class TestPlayGameOpeningPrefix:
         sf = _fake_stockfish()
 
         with patch.object(_arena, "broadcast", side_effect=fake_broadcast), \
-             patch.object(_arena._pause_event, "wait", new=asyncio.coroutine(lambda: None)), \
+             patch.object(_arena._pause_event, "wait", new=AsyncMock(return_value=None)), \
              patch.dict(_arena._stop, {"requested": False}), \
              patch.dict(_arena._mode, {"headless": True}):
             try:
