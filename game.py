@@ -422,7 +422,11 @@ async def play_game(
         # Score from White's perspective (for centipawn graph).
         # candidates are scored from the current player's POV, so negate for Black.
         was_white    = board.turn == chess.WHITE
-        chosen_score = next((s for m, s in candidates if m == chosen_move), candidates[0][1])
+        chosen_score = next((s for m, s in candidates if m == chosen_move), None)
+        if chosen_score is None:
+            # Move not in candidate list (blind mode) — query Stockfish directly
+            # so the eval chart reflects the actual position rather than top-pick.
+            chosen_score = stockfish.score_move(board, chosen_move)
         score_cp_white = chosen_score if was_white else (
             -chosen_score if chosen_score is not None else None
         )

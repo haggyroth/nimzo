@@ -183,7 +183,7 @@ async def api_start(config: TournamentStartConfig):
                     opening_pgn=config.opening_pgn,
                 )
             except Exception as exc:
-                logger.info("Tournament ended: %s", type(exc).__name__)
+                logger.warning("Tournament ended: %s: %s", type(exc).__name__, exc)
             finally:
                 _st._stop["requested"] = False
                 _st._pause_event.set()
@@ -228,7 +228,7 @@ async def api_start(config: TournamentStartConfig):
         try:
             await run_tournament(white, black, config.games, tutor, judge, adaptive_difficulty=config.adaptive_difficulty, max_moves=config.max_moves, opening_pgn=config.opening_pgn)
         except Exception as exc:
-            logger.info("Tournament ended: %s", type(exc).__name__)
+            logger.warning("Tournament ended: %s: %s", type(exc).__name__, exc)
         finally:
             _st._stop["requested"] = False
             _st._pause_event.set()

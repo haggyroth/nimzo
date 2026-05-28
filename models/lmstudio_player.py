@@ -148,7 +148,16 @@ class LMStudioPlayer(ChessPlayer):
         move_match      = re.search(r"MOVE:\s*([a-h][1-8][a-h][1-8][qrbn]?)", clean, re.IGNORECASE)
         reasoning_match = re.search(r"REASONING:\s*(.+?)(?:\n\n|\Z)", clean, re.IGNORECASE | re.DOTALL)
 
-        reasoning = reasoning_match.group(1).strip() if reasoning_match else "(no reasoning)"
+        if reasoning_match:
+            reasoning = reasoning_match.group(1).strip()
+        elif not candidates:
+            # Blind mode: model may write free-form prose instead of a tagged
+            # REASONING: line.  Strip the MOVE line and use whatever's left.
+            leftover = re.sub(r"MOVE:\s*[a-h][1-8][a-h][1-8][qrbn]?\s*",
+                              "", clean, flags=re.IGNORECASE).strip()
+            reasoning = leftover[:300] if len(leftover) > 10 else ""
+        else:
+            reasoning = "(no reasoning)"
 
         # 1. Explicit MOVE field — highest confidence
         if move_match:
