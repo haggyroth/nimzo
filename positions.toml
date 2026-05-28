@@ -1,0 +1,69 @@
+# positions.toml — Nimzo puzzle gauntlet positions
+#
+# Each [[puzzle]] entry describes one tactical position.
+# fen          : FEN string for the position to solve
+# solution_uci : the correct (best) first move in UCI notation
+# description  : human-readable label shown in the UI and results
+#
+# To use a custom puzzle set, copy this file and point the gauntlet at it
+# via the UI or via puzzles_file = "my_puzzles.toml" in your TOML config.
+
+# ── Mate in 1 ────────────────────────────────────────────────────────────
+
+[[puzzle]]
+fen         = "r1bqkb1r/pppp1Qpp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 4"
+solution_uci = "e8d8"
+description  = "Legall's mate threat — king must flee"
+
+[[puzzle]]
+fen         = "6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1"
+solution_uci = "e1e8"
+description  = "Back rank mate in 1"
+
+[[puzzle]]
+fen         = "r5k1/5ppp/8/8/8/8/1B6/6K1 w - - 0 1"
+solution_uci = "b2f6"
+description  = "Bishop delivers checkmate"
+
+# ── Mate in 2 ────────────────────────────────────────────────────────────
+
+[[puzzle]]
+fen         = "r1b1kb1r/pppp1ppp/2n5/4p3/2B1P1nq/2NP4/PPP2PPP/R1BQK2R w KQkq - 0 6"
+solution_uci = "d1f3"
+description  = "Defend and counter — White blocks the queen check"
+
+[[puzzle]]
+fen         = "6k1/pp3ppp/8/8/8/8/PP3PPP/3R2K1 w - - 0 1"
+solution_uci = "d1d8"
+description  = "Rook to 8th rank forces mate next"
+
+# ── Tactical fork ────────────────────────────────────────────────────────
+
+[[puzzle]]
+fen         = "r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq d3 0 3"
+solution_uci = "e5d4"
+description  = "Pawn captures in the center — wins material"
+
+[[puzzle]]
+fen         = "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R w KQkq - 2 5"
+solution_uci = "c4b5"
+description  = "Pin the knight — bishop pins to king"
+
+# ── Endgame technique ────────────────────────────────────────────────────
+
+[[puzzle]]
+fen         = "8/8/3k4/8/3K4/8/3P4/8 w - - 0 1"
+solution_uci = "d4e5"
+description  = "Key square opposition — king steps to escort the pawn"
+
+[[puzzle]]
+fen         = "8/8/8/3k4/8/3K4/8/3R4 w - - 0 1"
+solution_uci = "d1d5"
+description  = "Rook checks to cut off the king"
+
+# ── Tactic — win material ────────────────────────────────────────────────
+
+[[puzzle]]
+fen         = "rnbqkbnr/ppp2ppp/8/3pp3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq e6 0 3"
+solution_uci = "f3e5"
+description  = "Knight fork — captures the undefended pawn"

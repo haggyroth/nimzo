@@ -1472,3 +1472,42 @@
       opacity: .8;
       margin-left: 4px;
     }
+
+    /* ── Puzzle gauntlet (Phase 24) ──────────────────────────────── */
+    .puzzle-score-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9px;
+      margin-top: 4px;
+    }
+    .puzzle-score-table th {
+      text-align: left;
+      color: var(--text-dim);
+      font-weight: 400;
+      padding: 2px 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .puzzle-score-table td {
+      padding: 3px 4px;
+      color: var(--text);
+    }
+    .puzzle-score-table tr.puzzle-winner td {
+      color: var(--gold);
+      font-weight: 600;
+    }
+    .puzzle-hist-entry {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 9px;
+    }
+    .puzzle-hist-head {
+      color: var(--text-mid);
+      margin-bottom: 3px;
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+    }
+    .puzzle-hist-score {
+      color: var(--text);
+      padding: 1px 0;
+    }

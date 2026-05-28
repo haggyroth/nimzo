@@ -93,6 +93,32 @@ CREATE TABLE IF NOT EXISTS tournament_games (
     black_model_id  TEXT
 );
 
+CREATE TABLE IF NOT EXISTS puzzle_gauntlets (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    status          TEXT DEFAULT 'running',   -- 'running' | 'finished' | 'aborted'
+    player_model_ids TEXT,                    -- JSON list of model_ids
+    puzzle_count    INTEGER DEFAULT 0,
+    puzzles_file    TEXT DEFAULT 'positions.toml',
+    candidate_count INTEGER DEFAULT 5,
+    started_at      TEXT DEFAULT (datetime('now')),
+    finished_at     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS puzzle_results (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    gauntlet_id     INTEGER REFERENCES puzzle_gauntlets(id),
+    player_id       INTEGER REFERENCES players(id),
+    puzzle_index    INTEGER,    -- 0-based
+    puzzle_fen      TEXT,
+    solution_uci    TEXT,
+    chosen_uci      TEXT,
+    solved          INTEGER,    -- 1 = correct, 0 = wrong
+    candidate_rank  INTEGER,    -- rank of chosen move in candidate list (0 = not in list)
+    elapsed_ms      INTEGER,
+    reasoning       TEXT,
+    played_at       TEXT DEFAULT (datetime('now'))
+);
+
 -- Indexes on frequently-queried foreign keys and sort columns (MN-3).
 -- IF NOT EXISTS makes these safe to add to an existing database.
 CREATE INDEX IF NOT EXISTS idx_moves_game      ON moves(game_id);
@@ -102,6 +128,8 @@ CREATE INDEX IF NOT EXISTS idx_games_black     ON games(black_player_id);
 CREATE INDEX IF NOT EXISTS idx_games_played    ON games(played_at);
 CREATE INDEX IF NOT EXISTS idx_lessons_player  ON lessons(player_id);
 CREATE INDEX IF NOT EXISTS idx_tgames_tour     ON tournament_games(tournament_id);
+CREATE INDEX IF NOT EXISTS idx_presults_gauntlet ON puzzle_results(gauntlet_id);
+CREATE INDEX IF NOT EXISTS idx_presults_player   ON puzzle_results(player_id);
 """
 
 
@@ -204,6 +232,32 @@ def _migrate(conn: sqlite3.Connection):
             white_model_id  TEXT,
             black_model_id  TEXT
         );
+        CREATE TABLE IF NOT EXISTS puzzle_gauntlets (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            status          TEXT DEFAULT 'running',
+            player_model_ids TEXT,
+            puzzle_count    INTEGER DEFAULT 0,
+            puzzles_file    TEXT DEFAULT 'positions.toml',
+            candidate_count INTEGER DEFAULT 5,
+            started_at      TEXT DEFAULT (datetime('now')),
+            finished_at     TEXT
+        );
+        CREATE TABLE IF NOT EXISTS puzzle_results (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            gauntlet_id     INTEGER REFERENCES puzzle_gauntlets(id),
+            player_id       INTEGER REFERENCES players(id),
+            puzzle_index    INTEGER,
+            puzzle_fen      TEXT,
+            solution_uci    TEXT,
+            chosen_uci      TEXT,
+            solved          INTEGER,
+            candidate_rank  INTEGER,
+            elapsed_ms      INTEGER,
+            reasoning       TEXT,
+            played_at       TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_presults_gauntlet ON puzzle_results(gauntlet_id);
+        CREATE INDEX IF NOT EXISTS idx_presults_player   ON puzzle_results(player_id);
     """)
 
 
@@ -1385,3 +1439,149 @@ def get_tournament_history(limit: int = 20) -> list[dict]:
             rec["game_count"] = game_counts.get(r["id"], 0)
             result.append(rec)
         return result
+
+
+# ── Puzzle Gauntlets ──────────────────────────────────────────────────────
+
+def create_puzzle_gauntlet(
+    player_model_ids: list[str],
+    puzzle_count: int,
+    puzzles_file: str = "positions.toml",
+    candidate_count: int = 5,
+) -> int:
+    """Create a new puzzle gauntlet record; returns the new gauntlet id."""
+    import json
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO puzzle_gauntlets
+                (player_model_ids, puzzle_count, puzzles_file, candidate_count, status)
+            VALUES (?, ?, ?, ?, 'running')
+            """,
+            (json.dumps(player_model_ids), puzzle_count, puzzles_file, candidate_count),
+        )
+        row = conn.execute("SELECT last_insert_rowid() AS id").fetchone()
+        return row["id"]
+
+
+def finish_puzzle_gauntlet(gauntlet_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE puzzle_gauntlets
+            SET status = 'finished', finished_at = datetime('now')
+            WHERE id = ?
+            """,
+            (gauntlet_id,),
+        )
+
+
+def abort_puzzle_gauntlet(gauntlet_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE puzzle_gauntlets SET status = 'aborted', finished_at = datetime('now') WHERE id = ?",
+            (gauntlet_id,),
+        )
+
+
+def record_puzzle_result(
+    gauntlet_id: int,
+    player_id: int,
+    puzzle_index: int,
+    puzzle_fen: str,
+    solution_uci: str,
+    chosen_uci: str,
+    solved: bool,
+    candidate_rank: int,
+    elapsed_ms: int,
+    reasoning: str,
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO puzzle_results
+                (gauntlet_id, player_id, puzzle_index, puzzle_fen, solution_uci,
+                 chosen_uci, solved, candidate_rank, elapsed_ms, reasoning)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (gauntlet_id, player_id, puzzle_index, puzzle_fen, solution_uci,
+             chosen_uci, int(solved), candidate_rank, elapsed_ms, reasoning),
+        )
+
+
+def get_puzzle_gauntlets(limit: int = 20) -> list[dict]:
+    """Return recent puzzle gauntlets with per-player aggregate scores."""
+    import json
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, status, player_model_ids, puzzle_count, puzzles_file,
+                   candidate_count, started_at, finished_at
+            FROM puzzle_gauntlets
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+        if not rows:
+            return []
+
+        gauntlet_ids = [r["id"] for r in rows]
+        placeholders = ",".join("?" * len(gauntlet_ids))
+
+        # Per-player aggregate scores across all gauntlets in one query
+        score_rows = conn.execute(
+            f"""
+            SELECT pr.gauntlet_id, p.model_id, p.name,
+                   COUNT(*) AS total,
+                   SUM(pr.solved) AS solved,
+                   AVG(CASE WHEN pr.candidate_rank > 0 THEN pr.candidate_rank END) AS avg_rank
+            FROM puzzle_results pr
+            JOIN players p ON pr.player_id = p.id
+            WHERE pr.gauntlet_id IN ({placeholders})
+            GROUP BY pr.gauntlet_id, p.model_id
+            """,
+            gauntlet_ids,
+        ).fetchall()
+
+        scores_by_gauntlet: dict[int, list[dict]] = {}
+        for sr in score_rows:
+            gid = sr["gauntlet_id"]
+            if gid not in scores_by_gauntlet:
+                scores_by_gauntlet[gid] = []
+            scores_by_gauntlet[gid].append({
+                "model_id":  sr["model_id"],
+                "name":      sr["name"],
+                "solved":    sr["solved"] or 0,
+                "total":     sr["total"],
+                "fraction":  round((sr["solved"] or 0) / sr["total"], 3) if sr["total"] else 0.0,
+                "avg_rank":  round(sr["avg_rank"], 2) if sr["avg_rank"] is not None else None,
+            })
+
+        result = []
+        for r in rows:
+            rec = dict(r)
+            rec["player_model_ids"] = json.loads(rec.get("player_model_ids") or "[]")
+            rec["scores"] = scores_by_gauntlet.get(r["id"], [])
+            result.append(rec)
+        return result
+
+
+def get_puzzle_gauntlet_results(gauntlet_id: int) -> list[dict]:
+    """Return per-puzzle per-player results for a single gauntlet."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT pr.puzzle_index, pr.puzzle_fen, pr.solution_uci,
+                   p.model_id, p.name,
+                   pr.chosen_uci, pr.solved, pr.candidate_rank,
+                   pr.elapsed_ms, pr.reasoning
+            FROM puzzle_results pr
+            JOIN players p ON pr.player_id = p.id
+            WHERE pr.gauntlet_id = ?
+            ORDER BY pr.puzzle_index ASC, p.name ASC
+            """,
+            (gauntlet_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]

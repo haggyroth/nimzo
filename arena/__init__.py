@@ -39,10 +39,12 @@ from arena.app import app          # noqa: E402
 # ── 3. Routers — tournament.py transitively imports game.py ──────────────
 from arena.routes import games, model_api, stats   # noqa: E402
 from arena.routes import tournament as _tr         # noqa: E402
+from arena.routes import puzzle as _pz             # noqa: E402
 app.include_router(games.router)
 app.include_router(model_api.router)
 app.include_router(stats.router)
 app.include_router(_tr.router)
+app.include_router(_pz.router)
 
 # ── 4. Re-exports that tests use ──────────────────────────────────────────
 from game import play_game                           # noqa: E402, F401
@@ -51,4 +53,6 @@ from arena.models import (                           # noqa: E402, F401
     PlayerSpec,
     TournamentStartConfig,
     HumanMoveRequest,
+    PuzzleGauntletConfig,
 )
+from game import run_puzzle_gauntlet as run_puzzle_gauntlet   # noqa: E402, F401

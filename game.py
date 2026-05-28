@@ -40,6 +40,7 @@ from models.anthropic_player import AnthropicPlayer
 from models.lmstudio_player import LMStudioPlayer
 from models.human_player import HumanPlayer
 from providers import CLOUD_PROVIDERS
+from puzzle_loader import load_puzzles as _load_puzzles
 from analysis import (
     TutorConfig,
     JudgeConfig,
@@ -917,6 +918,273 @@ async def run_tournament(
 
     _arena._state["status"] = "idle"
     await _arena.broadcast({"type": "tournament_status", **_arena._state})
+
+
+# ── Puzzle gauntlet runner ────────────────────────────────────────────────
+
+
+async def run_puzzle_gauntlet(
+    players: list[ChessPlayer],
+    stockfish: StockfishEngine,
+    puzzles_file: str = "positions.toml",
+    candidate_count: int = 5,
+    move_timeout: int = 30,
+) -> dict:
+    """
+    Run a puzzle gauntlet: each player in *players* attempts every puzzle.
+
+    All players see the same board position and the same Stockfish candidate
+    list — no ELO noise.  Score is fraction of puzzles solved (correct first
+    move chosen) and average candidate rank on near-misses.
+
+    Broadcasts:
+      puzzle_gauntlet_start — {gauntlet_id, player_names, puzzle_count}
+      puzzle_thinking       — {gauntlet_id, player, puzzle_index, description, fen, candidates}
+      puzzle_result         — {gauntlet_id, player, puzzle_index, solved, chosen_uci,
+                               solution_uci, candidate_rank, elapsed_ms}
+      puzzle_gauntlet_over  — {gauntlet_id, scores: [{player, model_id, solved, total,
+                               fraction, avg_rank}]}
+
+    Returns the gauntlet_id and the final scores dict.
+    """
+    # ── Load puzzles ──────────────────────────────────────────────────────
+    try:
+        puzzles = _load_puzzles(puzzles_file)
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        logger.error("Puzzle gauntlet: cannot load puzzles — %s", exc)
+        raise
+
+    puzzle_count = len(puzzles)
+    loop = asyncio.get_running_loop()
+
+    # ── Register players + create DB record ───────────────────────────────
+    for player in players:
+        await asyncio.to_thread(
+            database.upsert_player,
+            player.config.model_id,
+            player.config.name,
+            player.config.backend,
+        )
+
+    player_model_ids = [p.config.model_id for p in players]
+    gauntlet_id = await asyncio.to_thread(
+        database.create_puzzle_gauntlet,
+        player_model_ids,
+        puzzle_count,
+        puzzles_file,
+        candidate_count,
+    )
+
+    # Map model_id → player_id (needed for DB writes)
+    def _get_player_ids() -> dict[str, int]:
+        from db import get_conn
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT model_id, id FROM players WHERE model_id IN ({})".format(
+                    ",".join("?" * len(player_model_ids))
+                ),
+                player_model_ids,
+            ).fetchall()
+        return {r["model_id"]: r["id"] for r in rows}
+
+    player_db_ids = await asyncio.to_thread(_get_player_ids)
+
+    # ── Update arena state ────────────────────────────────────────────────
+    _arena._state.update({
+        "status":       "puzzle",
+        "gauntlet_id":  gauntlet_id,
+        "puzzle_total": puzzle_count,
+        "puzzle_index": 0,
+    })
+
+    await _arena.broadcast({
+        "type":         "puzzle_gauntlet_start",
+        "gauntlet_id":  gauntlet_id,
+        "player_names": [p.config.name for p in players],
+        "puzzle_count": puzzle_count,
+    })
+
+    # Running score accumulators: {model_id: {solved, total, rank_sum, rank_count}}
+    scores: dict[str, dict] = {
+        p.config.model_id: {"solved": 0, "total": 0, "rank_sum": 0, "rank_count": 0}
+        for p in players
+    }
+
+    # ── Main loop: iterate puzzles then players ───────────────────────────
+    try:
+        for puzzle_idx, puzzle in enumerate(puzzles):
+            if _arena._stop["requested"]:
+                raise _arena.TournamentAborted()
+
+            await _arena._pause_event.wait()
+
+            fen          = puzzle["fen"]
+            solution_uci = puzzle["solution_uci"]
+            description  = puzzle["description"]
+
+            board = chess.Board(fen)
+
+            # Compute candidates ONCE and share across all players
+            try:
+                candidates = await loop.run_in_executor(
+                    None, stockfish.get_candidates, board, candidate_count
+                )
+            except Exception:
+                raise _arena.TournamentAborted() from None
+
+            _arena._state["puzzle_index"] = puzzle_idx
+
+            # Candidate list formatted for broadcasting / prompt building
+            candidates_json = [
+                {"uci": m.uci(), "san": board.san(m), "score_cp": s}
+                for m, s in candidates
+            ]
+            # Set of candidate UCIs for rank lookup
+            candidate_uci_rank = {m.uci(): rank + 1 for rank, (m, _) in enumerate(candidates)}
+
+            for player in players:
+                if _arena._stop["requested"]:
+                    raise _arena.TournamentAborted()
+
+                await _arena.broadcast({
+                    "type":          "puzzle_thinking",
+                    "gauntlet_id":   gauntlet_id,
+                    "player":        player.config.name,
+                    "puzzle_index":  puzzle_idx,
+                    "description":   description,
+                    "fen":           fen,
+                    "candidates":    candidates_json,
+                })
+
+                timed_out = False
+                t_start   = loop.time()
+                timeout_secs = move_timeout or None
+                _lock = _get_model_lock(
+                    player.config.base_url or "",
+                    player.config.model_id,
+                )
+                try:
+                    async with _lock:
+                        coro = loop.run_in_executor(
+                            None, player.choose_move, board, candidates, ""
+                        )
+                        decision = await asyncio.wait_for(coro, timeout=timeout_secs)
+                except asyncio.TimeoutError:
+                    logger.warning("%s timed out on puzzle %d", player.config.name, puzzle_idx)
+                    decision = MoveDecision(
+                        move_uci=candidates[0][0].uci() if candidates else "",
+                        reasoning=f"(timed out after {timeout_secs}s)",
+                        candidate_rank=1,
+                        raw_response="",
+                    )
+                    timed_out = True
+                except Exception as exc:
+                    if _arena._stop["requested"]:
+                        raise _arena.TournamentAborted()
+                    logger.warning("%s error on puzzle %d: %s", player.config.name, puzzle_idx, exc)
+                    decision = MoveDecision(
+                        move_uci=candidates[0][0].uci() if candidates else "",
+                        reasoning=f"(error: {exc})",
+                        candidate_rank=1,
+                        raw_response="",
+                    )
+
+                elapsed_ms = int((loop.time() - t_start) * 1000)
+                chosen_uci = decision.move_uci
+                solved     = (chosen_uci == solution_uci)
+                cand_rank  = candidate_uci_rank.get(chosen_uci, 0)
+
+                # Accumulate scores
+                sc = scores[player.config.model_id]
+                sc["total"] += 1
+                if solved:
+                    sc["solved"] += 1
+                if cand_rank > 0:
+                    sc["rank_sum"]   += cand_rank
+                    sc["rank_count"] += 1
+
+                await _arena.broadcast({
+                    "type":           "puzzle_result",
+                    "gauntlet_id":    gauntlet_id,
+                    "player":         player.config.name,
+                    "model_id":       player.config.model_id,
+                    "puzzle_index":   puzzle_idx,
+                    "description":    description,
+                    "fen":            fen,
+                    "solved":         solved,
+                    "chosen_uci":     chosen_uci,
+                    "solution_uci":   solution_uci,
+                    "candidate_rank": cand_rank,
+                    "elapsed_ms":     elapsed_ms,
+                    "timed_out":      timed_out,
+                })
+
+                # Persist result
+                db_player_id = player_db_ids.get(player.config.model_id)
+                if db_player_id:
+                    await asyncio.to_thread(
+                        database.record_puzzle_result,
+                        gauntlet_id,
+                        db_player_id,
+                        puzzle_idx,
+                        fen,
+                        solution_uci,
+                        chosen_uci,
+                        solved,
+                        cand_rank,
+                        elapsed_ms,
+                        decision.reasoning,
+                    )
+
+    except _arena.TournamentAborted:
+        await asyncio.to_thread(database.abort_puzzle_gauntlet, gauntlet_id)
+        _arena._state["status"] = "idle"
+        await _arena.broadcast({"type": "tournament_status", **_arena._state})
+        raise
+
+    # ── Finish: compute final scores and broadcast ────────────────────────
+    await asyncio.to_thread(database.finish_puzzle_gauntlet, gauntlet_id)
+
+    final_scores = [
+        {
+            "player":   p.config.name,
+            "model_id": p.config.model_id,
+            "solved":   scores[p.config.model_id]["solved"],
+            "total":    scores[p.config.model_id]["total"],
+            "fraction": round(
+                scores[p.config.model_id]["solved"] / scores[p.config.model_id]["total"], 3
+            ) if scores[p.config.model_id]["total"] else 0.0,
+            "avg_rank": round(
+                scores[p.config.model_id]["rank_sum"] / scores[p.config.model_id]["rank_count"], 2
+            ) if scores[p.config.model_id]["rank_count"] else None,
+        }
+        for p in players
+    ]
+    # Sort by fraction desc, then avg_rank asc (lower is better) for the scoreboard
+    final_scores.sort(key=lambda s: (-s["fraction"], s["avg_rank"] or 99))
+
+    await _arena.broadcast({
+        "type":        "puzzle_gauntlet_over",
+        "gauntlet_id": gauntlet_id,
+        "scores":      final_scores,
+    })
+
+    logger.info(
+        "Puzzle gauntlet #%d complete — %d puzzles, %d players",
+        gauntlet_id, puzzle_count, len(players),
+    )
+    for s in final_scores:
+        logger.info(
+            "  %s: %d/%d solved (%.0f%%), avg rank %.2f",
+            s["player"], s["solved"], s["total"],
+            s["fraction"] * 100,
+            s["avg_rank"] if s["avg_rank"] is not None else 0,
+        )
+
+    _arena._state["status"] = "idle"
+    await _arena.broadcast({"type": "tournament_status", **_arena._state})
+
+    return {"gauntlet_id": gauntlet_id, "scores": final_scores}
     logger.info("Tournament complete!")
 
 

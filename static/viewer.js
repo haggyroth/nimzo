@@ -844,8 +844,14 @@ function setMode(mode) {
   currentMode = mode;
   document.getElementById('tabMatch').classList.toggle('active', mode==='match');
   document.getElementById('tabTournament').classList.toggle('active', mode==='tournament');
+  document.getElementById('tabPuzzle').classList.toggle('active', mode==='puzzle');
   document.getElementById('matchForm').style.display      = mode==='match' ? '' : 'none';
   document.getElementById('tournamentForm').style.display = mode==='tournament' ? '' : 'none';
+  document.getElementById('puzzleForm').style.display     = mode==='puzzle' ? '' : 'none';
+  if (mode === 'puzzle') {
+    document.getElementById('puzzleHistorySection').style.display = '';
+    loadPuzzleHistory();
+  }
 }
 
 // ── Tournament player slots ────────────────────────────────────────────────
@@ -1713,10 +1719,14 @@ function dispatch(msg) {
       case 'lessons':           onLessons(d);          break;
       case 'lesson_generating': onLessonGenerating(d); break;
       case 'lessons_saved':     onLessonsSaved();      break;
-      case 'tournament_status':  onTournamentStatus(d);  break;
-      case 'standings_update':   onStandingsUpdate(d);   break;
-      case 'tournament_complete':onTournamentComplete(d); break;
-      case 'state':              onInitialState(d);       break;
+      case 'tournament_status':      onTournamentStatus(d);      break;
+      case 'standings_update':       onStandingsUpdate(d);       break;
+      case 'tournament_complete':    onTournamentComplete(d);    break;
+      case 'state':                  onInitialState(d);          break;
+      case 'puzzle_gauntlet_start':  onPuzzleGauntletStart(d);  break;
+      case 'puzzle_thinking':        onPuzzleThinking(d);        break;
+      case 'puzzle_result':          onPuzzleResult(d);          break;
+      case 'puzzle_gauntlet_over':   onPuzzleGauntletOver(d);   break;
     }
   } catch(e) { console.warn('Bad WS message:', e); }
 }
@@ -2382,6 +2392,243 @@ buildUiThemeSwatches();
   loadHistory();
   loadTournamentHistory();
   setInterval(loadLeaderboard, 30000);
+
+  // ── Puzzle gauntlet ────────────────────────────────────────────────────
+
+  // Live score accumulator: {model_id: {name, solved, total}}
+  let puzzleScores = {};
+  let puzzlePlayers = [];  // [{id, name, backend, url, model, thinking}]
+  let puzzleNextId = 0;
+
+  function puzzleAddPlayer() {
+    const id = puzzleNextId++;
+    puzzlePlayers.push({ id, name: '', backend: 'lmstudio', url: DEFAULT_LMSTUDIO_URL, model: '', thinking: false });
+    renderPuzzlePlayers();
+  }
+
+  function puzzleRemovePlayer(id) {
+    puzzlePlayers = puzzlePlayers.filter(p => p.id !== id);
+    renderPuzzlePlayers();
+  }
+
+  function puzzleSync(id) {
+    const p = puzzlePlayers.find(p => p.id === id);
+    if (!p) return;
+    p.name     = (document.getElementById(`pzName_${id}`) || {}).value || '';
+    p.backend  = (document.getElementById(`pzBackend_${id}`) || {}).value || 'lmstudio';
+    p.url      = (document.getElementById(`pzUrl_${id}`) || {}).value || DEFAULT_LMSTUDIO_URL;
+    p.model    = (document.getElementById(`pzModel_${id}`) || {}).value || '';
+    p.thinking = (document.getElementById(`pzThinking_${id}`) || {}).checked || false;
+  }
+
+  function renderPuzzlePlayers() {
+    const container = document.getElementById('puzzlePlayerList');
+    if (!container) return;
+    container.innerHTML = '';
+    puzzlePlayers.forEach(p => {
+      const div = document.createElement('div');
+      div.className = 'trn-player-row';
+      div.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:9px;color:var(--text-dim)">Player</span>
+          <button class="trn-remove-btn" onclick="puzzleRemovePlayer(${p.id})">✕</button>
+        </div>
+        <input class="ctrl-input" id="pzName_${p.id}" placeholder="Display name" value="${p.name}" oninput="puzzleSync(${p.id})">
+        <select class="ctrl-select" id="pzBackend_${p.id}" onchange="puzzleSync(${p.id});onPzBackendChange(${p.id})">
+          <option value="lmstudio"${p.backend==='lmstudio'?' selected':''}>LM Studio</option>
+          <option value="anthropic"${p.backend==='anthropic'?' selected':''}>Anthropic</option>
+        </select>
+        <div class="url-row" id="pzUrlRow_${p.id}">
+          <input class="ctrl-input" id="pzUrl_${p.id}" placeholder="${DEFAULT_LMSTUDIO_URL}" value="${p.url}" oninput="puzzleSync(${p.id})">
+          <button class="fetch-btn" onclick="fetchPzModels(${p.id})" title="Load models">⟳</button>
+        </div>
+        <select class="ctrl-select" id="pzModel_${p.id}" onchange="puzzleSync(${p.id})"><option value="">— select model —</option></select>
+        <label class="toggle-row"><input type="checkbox" id="pzThinking_${p.id}"${p.thinking?' checked':''}> Extended thinking</label>
+      `;
+      container.appendChild(div);
+      if (p.backend === 'lmstudio') fetchPzModels(p.id);
+    });
+  }
+
+  function onPzBackendChange(id) {
+    const backend = (document.getElementById(`pzBackend_${id}`) || {}).value;
+    const urlRow  = document.getElementById(`pzUrlRow_${id}`);
+    if (urlRow) urlRow.style.display = backend === 'anthropic' ? 'none' : '';
+  }
+
+  async function fetchPzModels(id) {
+    const urlEl = document.getElementById(`pzUrl_${id}`);
+    const sel   = document.getElementById(`pzModel_${id}`);
+    if (!urlEl || !sel) return;
+    const url = urlEl.value || DEFAULT_LMSTUDIO_URL;
+    try {
+      const data = await fetch(`${API}/api/models?url=${encodeURIComponent(url)}`).then(r => r.json());
+      const models = (data.data || []).map(m => m.id).filter(Boolean);
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">— select model —</option>' +
+        models.map(m => `<option value="${m}"${m===cur?' selected':''}>${m}</option>`).join('');
+    } catch (_) {}
+  }
+
+  async function startPuzzleGauntlet() {
+    puzzlePlayers.forEach(p => puzzleSync(p.id));
+    if (puzzlePlayers.length === 0) { alert('Add at least one player.'); return; }
+    const missing = puzzlePlayers.filter(p => !p.model);
+    if (missing.length > 0) { alert('Select a model for every player.'); return; }
+
+    const cfg = {
+      players:         puzzlePlayers.map(p => ({
+        backend:  p.backend,
+        name:     p.name || extractModelName(p.model),
+        model_id: p.model,
+        url:      p.url,
+        thinking: p.thinking,
+      })),
+      candidate_count: parseInt(document.getElementById('puzzleCandidates').value) || 5,
+      puzzles_file:    document.getElementById('puzzleFile').value || 'positions.toml',
+      move_timeout:    parseInt(document.getElementById('puzzleTimeout').value) || 0,
+    };
+
+    const res = await fetch(`${API}/api/puzzle/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    }).then(r => r.json());
+
+    if (res.error) alert(res.error);
+  }
+
+  // ── Puzzle WebSocket handlers ─────────────────────────────────────────
+
+  function onPuzzleGauntletStart(d) {
+    puzzleScores = {};
+    (d.player_names || []).forEach(name => {
+      puzzleScores[name] = { name, solved: 0, total: 0 };
+    });
+
+    document.getElementById('setupForm').style.display = 'none';
+    document.getElementById('puzzleProgressView').style.display = '';
+    document.getElementById('puzzleScoreSection').style.display = '';
+    renderPuzzleScoreboard();
+
+    const badge = document.getElementById('tournamentBadge');
+    badge.textContent = 'Puzzle';
+    badge.className = 'ctrl-badge running';
+  }
+
+  function onPuzzleThinking(d) {
+    // Show the current puzzle on the board
+    if (d.fen && window._board) window._board.setPosition(d.fen);
+
+    const total = Object.values(puzzleScores).reduce((s, p) => Math.max(s, p.total), 0);
+    const count = d.puzzle_index + 1;
+    const pct   = Math.round((total / (count * Object.keys(puzzleScores).length || 1)) * 100);
+
+    const progressText = document.getElementById('puzzleProgressText');
+    const progressPct  = document.getElementById('puzzleProgressPct');
+    const progressFill = document.getElementById('puzzleProgressFill');
+    const descEl       = document.getElementById('puzzleCurrentDesc');
+
+    if (progressText) progressText.textContent = `Puzzle ${d.puzzle_index + 1}`;
+    if (progressPct)  progressPct.textContent  = `${d.player} thinking…`;
+    if (progressFill) progressFill.style.width  = `${pct}%`;
+    if (descEl)       descEl.textContent        = d.description || '';
+  }
+
+  function onPuzzleResult(d) {
+    const sc = puzzleScores[d.player];
+    if (sc) {
+      sc.total += 1;
+      if (d.solved) sc.solved += 1;
+    }
+    renderPuzzleScoreboard();
+
+    const total = Object.values(puzzleScores)[0]?.total || 1;
+    const pct   = Math.round((total / (d.puzzle_index + 1 || 1)) * 100);
+    const el    = document.getElementById('puzzleProgressFill');
+    if (el) el.style.width = `${pct}%`;
+  }
+
+  function onPuzzleGauntletOver(d) {
+    // Final scoreboard
+    const scoreEl = document.getElementById('puzzleScoreBody');
+    if (scoreEl) {
+      scoreEl.innerHTML = renderPuzzleScoreTable(d.scores || []);
+    }
+
+    const badge = document.getElementById('tournamentBadge');
+    badge.textContent = 'Done';
+    badge.className = 'ctrl-badge';
+
+    document.getElementById('puzzleProgressView').style.display = 'none';
+    document.getElementById('setupForm').style.display = '';
+
+    loadPuzzleHistory();
+  }
+
+  function renderPuzzleScoreboard() {
+    const el = document.getElementById('puzzleScoreBody');
+    if (!el) return;
+    const entries = Object.values(puzzleScores).map(s => ({
+      player:   s.name,
+      solved:   s.solved,
+      total:    s.total,
+      fraction: s.total ? s.solved / s.total : 0,
+      avg_rank: null,
+    }));
+    entries.sort((a, b) => b.fraction - a.fraction);
+    el.innerHTML = renderPuzzleScoreTable(entries);
+  }
+
+  function renderPuzzleScoreTable(scores) {
+    if (!scores || scores.length === 0) return '<div class="lb-empty">No results yet</div>';
+    return `<table class="puzzle-score-table">
+      <thead><tr>
+        <th>Player</th><th>Solved</th><th>%</th><th>Avg rank</th>
+      </tr></thead>
+      <tbody>
+        ${scores.map((s, i) => `<tr class="${i===0?'puzzle-winner':''}">
+          <td>${escHtml(s.player || s.name || '')}</td>
+          <td>${s.solved}/${s.total}</td>
+          <td>${(s.fraction * 100).toFixed(0)}%</td>
+          <td>${s.avg_rank != null ? s.avg_rank.toFixed(1) : '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  }
+
+  async function loadPuzzleHistory() {
+    const el = document.getElementById('puzzleHistoryBody');
+    if (!el) return;
+    try {
+      const gauntlets = await fetch(`${API}/api/puzzle/results`).then(r => r.json());
+      if (!gauntlets || gauntlets.length === 0) {
+        el.innerHTML = '<div class="lb-empty">No gauntlets yet</div>';
+        return;
+      }
+      el.innerHTML = gauntlets.map(g => {
+        const date = g.started_at ? g.started_at.slice(0, 10) : '?';
+        const scoresHtml = (g.scores || [])
+          .map(s => `<div class="puzzle-hist-score">${escHtml(s.name)}: ${s.solved}/${s.total} (${(s.fraction*100).toFixed(0)}%)</div>`)
+          .join('');
+        return `<div class="puzzle-hist-entry">
+          <div class="puzzle-hist-head">${date} · ${g.puzzle_count} puzzles · ${g.status}</div>
+          ${scoresHtml}
+        </div>`;
+      }).join('');
+    } catch (_) {
+      el.innerHTML = '<div class="lb-empty">Failed to load</div>';
+    }
+  }
+
+  // Expose globals needed by HTML onclick attributes
+  window.puzzleAddPlayer    = puzzleAddPlayer;
+  window.puzzleRemovePlayer = puzzleRemovePlayer;
+  window.fetchPzModels      = fetchPzModels;
+  window.startPuzzleGauntlet= startPuzzleGauntlet;
+  window.loadPuzzleHistory  = loadPuzzleHistory;
+
+  // ── End puzzle gauntlet section ────────────────────────────────────────
 
   // Auto-fetch models for all lmstudio slots on page load
   ['white', 'black', 'tutor'].forEach(side => {
