@@ -212,8 +212,9 @@
       letter-spacing: .04em;
     }
 
-    .p-right { display: flex; align-items: center; gap: 12px; }
-    .p-elo   { font-size: 10px; color: var(--gold); letter-spacing: 1px; }
+    .p-right   { display: flex; align-items: center; gap: 12px; }
+    .p-elo     { font-size: 10px; color: var(--gold); letter-spacing: 1px; }
+    .p-latency { font-size: 8px; color: var(--text-dim); letter-spacing: .5px; white-space: nowrap; }
     .p-eval  {
       font-size: 10px; font-weight: 500; letter-spacing: .5px;
       min-width: 46px; text-align: right;
@@ -975,8 +976,25 @@
     .rp-move-item:hover { background: var(--bg-card); }
     .rp-move-item.active { background: rgba(200,146,30,.15); color: var(--gold-bright); }
     .rp-move-num  { color: var(--text-dim); min-width: 20px; }
-    .rp-move-san  { color: var(--text); }
+    .rp-move-san  { color: var(--text); flex: 1; }
     .rp-move-qual { font-size: 8px; min-width: 16px; text-align: right; }
+    .rp-elapsed   { font-size: 7px; color: var(--text-dim); margin-left: auto; white-space: nowrap; }
+
+    /* Replay reasoning panel */
+    .rp-reasoning {
+      padding: 6px 8px; background: var(--bg2); border-top: 1px solid var(--border);
+      font-size: 8.5px; color: var(--text-mid); line-height: 1.5;
+      max-height: 100px; overflow-y: auto;
+    }
+    .rp-reas-mover {
+      font-size: 7.5px; text-transform: uppercase; letter-spacing: 1px;
+      color: var(--text-dim); margin-bottom: 3px; display: flex; gap: 6px;
+    }
+    .rp-reas-time  { color: var(--gold); }
+    .rp-reas-text  { line-height: 1.6; }
+
+    /* Autoplay button — same style as rp-btn but with play/pause icon */
+    #rpPlay { min-width: 26px; }
 
     /* ── Lesson generation spinner ───────────────────────────────── */
     #lessonSpinner {
@@ -1585,4 +1603,31 @@
       border-right: 1px solid var(--border);
       margin: 0 auto;
       width: 50%;
+    }
+    .bracket-seed {
+      display: inline-block;
+      font-size: 6px; font-weight: 600;
+      color: var(--text-dim);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 0 3px;
+      margin-right: 4px;
+      vertical-align: middle;
+      letter-spacing: .5px;
+    }
+    .bracket-player.winner .bracket-seed { color: var(--gold); border-color: var(--gold); }
+    .bracket-match.champion {
+      border-color: var(--gold);
+      background: rgba(200,146,30,.07);
+    }
+    .bracket-champion {
+      font-size: 9px;
+      color: var(--gold);
+      font-weight: 600;
+      letter-spacing: .5px;
+      text-align: center;
+      padding: 5px 8px 3px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
     }

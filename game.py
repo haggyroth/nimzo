@@ -782,6 +782,12 @@ def build_bracket(seeded_specs: list) -> dict:
 
     seed_order = _seed_order(n_slots)
     ordered_slots = [slots[i] for i in seed_order]
+    # Map model_id → 1-based seed (None → None for bye slots)
+    seed_map: dict[str, int] = {
+        spec.model_id: idx + 1
+        for idx, spec in enumerate(seeded_specs)
+        if spec is not None
+    }
 
     # Round 1 matches: pair consecutive entries
     def _spec_id(spec) -> str | None:
@@ -800,13 +806,15 @@ def build_bracket(seeded_specs: list) -> dict:
         winner_id = (_spec_id(w_spec) if b_spec is None else
                      _spec_id(b_spec) if w_spec is None else None)
         round1_matches.append({
-            "white":      _spec_id(w_spec),
-            "black":      _spec_id(b_spec),
-            "white_name": _spec_name(w_spec),
-            "black_name": _spec_name(b_spec),
-            "winner":     winner_id,
-            "game_id":    None,
-            "bye":        is_bye,
+            "white":       _spec_id(w_spec),
+            "black":       _spec_id(b_spec),
+            "white_name":  _spec_name(w_spec),
+            "black_name":  _spec_name(b_spec),
+            "white_seed":  seed_map.get(_spec_id(w_spec) or "", None),
+            "black_seed":  seed_map.get(_spec_id(b_spec) or "", None),
+            "winner":      winner_id,
+            "game_id":     None,
+            "bye":         is_bye,
         })
 
     rounds = [{
@@ -856,12 +864,18 @@ def advance_bracket(
         next_match_idx  = match_idx // 2
         is_upper_slot   = (match_idx % 2 == 0)
         next_match = rounds[round_idx + 1]["matches"][next_match_idx]
+        # Carry seed from current match to next round slot
+        cur_match = rounds[round_idx]["matches"][match_idx]
+        winner_seed = (cur_match.get("white_seed") if winner_id == cur_match.get("white")
+                       else cur_match.get("black_seed"))
         if is_upper_slot:
             next_match["white"]      = winner_id
             next_match["white_name"] = winner_name
+            next_match["white_seed"] = winner_seed
         else:
             next_match["black"]      = winner_id
             next_match["black_name"] = winner_name
+            next_match["black_seed"] = winner_seed
         # Mark as bye-free if both slots now filled
         if next_match["white"] and next_match["black"]:
             next_match["bye"] = False

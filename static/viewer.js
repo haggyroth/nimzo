@@ -442,6 +442,9 @@ let gameState = {
   isHumanTurn:    false,
   humanLegalUci:  [],       // all legal moves for current position
   humanCandidates:[], // UCI of Stockfish candidates
+  // Per-player elapsed_ms accumulators (reset each game)
+  elapsedSum:   { white: 0, black: 0 },
+  elapsedCount: { white: 0, black: 0 },
 };
 
 let tournamentStatus = 'idle';
@@ -1311,6 +1314,10 @@ function onGameStart(d) {
   gameState.humanAssisted = d.human_assisted !== false;
   _allLessons = {};
   evalHistory = [];
+  gameState.elapsedSum   = { white: 0, black: 0 };
+  gameState.elapsedCount = { white: 0, black: 0 };
+  document.getElementById('latencyWhite').textContent = '';
+  document.getElementById('latencyBlack').textContent = '';
   document.getElementById('evalPane').style.display = 'none';
   document.getElementById('historyPane').innerHTML = '';
   document.getElementById('overlay').classList.remove('show');
@@ -1404,6 +1411,15 @@ function onMove(d) {
   const banner = document.getElementById('humanTurnBanner');
   if (banner) banner.classList.remove('show');
   if (d.score_cp_white != null) gameState.lastEvalCp = d.score_cp_white;
+  // Accumulate per-player avg response time (skip book moves and timeouts)
+  if (d.elapsed_ms != null && !d.is_book_move && !d.timed_out) {
+    const col = (d.move_number % 2 === 1) ? 'white' : 'black';
+    gameState.elapsedSum[col]   += d.elapsed_ms;
+    gameState.elapsedCount[col] += 1;
+    const avg = gameState.elapsedSum[col] / gameState.elapsedCount[col];
+    const el  = document.getElementById(`latency${col[0].toUpperCase() + col.slice(1)}`);
+    if (el) el.textContent = `⌚ ${(avg / 1000).toFixed(1)}s`;
+  }
   // Clear candidate arrows on move
   if (_cmcb.ready && _cmcb.board) _cmcb.board.removeArrows();
   updatePlayers(); updateAnalysis(); _cmcbRender(true);  // true = animate
@@ -1536,7 +1552,21 @@ function renderBracket(bracket) {
   if (sec) sec.style.display = '';
 
   const rounds = bracket.rounds;
-  let html = '<div class="bracket-wrap">';
+
+  // Detect champion: winner of the final match
+  const finalMatch = rounds[rounds.length - 1].matches[0];
+  const champion = finalMatch && finalMatch.winner
+    ? { id: finalMatch.winner, name: finalMatch.winner === finalMatch.white ? finalMatch.white_name : finalMatch.black_name }
+    : null;
+
+  let html = '';
+
+  // Champion banner
+  if (champion) {
+    html += `<div class="bracket-champion">🏆 Champion: ${escHtml(champion.name)}</div>`;
+  }
+
+  html += '<div class="bracket-wrap">';
 
   rounds.forEach((round, rIdx) => {
     const isLast = rIdx === rounds.length - 1;
@@ -1544,18 +1574,22 @@ function renderBracket(bracket) {
       <div class="bracket-round-name">${escHtml(round.name)}</div>`;
 
     round.matches.forEach((m, mIdx) => {
-      const wWon = m.winner && m.winner === m.white;
-      const bWon = m.winner && m.winner === m.black;
-      const isBye = m.bye;
+      const wWon    = m.winner && m.winner === m.white;
+      const bWon    = m.winner && m.winner === m.black;
+      const isBye   = m.bye;
       const pending = !m.winner && !isBye;
+      const isChampMatch = champion && m.winner === champion.id && isLast;
 
-      html += `<div class="bracket-match${pending ? ' pending' : ''}${isBye ? ' bye' : ''}">`;
-      html += `<div class="bracket-player${wWon ? ' winner' : bWon ? ' loser' : ''}">${escHtml(m.white_name || 'TBD')}</div>`;
+      const wSeed = m.white_seed ? `<span class="bracket-seed">${m.white_seed}</span>` : '';
+      const bSeed = m.black_seed ? `<span class="bracket-seed">${m.black_seed}</span>` : '';
+
+      html += `<div class="bracket-match${pending ? ' pending' : ''}${isBye ? ' bye' : ''}${isChampMatch ? ' champion' : ''}">`;
+      html += `<div class="bracket-player${wWon ? ' winner' : bWon ? ' loser' : ''}">${wSeed}${escHtml(m.white_name || 'TBD')}</div>`;
       html += `<div class="bracket-vs">${isBye ? '—' : 'vs'}</div>`;
-      html += `<div class="bracket-player${bWon ? ' winner' : wWon ? ' loser' : ''}">${escHtml(m.black_name || 'TBD')}</div>`;
+      html += `<div class="bracket-player${bWon ? ' winner' : wWon ? ' loser' : ''}">${bSeed}${escHtml(m.black_name || 'TBD')}</div>`;
       if (m.winner) {
         const wname = wWon ? (m.white_name || '') : (m.black_name || '');
-        html += `<div class="bracket-winner-tag">▶ ${escHtml(wname)}</div>`;
+        html += `<div class="bracket-winner-tag">${isChampMatch ? '🏆' : '▶'} ${escHtml(wname)}</div>`;
       }
       html += '</div>';
 
@@ -1875,6 +1909,27 @@ const QUALITY_GLYPH = { best:'!!', excellent:'!', inaccuracy:'?!', mistake:'?', 
 const QUALITY_COLOR = { best:'#ffd700', excellent:'#56c45a', good:'', inaccuracy:'#f0d030', mistake:'#f09020', blunder:'#e83030' };
 
 const replay = { moves: [], cursor: 0, meta: null, gameId: null };
+let _rpAutoplayTimer = null;
+
+function rpToggleAutoplay() {
+  if (_rpAutoplayTimer) {
+    clearInterval(_rpAutoplayTimer);
+    _rpAutoplayTimer = null;
+  } else {
+    _rpAutoplayTimer = setInterval(() => {
+      if (replay.cursor >= replay.moves.length) {
+        clearInterval(_rpAutoplayTimer);
+        _rpAutoplayTimer = null;
+        const btn = document.getElementById('rpPlay');
+        if (btn) btn.textContent = '▶';
+        return;
+      }
+      rpGo(replay.cursor + 1);
+    }, 1200);
+  }
+  const btn = document.getElementById('rpPlay');
+  if (btn) btn.textContent = _rpAutoplayTimer ? '⏸' : '▶';
+}
 
 async function openReplay(gameId, meta) {
   try {
@@ -1901,14 +1956,17 @@ async function openReplay(gameId, meta) {
       <span class="rp-move-num"></span><span class="rp-move-san">start</span>
     </div>`;
     moves.forEach((m, i) => {
-      const isWhite = m.move_number % 2 === 1;
+      const isWhite  = m.move_number % 2 === 1;
       const numLabel = isWhite ? `${Math.ceil(m.move_number / 2)}.` : '';
-      const glyph = QUALITY_GLYPH[m.quality] || '';
-      const color = QUALITY_COLOR[m.quality] || 'var(--text)';
+      const glyph    = QUALITY_GLYPH[m.quality] || '';
+      const color    = QUALITY_COLOR[m.quality] || 'var(--text)';
+      const latency  = (m.elapsed_ms != null && !m.timed_out)
+        ? `<span class="rp-elapsed">${(m.elapsed_ms/1000).toFixed(1)}s</span>` : '';
       listHtml += `<div class="rp-move-item" data-idx="${i+1}" onclick="rpGo(${i+1})">
         <span class="rp-move-num">${numLabel}</span>
         <span class="rp-move-san" style="color:${color}">${m.move_san}${glyph}</span>
         <span class="rp-move-qual" style="color:${color}">${glyph}</span>
+        ${latency}
       </div>`;
     });
     list.innerHTML = listHtml;
@@ -1920,6 +1978,7 @@ async function openReplay(gameId, meta) {
 
 function closeReplay() {
   document.getElementById('replayModal').classList.remove('show');
+  if (_rpAutoplayTimer) { clearInterval(_rpAutoplayTimer); _rpAutoplayTimer = null; }
 }
 
 function copyReplayLink() {
@@ -2317,6 +2376,28 @@ function rpRender() {
   // Scroll active item into view
   const active = document.querySelector('#rpMoveList .rp-move-item.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
+
+  // Reasoning panel — show reasoning for the current move
+  const rpReasEl = document.getElementById('rpReasoning');
+  if (rpReasEl) {
+    if (cursor > 0 && moves[cursor - 1] && moves[cursor - 1].reasoning) {
+      const m = moves[cursor - 1];
+      const isWhite = m.move_number % 2 === 1;
+      const mover = isWhite
+        ? (replay.meta && replay.meta.white_name ? replay.meta.white_name : 'White')
+        : (replay.meta && replay.meta.black_name ? replay.meta.black_name : 'Black');
+      const elapsed = m.elapsed_ms != null ? `<span class="rp-reas-time">${(m.elapsed_ms/1000).toFixed(1)}s</span>` : '';
+      rpReasEl.innerHTML = `<div class="rp-reas-mover">${escHtml(mover)}${elapsed}</div>`
+        + `<div class="rp-reas-text">${escHtml(m.reasoning)}</div>`;
+      rpReasEl.style.display = '';
+    } else {
+      rpReasEl.style.display = 'none';
+    }
+  }
+
+  // Update autoplay button label
+  const playBtn = document.getElementById('rpPlay');
+  if (playBtn) playBtn.textContent = _rpAutoplayTimer ? '⏸' : '▶';
 }
 
 function rpDrawBoard(fen, lastUci) {
