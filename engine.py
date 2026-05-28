@@ -132,6 +132,34 @@ class StockfishEngine:
             pv=info.get("pv", []),
         )
 
+    def score_move(
+        self,
+        board: chess.Board,
+        move: chess.Move,
+    ) -> Optional[float]:
+        """
+        Ask Stockfish for the centipawn score of a specific move (current-player POV).
+        Used to evaluate blind-mode moves that fall outside the pre-computed candidate list.
+        Returns None if the engine is unavailable or the query fails.
+        """
+        if getattr(self, "_engine", None) is None:
+            return None
+        try:
+            info = self._engine.analyse(
+                board,
+                chess.engine.Limit(depth=self.candidate_depth),
+                root_moves=[move],
+            )
+            score = info.get("score")
+            if score is None:
+                return None
+            pov = score.pov(board.turn)
+            if pov.is_mate():
+                return 10000 if pov.mate() > 0 else -10000
+            return pov.score()
+        except Exception:
+            return None
+
     def evaluate_move_quality(
         self,
         board: chess.Board,
@@ -141,22 +169,35 @@ class StockfishEngine:
         """
         Categorize how good the chosen move was relative to Stockfish's top pick.
         Returns: 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder'
+
+        When the chosen move is not in the pre-computed candidate list (e.g. blind
+        mode), it is scored on-demand via a dedicated Stockfish query so that blind
+        moves receive accurate quality labels instead of 'unknown'.
         """
         if not candidates:
             return "unknown"
 
         top_move, top_score = candidates[0]
-        chosen_score = next((s for m, s in candidates if m == move), None)
+        in_candidates = any(m == move for m, _ in candidates)
+        chosen_score  = next((s for m, s in candidates if m == move), None)
 
         if move == top_move:
             return "best"
 
-        if top_score is None or chosen_score is None:
-            # Move was outside the candidate list (e.g. blind-mode play).
-            # Returning "good" would mask real blunders — be honest instead.
+        if top_score is None:
             return "unknown"
 
-        loss = top_score - chosen_score  # centipawns lost
+        # Move not in the candidate list at all (common in blind mode) — score
+        # it on-demand so we give an accurate label instead of 'unknown'.
+        # If it was in the list but had a None score, we leave it as 'unknown'
+        # (Stockfish couldn't score it reliably; no point re-querying).
+        if chosen_score is None and not in_candidates:
+            chosen_score = self.score_move(board, move)
+
+        if chosen_score is None:
+            return "unknown"
+
+        loss = top_score - chosen_score  # centipawns lost vs best candidate
 
         if loss < CP_LOSS_EXCELLENT:
             return "excellent"
