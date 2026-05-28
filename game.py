@@ -714,6 +714,352 @@ async def play_game(
     }
 
 
+# ── Elimination bracket helpers ──────────────────────────────────────────
+
+import math as _math  # noqa: E402 (stdlib, safe to import here)
+
+
+def _next_pow2(n: int) -> int:
+    """Smallest power of 2 that is >= n."""
+    return 1 if n <= 1 else 2 ** _math.ceil(_math.log2(n))
+
+
+def _round_name(n_slots: int, round_idx: int) -> str:
+    """Human-readable name for a bracket round."""
+    matches_in_round = n_slots >> (round_idx + 1)
+    if matches_in_round == 1:
+        return "Final"
+    if matches_in_round == 2:
+        return "Semi-Finals"
+    if matches_in_round == 4:
+        return "Quarter-Finals"
+    return f"Round of {matches_in_round * 2}"
+
+
+def build_bracket(seeded_specs: list) -> dict:
+    """
+    Build an initial single-elimination bracket from a seeded player list.
+
+    Standard seeding: seed 1 vs seed N, seed 2 vs seed N-1, etc., with higher
+    seeds in the upper half.  Non-power-of-2 player counts get byes for the
+    top seeds in round 1 so they advance automatically.
+
+    Returns a dict::
+
+        {
+          "n_slots": 8,           # padded size (power of 2)
+          "n_players": 5,         # actual player count
+          "rounds": [
+            {
+              "name": "Quarter-Finals",
+              "matches": [
+                {"white": <model_id|None>, "black": <model_id|None>,
+                 "white_name": str, "black_name": str,
+                 "winner": None, "game_id": None, "bye": bool},
+                ...
+              ]
+            },
+            ...
+          ]
+        }
+    """
+    n = len(seeded_specs)
+    n_slots = _next_pow2(max(n, 2))
+
+    # Pad player list with None sentinels for byes
+    slots: list = list(seeded_specs) + [None] * (n_slots - n)
+
+    # Standard bracket pairing for round 1: 1vs8, 4vs5, 2vs7, 3vs6 (for 8 slots)
+    # General rule: for position i in [0, n_slots/2), pair with (n_slots - 1 - i),
+    # but we need to interleave the two halves so the final keeps top vs top.
+    # Use the standard "fold" seeding:
+    def _seed_order(size: int) -> list[int]:
+        """Return seed indices in bracket order (0-based seeds)."""
+        if size == 2:
+            return [0, 1]
+        half = _seed_order(size // 2)
+        return [x for pair in zip(half, [size - 1 - h for h in half]) for x in pair]
+
+    seed_order = _seed_order(n_slots)
+    ordered_slots = [slots[i] for i in seed_order]
+
+    # Round 1 matches: pair consecutive entries
+    def _spec_id(spec) -> str | None:
+        return spec.model_id if spec is not None else None
+
+    def _spec_name(spec) -> str:
+        if spec is None:
+            return "BYE"
+        return spec.name or spec.model_id
+
+    round1_matches = []
+    for i in range(0, n_slots, 2):
+        w_spec = ordered_slots[i]
+        b_spec = ordered_slots[i + 1]
+        is_bye = (w_spec is None) or (b_spec is None)
+        winner_id = (_spec_id(w_spec) if b_spec is None else
+                     _spec_id(b_spec) if w_spec is None else None)
+        round1_matches.append({
+            "white":      _spec_id(w_spec),
+            "black":      _spec_id(b_spec),
+            "white_name": _spec_name(w_spec),
+            "black_name": _spec_name(b_spec),
+            "winner":     winner_id,
+            "game_id":    None,
+            "bye":        is_bye,
+        })
+
+    rounds = [{
+        "name":    _round_name(n_slots, 0),
+        "matches": round1_matches,
+    }]
+
+    # Build subsequent empty rounds (winners TBD)
+    n_rounds = _math.ceil(_math.log2(n_slots)) if n_slots > 1 else 1
+    for r in range(1, n_rounds):
+        n_matches = n_slots >> (r + 1)
+        rounds.append({
+            "name":    _round_name(n_slots, r),
+            "matches": [
+                {"white": None, "black": None, "white_name": "TBD", "black_name": "TBD",
+                 "winner": None, "game_id": None, "bye": False}
+                for _ in range(n_matches)
+            ],
+        })
+
+    return {"n_slots": n_slots, "n_players": n, "rounds": rounds}
+
+
+def advance_bracket(
+    bracket: dict,
+    round_idx: int,
+    match_idx: int,
+    winner_id: str,
+    winner_name: str,
+    game_id: int | None,
+    name_map: dict[str, str],
+) -> dict:
+    """
+    Record a match result and fill the winner into the next round.
+
+    Returns the updated bracket dict (mutated in place AND returned).
+    """
+    import copy
+    bracket = copy.deepcopy(bracket)
+
+    rounds = bracket["rounds"]
+    rounds[round_idx]["matches"][match_idx]["winner"]  = winner_id
+    rounds[round_idx]["matches"][match_idx]["game_id"] = game_id
+
+    # Propagate to next round if it exists
+    if round_idx + 1 < len(rounds):
+        next_match_idx  = match_idx // 2
+        is_upper_slot   = (match_idx % 2 == 0)
+        next_match = rounds[round_idx + 1]["matches"][next_match_idx]
+        if is_upper_slot:
+            next_match["white"]      = winner_id
+            next_match["white_name"] = winner_name
+        else:
+            next_match["black"]      = winner_id
+            next_match["black_name"] = winner_name
+        # Mark as bye-free if both slots now filled
+        if next_match["white"] and next_match["black"]:
+            next_match["bye"] = False
+
+    return bracket
+
+
+async def run_elimination_tournament(
+    player_specs: list,
+    player_map: dict[str, ChessPlayer],
+    tutor=None,
+    judge=None,
+    adaptive_difficulty: bool = False,
+    max_moves: int = 0,
+    opening_pgn: str = "",
+):
+    """
+    Run a single-elimination tournament.
+
+    Players are seeded by their current ELO (highest = seed 1).  Non-power-of-2
+    counts get byes for the top seeds in round 1.  A game is played for each
+    non-bye match; the winner advances.  Broadcasts ``bracket_update`` after
+    every match so the viewer can animate the bracket tree in real time.
+    """
+    name_map = {ps.model_id: (ps.name or ps.model_id) for ps in player_specs}
+    bracket = build_bracket(player_specs)
+
+    tournament_id = await asyncio.to_thread(
+        database.create_tournament,
+        format="elimination",
+        player_ids=[ps.model_id for ps in player_specs],
+        total_games=len(player_specs) - 1,   # elimination: exactly n-1 games
+    )
+    _arena._state["tournament_id"] = tournament_id
+
+    await asyncio.to_thread(database.update_tournament_bracket, tournament_id, bracket)
+
+    # Seed the arena state so the UI shows something on load
+    _arena._state.update({
+        "bracket":     bracket,
+        "game_number": 0,
+        "total_games": len(player_specs) - 1,
+    })
+    await _arena.broadcast({
+        "type":          "bracket_update",
+        "bracket":       bracket,
+        "tournament_id": tournament_id,
+    })
+
+    game_number = 0
+
+    with StockfishEngine() as stockfish:
+        for round_idx, round_data in enumerate(bracket["rounds"]):
+            for match_idx, match in enumerate(round_data["matches"]):
+                await _arena._pause_event.wait()
+                if _arena._stop["requested"]:
+                    await asyncio.to_thread(database.abort_tournament, tournament_id)
+                    raise _arena.TournamentAborted()
+
+                # Bye: winner already set — just propagate and broadcast
+                if match["bye"]:
+                    bracket = advance_bracket(
+                        bracket, round_idx, match_idx,
+                        match["winner"], name_map.get(match["winner"], "BYE"),
+                        None, name_map,
+                    )
+                    await asyncio.to_thread(database.update_tournament_bracket, tournament_id, bracket)
+                    await _arena.broadcast({
+                        "type":          "bracket_update",
+                        "bracket":       bracket,
+                        "tournament_id": tournament_id,
+                    })
+                    continue
+
+                # Wait until both slots are filled (could be TBD from prior rounds)
+                white_id = match["white"]
+                black_id = match["black"]
+                if not white_id or not black_id:
+                    # Should not happen with our build_bracket logic, but guard
+                    logger.warning("Elimination match %d.%d has unfilled slots — skipping", round_idx, match_idx)
+                    continue
+
+                white = player_map[white_id]
+                black = player_map[black_id]
+
+                white.elo = await asyncio.to_thread(database.get_player_elo, white_id)
+                black.elo = await asyncio.to_thread(database.get_player_elo, black_id)
+
+                game_number += 1
+                round_label = round_data["name"]
+                _arena._state.update({
+                    "game_number": game_number,
+                    "white":       white.config.name,
+                    "black":       black.config.name,
+                    "white_elo":   round(white.elo),
+                    "black_elo":   round(black.elo),
+                })
+                await _arena.broadcast({"type": "tournament_status", **_arena._state})
+                logger.info(
+                    "%s game %d: %s vs %s",
+                    round_label, game_number, white.config.name, black.config.name,
+                )
+
+                try:
+                    summary = await play_game(
+                        white, black, stockfish, game_number,
+                        tutor, judge,
+                        adaptive_difficulty=adaptive_difficulty,
+                        max_moves=max_moves or 500,
+                        opening_pgn=opening_pgn,
+                    )
+                except _arena.TournamentAborted:
+                    await asyncio.to_thread(database.abort_tournament, tournament_id)
+                    raise
+
+                result = summary["result"]
+                game_id = summary["game_id"]
+
+                # Determine winner
+                if result == "1-0":
+                    winner_id = white_id
+                elif result == "0-1":
+                    winner_id = black_id
+                else:
+                    # Draw: higher seed (lower index) advances as a tiebreak
+                    seed_ids = [ps.model_id for ps in player_specs]
+                    w_seed = seed_ids.index(white_id) if white_id in seed_ids else 999
+                    b_seed = seed_ids.index(black_id) if black_id in seed_ids else 999
+                    winner_id = white_id if w_seed <= b_seed else black_id
+                    logger.info("Draw — higher seed %s advances", name_map.get(winner_id))
+
+                winner_name = name_map.get(winner_id, winner_id)
+
+                await asyncio.to_thread(
+                    database.record_tournament_game,
+                    tournament_id, game_id, game_number, white_id, black_id,
+                )
+
+                bracket = advance_bracket(
+                    bracket, round_idx, match_idx, winner_id, winner_name, game_id, name_map,
+                )
+                await asyncio.to_thread(database.update_tournament_bracket, tournament_id, bracket)
+
+                _arena._state["bracket"] = bracket
+                await _arena.broadcast({
+                    "type":          "bracket_update",
+                    "bracket":       bracket,
+                    "tournament_id": tournament_id,
+                })
+
+                logger.info(
+                    "%s result: %s — %s advances",
+                    round_label, result, winner_name,
+                )
+                await asyncio.sleep(2)
+
+    # ── Final: determine champion ─────────────────────────────────────────
+    final_round   = bracket["rounds"][-1]
+    final_match   = final_round["matches"][0] if final_round["matches"] else {}
+    champion_id   = final_match.get("winner")
+    champion_name = name_map.get(champion_id) if champion_id else None
+
+    title = pick_title(champion_id, "elimination") if champion_id else None
+    await asyncio.to_thread(database.finish_tournament, tournament_id, champion_id, title)
+
+    # Build a standings list for the tournament_complete event
+    # In elimination: champion first, then other participants
+    champion_spec = next((ps for ps in player_specs if ps.model_id == champion_id), None)
+    standings = []
+    if champion_spec:
+        standings.append({
+            "model_id": champion_id,
+            "name":     champion_name,
+            "points":   1.0,
+            "wins": 1, "draws": 0, "losses": 0, "games_played": 1,
+        })
+    for ps in player_specs:
+        if ps.model_id != champion_id:
+            standings.append({
+                "model_id": ps.model_id,
+                "name":     ps.name,
+                "points":   0.0,
+                "wins": 0, "draws": 0, "losses": 0, "games_played": 0,
+            })
+
+    _arena._state.update({"status": "idle", "standings": standings, "bracket": bracket})
+    await _arena.broadcast({
+        "type":      "tournament_complete",
+        "standings": standings,
+        "winner":    standings[0] if standings else None,
+        "title":     title,
+        "bracket":   bracket,
+    })
+
+    if champion_name and title:
+        logger.info('Elimination complete! Champion: %s — "%s"', champion_name, title)
+
+
 # ── Multi-player bracket runner ───────────────────────────────────────────
 
 async def run_bracket_tournament(

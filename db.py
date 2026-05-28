@@ -207,6 +207,7 @@ def _migrate(conn: sqlite3.Connection):
     _add_column_if_missing(conn, "moves",   "coherence_score",     "REAL")
     _add_column_if_missing(conn, "moves",   "timed_out",           "INTEGER DEFAULT 0")
     _add_column_if_missing(conn, "players", "user_provided_portrait", "INTEGER DEFAULT 0")
+    _add_column_if_missing(conn, "tournaments", "bracket_json",    "TEXT")
     _add_column_if_missing(conn, "moves",   "elapsed_ms",          "INTEGER")
     _add_column_if_missing(conn, "games",  "eco_code",            "TEXT")
     _add_column_if_missing(conn, "games",  "opening_name",        "TEXT")
@@ -1374,6 +1375,16 @@ def abort_tournament(tournament_id: int) -> None:
         )
 
 
+def update_tournament_bracket(tournament_id: int, bracket: dict) -> None:
+    """Persist the current bracket JSON for a running elimination tournament."""
+    import json
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE tournaments SET bracket_json = ? WHERE id = ?",
+            (json.dumps(bracket), tournament_id),
+        )
+
+
 def record_tournament_game(
     tournament_id: int,
     game_id: int,
@@ -1400,6 +1411,7 @@ def get_tournament_history(limit: int = 20) -> list[dict]:
             """
             SELECT t.id, t.format, t.status, t.player_ids, t.total_games,
                    t.winner_model_id, t.title, t.started_at, t.finished_at,
+                   t.bracket_json,
                    wp.name AS winner_name
             FROM tournaments t
             LEFT JOIN players wp ON t.winner_model_id = wp.model_id
@@ -1437,6 +1449,9 @@ def get_tournament_history(limit: int = 20) -> list[dict]:
             ids = json.loads(rec.get("player_ids") or "[]")
             rec["player_names"] = [player_name_map.get(mid, mid) for mid in ids]
             rec["game_count"] = game_counts.get(r["id"], 0)
+            # Parse bracket JSON for elimination tournaments
+            bj = rec.get("bracket_json")
+            rec["bracket"] = json.loads(bj) if bj else None
             result.append(rec)
         return result
 

@@ -87,7 +87,7 @@ class TournamentStartConfig(BaseModel):
     max_moves: int = Field(default=0, ge=0, le=1000)
     # Multi-player tournament fields (len >= 2 activates bracket mode)
     players: list[PlayerSpec] = []
-    format: Literal["match", "round_robin", "gauntlet"] = "round_robin"
+    format: Literal["match", "round_robin", "gauntlet", "elimination"] = "round_robin"
     games_per_pair: int = Field(default=2, ge=1, le=100)
     # Adaptive difficulty: auto-adjust candidate_count based on rolling win rate
     adaptive_difficulty: bool = False
