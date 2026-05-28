@@ -1087,6 +1087,51 @@
     .piece-set-btn:hover { border-color: var(--border-hi); color: var(--text); }
     .piece-set-btn.active { border-color: var(--gold); color: var(--gold); }
 
+    /* ── Head-to-head panel ─────────────────────────────────────────────── */
+    .h2h-form {
+      display: flex; flex-direction: column; gap: 5px; padding: 6px 0 4px;
+    }
+    .h2h-hint {
+      font-size: 10px; color: var(--text-dim); text-align: center; padding: 8px 0;
+    }
+    .h2h-compare { padding: 6px 0; }
+    .h2h-header {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 10px; color: var(--text-mid); margin-bottom: 4px;
+    }
+    .h2h-pname { flex: 1; font-weight: 600; color: var(--text); font-size: 11px; }
+    .h2h-pname:last-child { text-align: right; }
+    .h2h-vs { color: var(--text-dim); font-size: 9px; flex-shrink: 0; }
+    .h2h-score {
+      text-align: center; font-size: 20px; font-weight: 700;
+      color: var(--gold); letter-spacing: 2px; margin: 2px 0;
+    }
+    .h2h-sub {
+      text-align: center; font-size: 9px; color: var(--text-dim); margin-bottom: 8px;
+    }
+    .h2h-stats { display: flex; flex-direction: column; gap: 3px; }
+    .h2h-stat-row {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 10px; border-top: 1px solid var(--border); padding-top: 3px;
+    }
+    .h2h-val { flex: 1; font-variant-numeric: tabular-nums; color: var(--text); }
+    .h2h-val:last-child { text-align: right; }
+    .h2h-label { flex: 2; text-align: center; color: var(--text-dim); font-size: 9px; }
+
+    /* ── History row extras ─────────────────────────────────────────────── */
+    .game-opening {
+      font-size: 9px; color: var(--text-dim);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 120px;
+    }
+    .game-pgn-btn {
+      background: none; border: 1px solid var(--border);
+      color: var(--text-dim); font-size: 10px; padding: 1px 5px;
+      cursor: pointer; border-radius: 3px; line-height: 1.4;
+      transition: border-color .15s, color .15s;
+    }
+    .game-pgn-btn:hover { border-color: var(--gold); color: var(--gold); }
+
     /* Font selector */
     .font-opts { display: flex; gap: 6px; }
     .font-btn {
