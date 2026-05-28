@@ -45,6 +45,7 @@ class _TournamentStartConfig:
     white_style: str = ""
     white_blind_opening_moves: int = 0
     white_blind: bool = False
+    white_candidate_count: Optional[int] = None
     black_backend: str = "lmstudio"
     black_name: str = "Black"
     black_model: str = ""
@@ -53,6 +54,7 @@ class _TournamentStartConfig:
     black_style: str = ""
     black_blind_opening_moves: int = 0
     black_blind: bool = False
+    black_candidate_count: Optional[int] = None
     tutor_backend: str = "lmstudio"
     tutor_model: str = ""
     tutor_url: str = "http://localhost:1234/v1"

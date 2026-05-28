@@ -80,6 +80,9 @@ class TournamentStartConfig(BaseModel):
     # Full-game blind mode: never show Stockfish candidates to the model
     white_blind: bool = False
     black_blind: bool = False
+    # Handicap: override candidate_count per player (None = use server default 5)
+    white_candidate_count: Optional[int] = Field(default=None, ge=1, le=20)
+    black_candidate_count: Optional[int] = Field(default=None, ge=1, le=20)
     # Turn cap: declare draw after this many half-moves (plies); 0 = no limit
     max_moves: int = Field(default=0, ge=0, le=1000)
     # Multi-player tournament fields (len >= 2 activates bracket mode)
