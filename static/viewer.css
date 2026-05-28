@@ -1676,3 +1676,48 @@
       border-bottom: 1px solid var(--border);
       margin-bottom: 4px;
     }
+
+    /* ── Replay eval chart ──────────────────────────────────────────────── */
+    .rp-eval-chart {
+      width: 100%; margin: 6px 0 2px;
+      border-radius: 3px; overflow: hidden;
+      border: 1px solid var(--border);
+      box-sizing: border-box;
+    }
+    .rp-eval-chart svg { display: block; }
+
+    /* ── Replay eval badge on move items ────────────────────────────────── */
+    .rp-eval-badge {
+      font-size: 9px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+      margin-left: auto; flex-shrink: 0;
+      opacity: 0.7;
+    }
+
+    /* ── Replay game summary bar ─────────────────────────────────────────── */
+    .rp-summary {
+      display: flex; flex-wrap: wrap; align-items: center;
+      gap: 4px; padding: 6px 8px 5px;
+      border-bottom: 1px solid var(--border);
+      font-size: 9px;
+    }
+    .rp-sum-label {
+      color: var(--text-mid); font-weight: 600; font-size: 9px;
+    }
+    .rp-sum-sep { color: var(--border-hi); padding: 0 2px; }
+    .rp-sum-chip {
+      padding: 1px 4px; border-radius: 3px; font-size: 9px;
+      font-weight: 600; letter-spacing: 0.02em;
+    }
+    .rp-sum-chip.blunder    { background: var(--q-blunder);    color: #fff; }
+    .rp-sum-chip.mistake    { background: var(--q-mistake);    color: #fff; }
+    .rp-sum-chip.inaccuracy { background: var(--q-inaccuracy); color: #fff; }
+    .rp-sum-chip.clean      { background: var(--q-best);       color: #fff; }
+
+    /* ── Replay header PGN download link ────────────────────────────────── */
+    .rp-pgn-dl {
+      font-size: 10px; color: var(--text-dim); cursor: pointer;
+      padding: 2px 5px; border: 1px solid var(--border); border-radius: 3px;
+      transition: color .15s, border-color .15s;
+    }
+    .rp-pgn-dl:hover { color: var(--gold); border-color: var(--gold); }
