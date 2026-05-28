@@ -4,6 +4,7 @@ arena/routes/games.py — /api/games/* routes and _build_game_pgn helper.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Optional
 from urllib.parse import quote
@@ -122,13 +123,13 @@ async def api_games_export(model_id: Optional[str] = None, limit: int = 5000):
       model_id — restrict to games where this model played (optional)
       limit    — max games to export (default 5 000)
     """
-    rows = database.get_all_games(model_id=model_id, limit=limit)
+    rows = await asyncio.to_thread(database.get_all_games, model_id=model_id, limit=limit)
     if not rows:
         return PlainTextResponse("# No games found\n", status_code=200)
 
     parts: list[str] = []
     for i, row in enumerate(rows, 1):
-        moves = database.get_game_moves(row["id"])
+        moves = await asyncio.to_thread(database.get_game_moves, row["id"])
         parts.append(_build_game_pgn(row, moves, round_number=i))
 
     raw_name = "nimzo_export.pgn" if not model_id else f"nimzo_{model_id}_export.pgn"
@@ -141,7 +142,7 @@ async def api_games_export(model_id: Optional[str] = None, limit: int = 5000):
 
 @router.get("/api/games")
 async def api_games(limit: int = 20):
-    return database.get_recent_games(limit)
+    return await asyncio.to_thread(database.get_recent_games, limit)
 
 
 # ── Per-game routes — parametric paths MUST come after static-prefix routes ──
@@ -151,7 +152,7 @@ async def api_games(limit: int = 20):
 @router.get("/api/games/{game_id}")
 async def api_game(game_id: int):
     """Return the game record for ``game_id``, or 404 if not found."""
-    row = database.get_game(game_id)
+    row = await asyncio.to_thread(database.get_game, game_id)
     if not row:
         raise HTTPException(status_code=404, detail="Game not found")
     return row
@@ -159,16 +160,16 @@ async def api_game(game_id: int):
 
 @router.get("/api/games/{game_id}/moves")
 async def api_game_moves(game_id: int):
-    return database.get_game_moves(game_id)
+    return await asyncio.to_thread(database.get_game_moves, game_id)
 
 
 @router.get("/api/games/{game_id}/pgn")
 async def api_game_pgn(game_id: int):
     """Download a single game as an annotated PGN file."""
-    game_row = database.get_game(game_id)
+    game_row = await asyncio.to_thread(database.get_game, game_id)
     if not game_row:
         return PlainTextResponse("Game not found", status_code=404)
-    moves = database.get_game_moves(game_id)
+    moves = await asyncio.to_thread(database.get_game_moves, game_id)
     pgn = _build_game_pgn(game_row, moves)
     raw_name = (
         f"nimzo_{game_row['white_name']}_vs_{game_row['black_name']}_{game_id}.pgn"

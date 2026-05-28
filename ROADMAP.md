@@ -298,7 +298,7 @@ Make lesson generation visible to the viewer, improve compression quality, and f
 
 ---
 
-## Phase 22 — Async Database (aiosqlite)
+## Phase 22 — Async Database (aiosqlite) ✅
 
 ### Goals
 All `database.*` calls currently run synchronous SQLite queries on the asyncio event loop, blocking it briefly on every game write, leaderboard poll, and stats request. At tournament scale (many games, large stats tables) this creates latency spikes visible to connected WebSocket clients. Migrating to `aiosqlite` or wrapping every call in `asyncio.to_thread()` eliminates the blocking.

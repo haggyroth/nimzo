@@ -91,7 +91,7 @@ async def api_start(config: TournamentStartConfig):
         # Seed by current ELO (highest first).
         seeded = sorted(
             config.players,
-            key=lambda ps: database.get_player_elo(ps.model_id),
+            key=lambda ps: database.get_player_elo(ps.model_id),  # sync OK: called once at start
             reverse=True,
         )
 
@@ -197,7 +197,7 @@ async def api_start(config: TournamentStartConfig):
 
 @router.get("/api/tournament/history")
 async def api_tournament_history(limit: int = 20):
-    return database.get_tournament_history(limit)
+    return await asyncio.to_thread(database.get_tournament_history, limit)
 
 
 @router.post("/api/tournament/pause")
