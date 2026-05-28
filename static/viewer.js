@@ -704,23 +704,25 @@ function addMoveCard(data) {
     const cls = cs >= 7 ? 'hi' : cs <= 3 ? 'lo' : '';
     coherenceHtml = `<span class="move-coherence ${cls}" title="Reasoning coherence score">🎯 ${cs}/10</span>`;
   }
+  const isBook       = !!data.is_book_move;
   const timeoutHtml  = data.timed_out ? `<span class="move-timeout" title="Model timed out">⏱ timeout</span>` : '';
   const blindHtml    = data.is_blind_move ? `<span class="move-blind" title="Opening blind move — no Stockfish candidates provided">🎭 blind</span>` : '';
-  const latencyHtml  = (data.elapsed_ms != null && !data.timed_out)
+  const bookHtml     = isBook ? `<span class="move-book" title="Forced opening prefix — played automatically before guided play">📖 book</span>` : '';
+  const latencyHtml  = (data.elapsed_ms != null && !data.timed_out && !isBook)
     ? `<span class="move-latency" title="Model response time">${(data.elapsed_ms / 1000).toFixed(1)}s</span>`
     : '';
 
   const card = document.createElement('div');
-  card.className = `move-card ${q}`;
+  card.className = `move-card ${q}${isBook ? ' book' : ''}`;
   card.innerHTML = `
     <div class="move-top">
       <span class="move-num-label">${label}</span>
       <span class="move-san-text">${escHtml(data.san)}</span>
-      <span class="move-badge ${q}">${q}</span>
-      ${coherenceHtml}${timeoutHtml}${blindHtml}${latencyHtml}
+      ${isBook ? '' : `<span class="move-badge ${q}">${q}</span>`}
+      ${coherenceHtml}${timeoutHtml}${blindHtml}${bookHtml}${latencyHtml}
     </div>
-    ${rankStr && !data.is_blind_move ? `<div class="move-rank-text">${rankStr}</div>` : ''}
-    ${showReason ? `<div class="move-reason">${escHtml(data.reasoning)}</div>` : ''}
+    ${rankStr && !data.is_blind_move && !isBook ? `<div class="move-rank-text">${rankStr}</div>` : ''}
+    ${showReason && !isBook ? `<div class="move-reason">${escHtml(data.reasoning)}</div>` : ''}
     ${showThink ? `<span class="move-think-toggle">🧠 thinking</span><div class="move-think-body">${escHtml(data.thinking_content.trim())}</div>` : ''}`;
 
   if (showThink) {
@@ -1019,6 +1021,7 @@ async function startTournament() {
     white_candidate_count: parseInt(document.getElementById('whiteCandidates')?.value) || null,
     black_candidate_count: parseInt(document.getElementById('blackCandidates')?.value) || null,
     max_moves:                parseInt(document.getElementById('maxMoves')?.value) || 0,
+    opening_pgn:              (document.getElementById('openingPgn')?.value || '').trim(),
   };
 
   const res = await fetch(`${API}/api/tournament/start`, {

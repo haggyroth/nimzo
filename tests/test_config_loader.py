@@ -68,6 +68,7 @@ class _TournamentStartConfig:
     max_moves: int = 0
     human_assisted: bool = True
     adaptive_difficulty: bool = False
+    opening_pgn: str = ""
     players: list = field(default_factory=list)
 
 
