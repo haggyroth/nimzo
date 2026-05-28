@@ -425,6 +425,19 @@
       </div>
     </div>
 
+    <!-- Head-to-Head section -->
+    <div class="ctrl-section collapsed" id="h2hSection">
+      <div class="ctrl-head" onclick="toggleSection('h2hSection')">
+        Head to Head <span class="chevron">▾</span>
+      </div>
+      <div class="h2h-form">
+        <select class="ctrl-select" id="h2hPlayerA" style="flex:1"><option value="">— Player A —</option></select>
+        <select class="ctrl-select" id="h2hPlayerB" style="flex:1"><option value="">— Player B —</option></select>
+        <button class="start-btn" style="margin-top:4px;padding:5px" onclick="runH2H()">Compare</button>
+      </div>
+      <div id="h2hBody"></div>
+    </div>
+
     <!-- Lessons section -->
     <div class="ctrl-section" id="lessonsSection">
       <div class="ctrl-head" onclick="toggleSection('lessonsSection')">Latest Lessons <span class="chevron">▾</span></div>

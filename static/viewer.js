@@ -811,7 +811,88 @@ async function loadLeaderboard() {
     });
     html += '</tbody></table>';
     body.innerHTML = html;
+
+    // Populate H2H dropdowns with the players we just loaded
+    const selA = document.getElementById('h2hPlayerA');
+    const selB = document.getElementById('h2hPlayerB');
+    if (selA && selB) {
+      const keep = '<option value="">— Player A —</option>';
+      const keepB = '<option value="">— Player B —</option>';
+      let optsHtml = '';
+      rows.forEach(r => {
+        optsHtml += `<option value="${escHtml(r.model_id)}">${escHtml(r.name)}</option>`;
+      });
+      selA.innerHTML = keep + optsHtml;
+      selB.innerHTML = keepB + optsHtml;
+    }
   } catch(e) { /* server not ready yet */ }
+}
+
+// ── Head-to-head comparison ───────────────────────────────────────────────
+async function runH2H() {
+  const a = document.getElementById('h2hPlayerA').value;
+  const b = document.getElementById('h2hPlayerB').value;
+  const body = document.getElementById('h2hBody');
+  if (!a || !b) { body.innerHTML = '<div class="h2h-hint">Select two players to compare.</div>'; return; }
+  if (a === b) { body.innerHTML = '<div class="h2h-hint">Select two different players.</div>'; return; }
+  body.innerHTML = '<div class="h2h-hint">Loading…</div>';
+  try {
+    const [rec, pA, pB] = await Promise.all([
+      fetch(`${API}/api/models/${encodeURIComponent(a)}/h2h/${encodeURIComponent(b)}`).then(r=>r.json()),
+      fetch(`${API}/api/models/${encodeURIComponent(a)}/profile`).then(r=>r.json()),
+      fetch(`${API}/api/models/${encodeURIComponent(b)}/profile`).then(r=>r.json()),
+    ]);
+    const nameA = pA.name || a;
+    const nameB = pB.name || b;
+    const winsA = rec.wins ?? 0;
+    const winsB = rec.losses ?? 0;
+    const draws = rec.draws ?? 0;
+    const total = rec.total ?? 0;
+    const pctA = total ? Math.round(100*(winsA + draws*0.5)/total) : '—';
+    const pctB = total ? Math.round(100*(winsB + draws*0.5)/total) : '—';
+
+    // Stats from profile responses — profile nests move stats under .moves
+    const movA = pA.moves || {};
+    const movB = pB.moves || {};
+    const blunderRateA = movA.total_moves ? movA.q_blunder / movA.total_moves : null;
+    const blunderRateB = movB.total_moves ? movB.q_blunder / movB.total_moves : null;
+    const blunderA = blunderRateA != null ? (blunderRateA*100).toFixed(1)+'%' : '—';
+    const blunderB = blunderRateB != null ? (blunderRateB*100).toFixed(1)+'%' : '—';
+    const rankA    = movA.avg_rank != null ? Number(movA.avg_rank).toFixed(2) : '—';
+    const rankB    = movB.avg_rank != null ? Number(movB.avg_rank).toFixed(2) : '—';
+    const eloA     = pA.elo ?? '—';
+    const eloB     = pB.elo ?? '—';
+
+    let html = `<div class="h2h-compare">
+      <div class="h2h-header">
+        <span class="h2h-pname">${escHtml(nameA)}</span>
+        <span class="h2h-vs">vs</span>
+        <span class="h2h-pname">${escHtml(nameB)}</span>
+      </div>
+      <div class="h2h-score">${winsA} – ${draws} – ${winsB}</div>
+      <div class="h2h-sub">${total} game${total===1?'':'s'} · ${pctA}% vs ${pctB}% score</div>
+      <div class="h2h-stats">
+        <div class="h2h-stat-row">
+          <span class="h2h-val">${eloA}</span>
+          <span class="h2h-label">ELO</span>
+          <span class="h2h-val">${eloB}</span>
+        </div>
+        <div class="h2h-stat-row">
+          <span class="h2h-val">${blunderA}</span>
+          <span class="h2h-label">Blunder rate</span>
+          <span class="h2h-val">${blunderB}</span>
+        </div>
+        <div class="h2h-stat-row">
+          <span class="h2h-val">${rankA}</span>
+          <span class="h2h-label">Avg candidate rank</span>
+          <span class="h2h-val">${rankB}</span>
+        </div>
+      </div>
+    </div>`;
+    body.innerHTML = html;
+  } catch(e) {
+    body.innerHTML = '<div class="h2h-hint">Error loading data.</div>';
+  }
 }
 
 // ── Recent games ──────────────────────────────────────────────────────────
@@ -828,16 +909,45 @@ async function loadHistory() {
 
     games.forEach(g => {
       const res = resultLabel[g.result] || g.result;
+      const openingTag = (g.eco_code || g.opening_name)
+        ? `<span class="game-opening" title="${escHtml(g.opening_name||'')}">` +
+          `${escHtml(g.eco_code||'')}${g.eco_code && g.opening_name ? ' · ' : ''}${escHtml(g.opening_name||'')}</span>`
+        : '';
       html += `<div class="game-row" onclick="openReplay(${g.id}, window._recentGamesMeta[${g.id}])">
         <span class="game-result">${res}</span>
         <span class="game-names">${escHtml(g.white_name)} vs ${escHtml(g.black_name)}</span>
         <span class="game-moves">${g.total_moves}m</span>
+        ${openingTag}
         <a class="game-lichess" title="Analyse on Lichess" target="_blank" rel="noopener"
            onclick="event.stopPropagation(); openLichessById(${g.id})">↗</a>
+        <button class="game-pgn-btn" title="Download PGN" onclick="event.stopPropagation(); downloadGamePgn(${g.id})">↓</button>
       </div>`;
     });
     body.innerHTML = html;
   } catch(e) {}
+}
+
+// ── PGN download ──────────────────────────────────────────────────────────
+async function downloadGamePgn(gameId) {
+  const url = `${API}/api/games/${gameId}/pgn`;
+  const resp = await fetch(url);
+  if (!resp.ok) { alert('PGN not found'); return; }
+  const text = await resp.text();
+  // Try to derive filename from Content-Disposition header
+  let filename = `nimzo_game_${gameId}.pgn`;
+  const cd = resp.headers.get('content-disposition');
+  if (cd) {
+    const m = cd.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
+    if (m) filename = decodeURIComponent(m[1].replace(/^"|"$/g, ''));
+  }
+  const blob = new Blob([text], { type: 'application/x-chess-pgn' });
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(blob),
+    download: filename,
+  });
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 
 // ── Mode tabs ─────────────────────────────────────────────────────────────

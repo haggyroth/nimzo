@@ -505,8 +505,10 @@ def get_recent_games(limit: int = 20) -> list[dict]:
             SELECT
                 g.id, g.result, g.termination, g.total_moves, g.played_at,
                 wp.name AS white_name, bp.name AS black_name,
+                wp.model_id AS white_model_id, bp.model_id AS black_model_id,
                 g.white_elo_before, g.white_elo_after,
-                g.black_elo_before,  g.black_elo_after
+                g.black_elo_before,  g.black_elo_after,
+                g.eco_code, g.opening_name
             FROM games g
             JOIN players wp ON g.white_player_id = wp.id
             JOIN players bp ON g.black_player_id = bp.id
