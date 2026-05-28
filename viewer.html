@@ -159,6 +159,10 @@
               <label class="toggle-row">
                 <input type="checkbox" id="whiteThinking"> Extended thinking
               </label>
+              <div class="games-row" title="Stockfish candidates shown to this model (0 = default 5). Raise for weaker models, lower for stronger ones to create balanced handicap matches.">
+                <span>Candidates</span>
+                <input type="number" id="whiteCandidates" value="0" min="0" max="20" style="width:52px" placeholder="5">
+              </div>
               <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
                 <span>Blind opening moves</span>
                 <input type="number" id="whiteBlindMoves" value="0" min="0" max="20" style="width:52px">
@@ -193,6 +197,10 @@
               <label class="toggle-row">
                 <input type="checkbox" id="blackThinking"> Extended thinking
               </label>
+              <div class="games-row" title="Stockfish candidates shown to this model (0 = default 5). Raise for weaker models, lower for stronger ones to create balanced handicap matches.">
+                <span>Candidates</span>
+                <input type="number" id="blackCandidates" value="0" min="0" max="20" style="width:52px" placeholder="5">
+              </div>
               <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
                 <span>Blind opening moves</span>
                 <input type="number" id="blackBlindMoves" value="0" min="0" max="20" style="width:52px">

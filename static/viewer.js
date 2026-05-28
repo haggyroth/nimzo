@@ -1016,6 +1016,8 @@ async function startTournament() {
     black_blind_opening_moves: parseInt(document.getElementById('blackBlindMoves')?.value) || 0,
     white_blind: document.getElementById('whiteBlind')?.checked ?? false,
     black_blind: document.getElementById('blackBlind')?.checked ?? false,
+    white_candidate_count: parseInt(document.getElementById('whiteCandidates')?.value) || null,
+    black_candidate_count: parseInt(document.getElementById('blackCandidates')?.value) || null,
     max_moves:                parseInt(document.getElementById('maxMoves')?.value) || 0,
   };
 
