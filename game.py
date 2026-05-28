@@ -359,7 +359,10 @@ async def play_game(
             ],
             "is_human_turn": is_human,
             "is_blind_move": is_blind,
-            "legal_uci": current_player.get_legal_uci_moves() if is_human else [],
+            # Compute legal moves directly from the board — the player's
+            # internal _current_board is only set inside choose_move(), which
+            # runs after this broadcast, so get_legal_uci_moves() returned [].
+            "legal_uci": [m.uci() for m in board.legal_moves] if is_human else [],
         })
 
         # Model receives empty candidate list in blind mode

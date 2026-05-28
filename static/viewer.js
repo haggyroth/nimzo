@@ -522,21 +522,28 @@ async function _cmcbRender(animate) {
   // Human input handling
   if (gameState.isHumanTurn) {
     const humanColorConst = gameState.humanColor === 'black' ? COLOR.black : COLOR.white;
-    const allowedUci = gameState.humanAssisted
-      ? gameState.humanCandidates
-      : gameState.humanLegalUci;
+    // In assisted mode, prefer candidate moves; in free mode use all legal moves.
+    // Always fall back to humanLegalUci so pieces with no candidate move are still
+    // draggable (this guards against candidates not yet arriving, or a position
+    // where the top-N doesn't cover every piece the human might want to move).
+    const candidateUci = gameState.humanAssisted ? gameState.humanCandidates : [];
+    const legalUci     = gameState.humanLegalUci;
 
     _cmcb.board.enableMoveInput(event => {
       const { INPUT_EVENT_TYPE } = _cmcb;
       if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
-        // Allow drag only if this piece has at least one legal/candidate move
-        return allowedUci.some(u => u.startsWith(event.squareFrom));
+        // Allow drag if this piece appears in candidates OR has any legal move
+        return candidateUci.some(u => u.startsWith(event.squareFrom))
+            || legalUci.some(u => u.startsWith(event.squareFrom));
       }
       if (event.type === INPUT_EVENT_TYPE.validateMoveInput) {
         const uci = event.squareFrom + event.squareTo;
-        // Check promotions (pawn to back rank)
-        const matches = allowedUci.filter(u => u.startsWith(uci));
+        // Prefer a candidate destination; fall back to any legal destination
+        const candMatches  = candidateUci.filter(u => u.startsWith(uci));
+        const legalMatches = legalUci.filter(u => u.startsWith(uci));
+        const matches = candMatches.length > 0 ? candMatches : legalMatches;
         if (matches.length > 0) {
+          // Auto-promote to queen; can be extended later with a promotion dialog
           const chosen = matches.find(u => u.endsWith('q')) || matches[0];
           submitHumanMove(chosen);
           return true;
@@ -1475,7 +1482,9 @@ function onGameStart(d) {
   if (d.white_is_human) gameState.humanColor = 'white';
   else if (d.black_is_human) gameState.humanColor = 'black';
   else gameState.humanColor = null;
-  gameState.humanAssisted = d.human_assisted !== false;
+  // Do NOT reset humanAssisted here — game_start doesn't carry it, so
+  // d.human_assisted is undefined, which would always coerce to true and
+  // override the value already set by tournament_status.
   _allLessons = {};
   evalHistory = [];
   gameState.elapsedSum   = { white: 0, black: 0 };
