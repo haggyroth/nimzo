@@ -130,6 +130,7 @@
         <div class="mode-tabs">
           <button class="mode-tab active" id="tabMatch"      onclick="setMode('match')">Match</button>
           <button class="mode-tab"        id="tabTournament" onclick="setMode('tournament')">Tournament</button>
+          <button class="mode-tab"        id="tabPuzzle"     onclick="setMode('puzzle')">Puzzles</button>
         </div>
 
         <!-- ── Match mode ── -->
@@ -311,6 +312,54 @@
           </div>
         </div>
 
+        <!-- ── Puzzle Gauntlet mode ── -->
+        <div id="puzzleForm" style="display:none">
+          <div class="ctrl-body">
+
+            <p style="font-size:10px;color:var(--text-dim);margin:0 0 8px">
+              Each model attempts every puzzle from the positions file.
+              Score = fraction of correct first moves chosen.
+            </p>
+
+            <!-- Puzzle file path -->
+            <div class="games-row" title="Path to a .toml file with [[puzzle]] entries. Relative to the server working directory.">
+              <span>Positions file</span>
+              <input class="ctrl-input" id="puzzleFile" value="positions.toml" style="flex:1">
+            </div>
+
+            <!-- Candidate count -->
+            <div class="games-row" title="Stockfish candidates shown to each model per puzzle.">
+              <span>Candidates</span>
+              <input type="number" id="puzzleCandidates" value="5" min="1" max="20" style="width:52px">
+            </div>
+
+            <!-- Move timeout -->
+            <div class="games-row" title="Seconds per puzzle. 0 = no limit.">
+              <span>Timeout (s)</span>
+              <input type="number" id="puzzleTimeout" value="30" min="0" max="300" style="width:52px">
+            </div>
+
+            <hr class="divider">
+
+            <!-- Dynamic player list for puzzle gauntlet -->
+            <div id="puzzlePlayerList" style="display:flex;flex-direction:column;gap:8px"></div>
+            <button class="trn-add-btn" onclick="puzzleAddPlayer()">+ Add Player</button>
+
+            <hr class="divider">
+            <button class="start-btn" id="puzzleStartBtn" onclick="startPuzzleGauntlet()">▶ Run Gauntlet</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Puzzle progress view -->
+      <div class="progress-wrap" id="puzzleProgressView" style="display:none">
+        <div class="progress-label">
+          <span id="puzzleProgressText">Puzzle 0 / 0</span>
+          <span id="puzzleProgressPct">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="puzzleProgressFill" style="width:0%"></div></div>
+        <div id="puzzleCurrentDesc" style="font-size:9px;color:var(--text-dim);margin-top:4px;text-align:center"></div>
       </div>
 
       <!-- Progress view (shown when running/paused) -->
@@ -329,6 +378,26 @@
         Live Standings <span class="chevron">▾</span>
       </div>
       <div id="standingsBody"></div>
+    </div>
+
+    <!-- Puzzle scoreboard (shown during/after gauntlet) -->
+    <div class="ctrl-section" id="puzzleScoreSection" style="display:none">
+      <div class="ctrl-head" onclick="toggleSection('puzzleScoreSection')">
+        Puzzle Scores <span class="chevron">▾</span>
+      </div>
+      <div id="puzzleScoreBody"></div>
+    </div>
+
+    <!-- Puzzle history -->
+    <div class="ctrl-section" id="puzzleHistorySection" style="display:none">
+      <div class="ctrl-head" onclick="toggleSection('puzzleHistorySection')">
+        Gauntlet History
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadPuzzleHistory()">↻</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div id="puzzleHistoryBody"><div class="lb-empty">No gauntlets yet</div></div>
     </div>
 
     <!-- Leaderboard section -->

@@ -96,3 +96,21 @@ class TournamentStartConfig(BaseModel):
     # Invalid/illegal moves are silently skipped; the game continues from wherever
     # the prefix successfully reaches.
     opening_pgn: str = ""
+
+
+class PuzzleGauntletConfig(BaseModel):
+    """
+    Request body for ``POST /api/puzzle/start``.
+
+    One or more players each attempt every puzzle from the given positions file.
+    Score = fraction solved (correct first move) + average candidate rank for
+    near-misses.  No ELO changes — this is a pure capability benchmark.
+    """
+
+    players: list[PlayerSpec] = []
+    # How many Stockfish candidates to show to each model per puzzle
+    candidate_count: int = Field(default=5, ge=1, le=20)
+    # Path to a TOML file containing [[puzzle]] entries (relative to CWD or absolute)
+    puzzles_file: str = "positions.toml"
+    # Seconds per puzzle move; 0 = no limit
+    move_timeout: int = Field(default=30, ge=0, le=300)
