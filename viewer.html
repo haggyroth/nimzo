@@ -255,6 +255,11 @@
               <input type="number" id="maxMoves" value="0" min="0" max="5000" style="width:60px" placeholder="0">
             </div>
 
+            <div title="PGN move sequence to play automatically before guided play begins (e.g. &quot;1. e4 e5 2. Nf3 Nc6&quot;). Leave blank for a normal game. Both models step through these moves; the viewer shows them as greyed-out book moves.">
+              <span class="games-label">Opening prefix (PGN)</span>
+              <textarea id="openingPgn" rows="2" placeholder="e.g. 1. e4 e5 2. Nf3 Nc6" style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:11px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;margin-top:4px"></textarea>
+            </div>
+
             <button class="start-btn" id="startBtn" onclick="startTournament()">▶ Start Match</button>
           </div>
         </div>

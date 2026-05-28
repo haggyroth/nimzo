@@ -91,3 +91,8 @@ class TournamentStartConfig(BaseModel):
     games_per_pair: int = Field(default=2, ge=1, le=100)
     # Adaptive difficulty: auto-adjust candidate_count based on rolling win rate
     adaptive_difficulty: bool = False
+    # Forced opening prefix: PGN move sequence to replay before guided play begins.
+    # e.g. "1. e4 e5 2. Nf3 Nc6" — both models step through these moves automatically.
+    # Invalid/illegal moves are silently skipped; the game continues from wherever
+    # the prefix successfully reaches.
+    opening_pgn: str = ""

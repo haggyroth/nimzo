@@ -16,6 +16,7 @@ from __future__ import annotations  # PEP 563 — all annotations are strings at
 
 import asyncio
 import hashlib
+import io
 import itertools
 import logging
 import time
@@ -207,6 +208,7 @@ async def play_game(
     judge: JudgeConfig | None = None,
     adaptive_difficulty: bool = False,
     max_moves: int = 500,
+    opening_pgn: str = "",
 ) -> dict:
     """
     Run a single game between two players and return a result dict.
@@ -221,6 +223,12 @@ async def play_game(
     Players with ``config.blind_opening_moves > 0`` have Stockfish candidates
     withheld for the first N full moves; the model must choose freely from its
     chess knowledge and the fallback on parse failure is a random legal move.
+
+    If ``opening_pgn`` is non-empty, those moves are replayed automatically
+    before the main loop begins.  The viewer receives them as ``move`` events
+    with ``is_book_move=True`` so they can be rendered differently.  Illegal
+    or unparseable moves are silently skipped; play continues from the
+    furthest valid position reached.
 
     Returns a dict with keys: result, termination, pgn, white_elo_before/after,
     black_elo_before/after, and per-move quality/coherence data.
@@ -253,6 +261,45 @@ async def play_game(
     move_number = 0
 
     loop = asyncio.get_running_loop()
+
+    # ── Forced opening prefix ─────────────────────────────────────────────
+    # Replay ``opening_pgn`` moves before the main loop.  Each move is
+    # broadcast as a ``move`` event with ``is_book_move=True`` so the viewer
+    # can render them greyed out.  Invalid or illegal moves are skipped
+    # silently so a typo in the PGN does not crash the game.
+    if opening_pgn.strip():
+        try:
+            prefix_game = chess.pgn.read_game(io.StringIO(opening_pgn))
+        except Exception:
+            prefix_game = None
+        if prefix_game is not None:
+            for prefix_move in prefix_game.mainline_moves():
+                if board.is_game_over():
+                    break
+                if prefix_move not in board.legal_moves:
+                    logger.warning("opening_pgn: illegal move %s at %s — stopping prefix early", prefix_move, board.fen())
+                    break
+                san = board.san(prefix_move)
+                node = node.add_variation(prefix_move)
+                board.push(prefix_move)
+                move_number += 1
+                await _arena.broadcast({
+                    "type":           "move",
+                    "san":            san,
+                    "uci":            prefix_move.uci(),
+                    "move_number":    move_number,
+                    "color":          "black" if board.turn == chess.WHITE else "white",  # color of side that just moved
+                    "quality":        "book",
+                    "candidate_rank": 0,
+                    "reasoning":      "(opening book)",
+                    "coherence_score": None,
+                    "score_cp_white": None,
+                    "elapsed_ms":     None,
+                    "is_book_move":   True,
+                    "is_blind_move":  False,
+                    "timed_out":      False,
+                    "fen":            board.fen(),
+                })
 
     # Sentinel so the post-loop code knows *why* we exited
     move_limit_hit = False
@@ -673,6 +720,7 @@ async def run_bracket_tournament(
     judge: JudgeConfig | None = None,
     adaptive_difficulty: bool = False,
     max_moves: int = 0,
+    opening_pgn: str = "",
 ):
     """
     Drive a multi-player round-robin or gauntlet tournament.
@@ -734,7 +782,7 @@ async def run_bracket_tournament(
 
             logger.info("Game %d/%d: %s (W) vs %s (B)", actual_idx, total, white.config.name, black.config.name)
             try:
-                summary = await play_game(white, black, stockfish, actual_idx, tutor, judge, adaptive_difficulty=adaptive_difficulty, max_moves=max_moves or 500)
+                summary = await play_game(white, black, stockfish, actual_idx, tutor, judge, adaptive_difficulty=adaptive_difficulty, max_moves=max_moves or 500, opening_pgn=opening_pgn)
             except _arena.TournamentAborted:
                 logger.info("Tournament stopped by user.")
                 database.abort_tournament(tournament_id)
@@ -827,6 +875,7 @@ async def run_tournament(
     judge: JudgeConfig | None = None,
     adaptive_difficulty: bool = False,
     max_moves: int = 0,
+    opening_pgn: str = "",
 ):
     """
     Drive a 2-player match of ``n_games`` games, alternating colours each game.
@@ -846,7 +895,7 @@ async def run_tournament(
 
             logger.info("Game %d/%d: %s (W) vs %s (B)", i, n_games, white.config.name, black.config.name)
             try:
-                summary = await play_game(white, black, stockfish, i, tutor, judge, adaptive_difficulty=adaptive_difficulty, max_moves=max_moves or 500)
+                summary = await play_game(white, black, stockfish, i, tutor, judge, adaptive_difficulty=adaptive_difficulty, max_moves=max_moves or 500, opening_pgn=opening_pgn)
             except _arena.TournamentAborted:
                 logger.info("Tournament stopped by user.")
                 break

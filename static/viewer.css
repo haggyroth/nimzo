@@ -421,6 +421,13 @@
     .move-coherence.lo { color: var(--q-blunder); }
     .move-timeout  { font-size: 7px; color: var(--q-mistake); margin-left: 4px; letter-spacing: .5px; }
     .move-latency  { font-size: 7px; color: var(--text-dim);  margin-left: 4px; letter-spacing: .5px; }
+    .move-book     { font-size: 7px; color: var(--text-dim);  margin-left: 4px; letter-spacing: .5px; }
+    /* Book move cards: greyed out, no coloured left border */
+    .move-card.book {
+      border-left-color: var(--border);
+      opacity: 0.55;
+    }
+    .move-card.book .move-san-text { color: var(--text-dim); }
     .move-reason {
       font-size: 9px; font-style: italic; color: var(--text-mid); line-height: 1.5; margin-top: 3px;
       display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;

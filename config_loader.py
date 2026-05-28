@@ -99,6 +99,7 @@ def load_config(path: str | Path):
     fmt          = match_cfg.get("format", "match")
     move_timeout = int(match_cfg.get("move_timeout", 0))
     max_moves    = int(match_cfg.get("max_moves", 0))
+    opening_pgn  = str(match_cfg.get("opening_pgn", ""))
 
     adaptive_difficulty = bool(match_cfg.get("adaptive_difficulty", False))
 
@@ -132,6 +133,7 @@ def load_config(path: str | Path):
             max_moves           = max_moves,
             human_assisted      = bool(match_cfg.get("human_assisted", True)),
             adaptive_difficulty = adaptive_difficulty,
+            opening_pgn         = opening_pgn,
         )
 
     # ── 2-player match mode ───────────────────────────────────────────────
@@ -165,4 +167,5 @@ def load_config(path: str | Path):
         max_moves                   = max_moves,
         human_assisted              = bool(match_cfg.get("human_assisted", True)),
         adaptive_difficulty         = adaptive_difficulty,
+        opening_pgn                 = opening_pgn,
     )
