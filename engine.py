@@ -11,7 +11,40 @@ from typing import Optional
 import os
 
 
-DEFAULT_STOCKFISH_PATH = os.environ.get("STOCKFISH_PATH", "/usr/games/stockfish")
+def _find_stockfish() -> str:
+    """
+    Resolve the Stockfish binary path.
+
+    Priority:
+    1. STOCKFISH_PATH env var (explicit override)
+    2. ``which stockfish`` — Homebrew / system PATH
+    3. Common hard-coded install locations (Homebrew Intel/ARM, apt, snap)
+    4. Fall back to '/usr/games/stockfish' so the original error message is preserved
+       if none of the above exist (will raise FileNotFoundError on first use).
+    """
+    explicit = os.environ.get("STOCKFISH_PATH")
+    if explicit:
+        return explicit
+
+    import shutil
+    on_path = shutil.which("stockfish")
+    if on_path:
+        return on_path
+
+    candidates = [
+        "/opt/homebrew/bin/stockfish",   # Homebrew ARM (Apple Silicon)
+        "/usr/local/bin/stockfish",      # Homebrew Intel
+        "/usr/bin/stockfish",            # apt
+        "/snap/bin/stockfish",           # snap
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+
+    return "/usr/games/stockfish"  # apt default — will fail with a clear error
+
+
+DEFAULT_STOCKFISH_PATH = _find_stockfish()
 
 # Move-quality centipawn-loss thresholds (vs Stockfish's top candidate).
 # Tune these to adjust how harshly moves are graded.
