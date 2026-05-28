@@ -510,8 +510,8 @@ async def play_game(
     opening_ply = opening_deep[2] if opening_deep else None
 
     # ELO — use game count for dynamic K
-    w_count = database.get_player_game_count(white.config.model_id)
-    b_count = database.get_player_game_count(black.config.model_id)
+    w_count = await asyncio.to_thread(database.get_player_game_count, white.config.model_id)
+    b_count = await asyncio.to_thread(database.get_player_game_count, black.config.model_id)
     w_elo_before, b_elo_before = white.elo, black.elo
     w_elo_after, b_elo_after   = calculate_elos(
         w_elo_before, b_elo_before, result, w_count, b_count
@@ -519,10 +519,11 @@ async def play_game(
     white.update_elo(w_elo_after)
     black.update_elo(b_elo_after)
 
-    database.upsert_player(white.config.model_id, white.config.name, white.config.backend, w_elo_after)
-    database.upsert_player(black.config.model_id, black.config.name, black.config.backend, b_elo_after)
+    await asyncio.to_thread(database.upsert_player, white.config.model_id, white.config.name, white.config.backend, w_elo_after)
+    await asyncio.to_thread(database.upsert_player, black.config.model_id, black.config.name, black.config.backend, b_elo_after)
 
-    game_id = database.record_game(
+    game_id = await asyncio.to_thread(
+        database.record_game,
         white_model_id=white.config.model_id,
         black_model_id=black.config.model_id,
         result=result,
@@ -536,23 +537,26 @@ async def play_game(
         eco_code=opening[0] if opening else None,
         opening_name=opening[1] if opening else None,
     )
-    for rec in move_records:
-        database.record_move(
-            game_id=game_id,
-            move_number=rec["move_number"],
-            player_model_id=rec["player_model_id"],
-            move_uci=rec["move_uci"],
-            move_san=rec["move_san"],
-            candidate_rank=rec["candidate_rank"],
-            quality=rec["quality"],
-            score_cp=rec["score_cp"],
-            reasoning=rec["reasoning"],
-            thinking_content=rec["thinking_content"],
-            fen_after=rec["fen_after"],
-            coherence_score=rec.get("coherence_score"),
-            timed_out=rec.get("timed_out", False),
-            elapsed_ms=rec.get("elapsed_ms"),
-        )
+    # Write all move records in a single thread submission to avoid per-move overhead
+    def _write_moves() -> None:
+        for rec in move_records:
+            database.record_move(
+                game_id=game_id,
+                move_number=rec["move_number"],
+                player_model_id=rec["player_model_id"],
+                move_uci=rec["move_uci"],
+                move_san=rec["move_san"],
+                candidate_rank=rec["candidate_rank"],
+                quality=rec["quality"],
+                score_cp=rec["score_cp"],
+                reasoning=rec["reasoning"],
+                thinking_content=rec["thinking_content"],
+                fen_after=rec["fen_after"],
+                coherence_score=rec.get("coherence_score"),
+                timed_out=rec.get("timed_out", False),
+                elapsed_ms=rec.get("elapsed_ms"),
+            )
+    await asyncio.to_thread(_write_moves)
 
     # ── Achievements ───────────────────────────────────────────────────
     score_history_white = [rec["score_cp"] for rec in move_records]
@@ -572,7 +576,7 @@ async def play_game(
             opening_ply=opening_ply,
         )
         if codes:
-            database.record_achievements(player.config.model_id, game_id, codes)
+            await asyncio.to_thread(database.record_achievements, player.config.model_id, game_id, codes)
             awards[player.config.model_id] = codes
             logger.info("Achievements for %s: %s", player.config.name, ", ".join(codes))
 
@@ -632,7 +636,7 @@ async def play_game(
 
         if lessons["improve"] or lessons["strength"]:
             bmr = bad_move_rate(qualities)
-            existing = [l["lesson"] for l in database.get_all_raw_lessons(player.config.model_id)]
+            existing = [l["lesson"] for l in await asyncio.to_thread(database.get_all_raw_lessons, player.config.model_id)]
 
             saved_improve: list[str] = []
             saved_strength: list[str] = []
@@ -643,7 +647,7 @@ async def play_game(
                     continue
                 tagged = f"[improve] {lesson}"
                 player.add_lesson(tagged)
-                database.record_lesson(player.config.model_id, game_id, lesson, "improve", bmr)
+                await asyncio.to_thread(database.record_lesson, player.config.model_id, game_id, lesson, "improve", bmr)
                 existing.append(lesson)
                 saved_improve.append(lesson)
 
@@ -653,7 +657,7 @@ async def play_game(
                     continue
                 tagged = f"[strength] {lesson}"
                 player.add_lesson(tagged)
-                database.record_lesson(player.config.model_id, game_id, lesson, "strength", bmr)
+                await asyncio.to_thread(database.record_lesson, player.config.model_id, game_id, lesson, "strength", bmr)
                 existing.append(lesson)
                 saved_strength.append(lesson)
 
@@ -672,16 +676,16 @@ async def play_game(
                     logger.info("  strength: %s", l)
 
         # ── Lesson compression: every 5 games once threshold is reached ──
-        game_count = database.get_player_game_count(player.config.model_id)
-        lesson_count = database.get_lesson_count(player.config.model_id)
+        game_count = await asyncio.to_thread(database.get_player_game_count, player.config.model_id)
+        lesson_count = await asyncio.to_thread(database.get_lesson_count, player.config.model_id)
         if _has_tutor and game_count >= 5 and game_count % 5 == 0 and lesson_count >= 10:
             logger.info("Compressing %d lessons for %s (game #%d)…", lesson_count, player.config.name, game_count)
-            all_lessons = database.get_all_raw_lessons(player.config.model_id)
-            profile = await loop.run_in_executor(
-                None, compress_lessons, all_lessons, player.config.name, game_count, tutor
+            all_lessons = await asyncio.to_thread(database.get_all_raw_lessons, player.config.model_id)
+            profile = await asyncio.to_thread(
+                compress_lessons, all_lessons, player.config.name, game_count, tutor
             )
             if profile:
-                database.set_strategic_profile(player.config.model_id, profile)
+                await asyncio.to_thread(database.set_strategic_profile, player.config.model_id, profile)
                 player.config.strategic_profile = profile
 
     if _has_tutor and _lesson_players:
@@ -690,7 +694,7 @@ async def play_game(
     # ── Adaptive difficulty ───────────────────────────────────────────────
     if adaptive_difficulty:
         for player in (white, black):
-            rate = database.get_recent_win_rate(player.config.model_id, n=10)
+            rate = await asyncio.to_thread(database.get_recent_win_rate, player.config.model_id, 10)
             if rate is None:
                 continue
             old_count = player.config.candidate_count
@@ -732,7 +736,8 @@ async def run_bracket_tournament(
     total = len(pairings)
     game_results: list[dict] = []
 
-    tournament_id = database.create_tournament(
+    tournament_id = await asyncio.to_thread(
+        database.create_tournament,
         format=fmt,
         player_ids=[ps.model_id for ps in player_specs],
         total_games=total,
@@ -768,8 +773,8 @@ async def run_bracket_tournament(
             black = player_map[black_spec.model_id]
 
             # Refresh ELOs from DB before each game
-            white.elo = database.get_player_elo(white.config.model_id)
-            black.elo = database.get_player_elo(black.config.model_id)
+            white.elo = await asyncio.to_thread(database.get_player_elo, white.config.model_id)
+            black.elo = await asyncio.to_thread(database.get_player_elo, black.config.model_id)
 
             _arena._state.update({
                 "game_number": actual_idx,
@@ -785,7 +790,7 @@ async def run_bracket_tournament(
                 summary = await play_game(white, black, stockfish, actual_idx, tutor, judge, adaptive_difficulty=adaptive_difficulty, max_moves=max_moves or 500, opening_pgn=opening_pgn)
             except _arena.TournamentAborted:
                 logger.info("Tournament stopped by user.")
-                database.abort_tournament(tournament_id)
+                await asyncio.to_thread(database.abort_tournament, tournament_id)
                 break
 
             result = summary["result"]
@@ -794,8 +799,11 @@ async def run_bracket_tournament(
                 "black_model_id": black.config.model_id,
                 "result": result,
             })
-            database.record_tournament_game(tournament_id, summary["game_id"], actual_idx,
-                                            white.config.model_id, black.config.model_id)
+            await asyncio.to_thread(
+                database.record_tournament_game,
+                tournament_id, summary["game_id"], actual_idx,
+                white.config.model_id, black.config.model_id,
+            )
 
             # Update series win counts
             ps = pair_schedule[key]
@@ -849,7 +857,7 @@ async def run_bracket_tournament(
             }
         winner_id = final[0]["model_id"] if final else None
         title = pick_title(winner_id, fmt) if winner_id else None
-        database.finish_tournament(tournament_id, winner_id, title)
+        await asyncio.to_thread(database.finish_tournament, tournament_id, winner_id, title)
         _arena._state.update({"status": "idle", "standings": final})
         await _arena.broadcast({
             "type":      "tournament_complete",

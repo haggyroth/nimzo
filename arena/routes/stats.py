@@ -4,6 +4,7 @@ arena/routes/stats.py — /api/stats/*, /api/leaderboard, serve_viewer, stats_pa
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -50,27 +51,27 @@ async def api_status():
 
 @router.get("/api/leaderboard")
 async def api_leaderboard():
-    return database.get_leaderboard()
+    return await asyncio.to_thread(database.get_leaderboard)
 
 
 @router.get("/api/elo-history/{model_id:path}")
 async def api_elo_history(model_id: str):
-    return database.get_elo_history(model_id)
+    return await asyncio.to_thread(database.get_elo_history, model_id)
 
 
 @router.get("/api/stats/moves")
 async def api_stats_moves():
-    return database.get_player_move_stats()
+    return await asyncio.to_thread(database.get_player_move_stats)
 
 
 @router.get("/api/stats/colors")
 async def api_stats_colors():
-    return database.get_color_stats()
+    return await asyncio.to_thread(database.get_color_stats)
 
 
 @router.get("/api/stats/h2h")
 async def api_stats_h2h():
-    return database.get_head_to_head()
+    return await asyncio.to_thread(database.get_head_to_head)
 
 
 @router.get("/api/achievements/catalogue")

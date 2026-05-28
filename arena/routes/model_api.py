@@ -39,7 +39,7 @@ _portrait_locks: dict[str, asyncio.Lock] = {}
 @router.get("/api/models/{model_id:path}/profile")
 async def api_model_profile(model_id: str):
     """Return enriched profile for a model: stats, personality traits, and achievements."""
-    profile = database.get_model_profile(model_id)
+    profile = await asyncio.to_thread(database.get_model_profile, model_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Model not found")
     profile["traits"] = derive_personality_traits(profile)
@@ -49,40 +49,37 @@ async def api_model_profile(model_id: str):
             "times": a["times"],
             **ACHIEVEMENT_CATALOGUE.get(a["code"], {"label": a["code"], "desc": ""}),
         }
-        for a in database.get_player_achievements(model_id)
+        for a in await asyncio.to_thread(database.get_player_achievements, model_id)
     ]
     # Run HF fetch off the event loop so a slow HF response can't stall the UI.
-    loop = asyncio.get_running_loop()
-    profile["metadata"] = await loop.run_in_executor(
-        None, get_model_metadata, model_id,
-    )
+    profile["metadata"] = await asyncio.to_thread(get_model_metadata, model_id)
     # Include portrait URL if already generated
-    portrait_path = database.get_portrait_path(model_id)
+    portrait_path = await asyncio.to_thread(database.get_portrait_path, model_id)
     profile["portrait_url"] = f"/{portrait_path}" if portrait_path else None
     return profile
 
 
 @router.get("/api/models/{model_id:path}/lesson-effectiveness")
 async def api_lesson_effectiveness(model_id: str):
-    return database.get_lesson_effectiveness(model_id)
+    return await asyncio.to_thread(database.get_lesson_effectiveness, model_id)
 
 
 @router.get("/api/models/{model_id:path}/coherence")
 async def api_coherence_stats(model_id: str):
     """Average reasoning coherence score and timeout rate for a model."""
-    return database.get_coherence_stats(model_id)
+    return await asyncio.to_thread(database.get_coherence_stats, model_id)
 
 
 @router.get("/api/models/{model_id:path}/coherence-history")
 async def api_coherence_history(model_id: str):
     """Per-game average coherence score for a model, ordered chronologically."""
-    return database.get_coherence_history(model_id)
+    return await asyncio.to_thread(database.get_coherence_history, model_id)
 
 
 @router.get("/api/models/{model_id:path}/openings")
 async def api_model_openings(model_id: str):
     """W/D/L breakdown per opening for a model, ordered by games played."""
-    return database.get_openings_for_model(model_id)
+    return await asyncio.to_thread(database.get_openings_for_model, model_id)
 
 
 @router.get("/api/models/{model_id:path}/quality")
@@ -94,7 +91,7 @@ async def api_model_quality(model_id: str):
     score, and bad-move rate (mistakes + blunders).  404 if model unknown or
     has no recorded moves.
     """
-    stats = database.get_player_quality_stats(model_id)
+    stats = await asyncio.to_thread(database.get_player_quality_stats, model_id)
     if stats is None:
         raise HTTPException(status_code=404, detail="Model not found or no moves recorded")
     return stats
@@ -113,11 +110,11 @@ async def api_generate_portrait(model_id: str):
     seconds to prevent runaway paid API calls.
     """
     # Reject unknown model IDs — prevents paid API calls for arbitrary ghost IDs
-    if not database.player_exists(model_id):
+    if not await asyncio.to_thread(database.player_exists, model_id):
         raise HTTPException(status_code=404, detail="Model not found")
 
     # Return cached path without regenerating
-    existing = database.get_portrait_path(model_id)
+    existing = await asyncio.to_thread(database.get_portrait_path, model_id)
     if existing and Path(existing).exists():
         return {"portrait_url": f"/{existing}"}
 
@@ -144,13 +141,10 @@ async def api_generate_portrait(model_id: str):
             )
         _portrait_last_generated[model_id] = now
 
-    loop = asyncio.get_running_loop()
-    path = await loop.run_in_executor(
-        None, generate_portrait, model_id, api_key, _PORTRAITS_DIR
-    )
+    path = await asyncio.to_thread(generate_portrait, model_id, api_key, _PORTRAITS_DIR)
 
     if path:
-        database.set_portrait_path(model_id, path)
+        await asyncio.to_thread(database.set_portrait_path, model_id, path)
 
     quota_exhausted = _portraits_module._quota_exhausted
     return {"portrait_url": f"/{path}" if path else None, "quota_exhausted": quota_exhausted}
@@ -169,7 +163,7 @@ async def api_upload_portrait(model_id: str, file: UploadFile = File(...)):
     _ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
     _MAX_BYTES = 2 * 1024 * 1024   # 2 MB
 
-    if not database.player_exists(model_id):
+    if not await asyncio.to_thread(database.player_exists, model_id):
         raise HTTPException(status_code=404, detail="Model not found")
 
     content_type = (file.content_type or "").split(";")[0].strip().lower()
@@ -202,14 +196,14 @@ async def api_upload_portrait(model_id: str, file: UploadFile = File(...)):
     _PORTRAITS_DIR.mkdir(exist_ok=True)
     dest.write_bytes(data)
 
-    database.set_portrait_path(model_id, f"portraits/{filename}", user_provided=True)
+    await asyncio.to_thread(database.set_portrait_path, model_id, f"portraits/{filename}", user_provided=True)
     return {"portrait_url": f"/portraits/{filename}", "user_provided": True}
 
 
 @router.get("/api/models/{model_id_a:path}/h2h/{model_id_b:path}")
 async def api_h2h(model_id_a: str, model_id_b: str):
     """Head-to-head record for model_a vs model_b from model_a's perspective."""
-    return database.get_h2h_record(model_id_a, model_id_b)
+    return await asyncio.to_thread(database.get_h2h_record, model_id_a, model_id_b)
 
 
 # Hosts allowed for the /api/models proxy.  Prevents SSRF when the server is
