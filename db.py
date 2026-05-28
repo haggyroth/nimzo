@@ -580,7 +580,7 @@ def get_game_moves(game_id: int) -> list[dict]:
             """
             SELECT m.move_number, m.move_san, m.move_uci, m.quality,
                    m.candidate_rank, m.reasoning, m.score_cp, m.thinking_content,
-                   m.coherence_score, m.timed_out, m.elapsed_ms
+                   m.coherence_score, m.timed_out, m.elapsed_ms, m.fen_after
             FROM moves m
             WHERE m.game_id = ?
             ORDER BY m.move_number ASC

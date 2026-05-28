@@ -60,6 +60,7 @@
           <div class="p-think" id="thinkBlack">● thinking</div>
           <div class="p-eval"  id="evalBlack"></div>
           <div class="p-elo"   id="eloBlack">—</div>
+          <div class="p-latency" id="latencyBlack" title="Avg response time this game"></div>
         </div>
       </div>
       <div class="stat-card" id="statCardBlack"></div>
@@ -87,6 +88,7 @@
           <div class="p-think" id="thinkWhite">● thinking</div>
           <div class="p-eval"  id="evalWhite"></div>
           <div class="p-elo"   id="eloWhite">—</div>
+          <div class="p-latency" id="latencyWhite" title="Avg response time this game"></div>
         </div>
       </div>
     </div>
@@ -580,10 +582,13 @@
     <div class="rp-controls">
       <button class="rp-btn" id="rpFirst"  onclick="rpGo(0)">⟨⟨</button>
       <button class="rp-btn" id="rpPrev"   onclick="rpGo(replay.cursor-1)">⟨</button>
+      <button class="rp-btn" id="rpPlay"   onclick="rpToggleAutoplay()" title="Autoplay">▶</button>
       <span  class="rp-counter" id="rpCounter"></span>
       <button class="rp-btn" id="rpNext"   onclick="rpGo(replay.cursor+1)">⟩</button>
       <button class="rp-btn" id="rpLast"   onclick="rpGo(replay.moves.length)">⟩⟩</button>
     </div>
+    <!-- Reasoning panel for current move -->
+    <div class="rp-reasoning" id="rpReasoning"></div>
     <!-- Header + close (below controls to not crowd board) -->
     <div class="rp-header" style="padding-top:6px">
       <span class="rp-title" id="rpTitle"></span>
