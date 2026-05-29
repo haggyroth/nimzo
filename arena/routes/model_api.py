@@ -210,14 +210,30 @@ async def api_h2h(model_id_a: str, model_id_b: str):
 # exposed on a LAN (NIMZO_HOST=0.0.0.0).  Extend via the env var if you run
 # LM Studio on a remote host inside your trusted network.
 _PROXY_ALLOWED_HOSTS: frozenset[str] = frozenset({
-    "localhost", "127.0.0.1", "::1", "0.0.0.0",
+    "localhost", "127.0.0.1", "::1",
     *filter(None, os.environ.get("NIMZO_ALLOWED_MODEL_HOSTS", "").split(",")),
+})
+
+# Ports allowed for the /api/models proxy.  None means no explicit port in the
+# URL (i.e. the protocol default).  Covers LM Studio (1234/1235) and Ollama
+# (11434).  Extend via NIMZO_ALLOWED_MODEL_PORTS (comma-separated integers).
+_PROXY_ALLOWED_PORTS: frozenset[int | None] = frozenset({
+    None,   # no explicit port — uses protocol default (80 / 443)
+    1234, 1235,   # LM Studio primary and secondary instance
+    11434,         # Ollama
+    *[
+        int(p)
+        for p in filter(None, os.environ.get("NIMZO_ALLOWED_MODEL_PORTS", "").split(","))
+        if p.strip().isdigit()
+    ],
 })
 
 
 def _check_proxy_url(url: str) -> None:
-    """Raise HTTPException(403) if *url* points to a host outside the allowlist."""
-    host = (urlparse(url).hostname or "").lower().strip("[]")  # strip IPv6 brackets
+    """Raise HTTPException(403) if *url* points outside the host/port allowlists."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower().strip("[]")  # strip IPv6 brackets
+    port = parsed.port  # None if not explicitly specified
     if host not in _PROXY_ALLOWED_HOSTS:
         raise HTTPException(
             status_code=403,
@@ -225,6 +241,15 @@ def _check_proxy_url(url: str) -> None:
                 f"Host {host!r} is not in the proxy allowlist. "
                 "Add it to the NIMZO_ALLOWED_MODEL_HOSTS env var (comma-separated) "
                 "to permit requests to that host."
+            ),
+        )
+    if port not in _PROXY_ALLOWED_PORTS:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Port {port} is not in the proxy allowlist. "
+                "Add it to the NIMZO_ALLOWED_MODEL_PORTS env var (comma-separated) "
+                "to permit requests to that port."
             ),
         )
 

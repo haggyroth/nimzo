@@ -75,28 +75,31 @@ def _make_db_context(tmp_path: Path):
 # ── G-1 through G-3: _load_puzzles ───────────────────────────────────────────
 
 class TestLoadPuzzles:
-    def test_parses_valid_toml(self, tmp_path):
+    def test_parses_valid_toml(self, tmp_path, monkeypatch):
         """G-1: valid positions.toml is parsed correctly."""
+        import puzzle_loader
+        monkeypatch.setattr(puzzle_loader, "_PROJECT_ROOT", tmp_path.resolve())
         pth = _write_toml(tmp_path, _SIMPLE_TOML)
-        from puzzle_loader import load_puzzles as _load_puzzles
-        puzzles = _load_puzzles(str(pth))
+        puzzles = puzzle_loader.load_puzzles(str(pth))
         assert len(puzzles) == 2
         assert puzzles[0]["solution_uci"] == "h1h8"
         assert puzzles[1]["description"] == "Back rank mate"
 
-    def test_missing_file_raises(self, tmp_path):
+    def test_missing_file_raises(self, tmp_path, monkeypatch):
         """G-2: missing file raises FileNotFoundError."""
-        from puzzle_loader import load_puzzles as _load_puzzles
+        import puzzle_loader
+        monkeypatch.setattr(puzzle_loader, "_PROJECT_ROOT", tmp_path.resolve())
         with pytest.raises(FileNotFoundError):
-            _load_puzzles(str(tmp_path / "nope.toml"))
+            puzzle_loader.load_puzzles(str(tmp_path / "nope.toml"))
 
-    def test_missing_field_raises(self, tmp_path):
+    def test_missing_field_raises(self, tmp_path, monkeypatch):
         """G-3: puzzle missing required field raises ValueError."""
+        import puzzle_loader
+        monkeypatch.setattr(puzzle_loader, "_PROJECT_ROOT", tmp_path.resolve())
         bad = "[[puzzle]]\nfen = \"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\"\n"
         pth = _write_toml(tmp_path, bad)
-        from puzzle_loader import load_puzzles as _load_puzzles
         with pytest.raises(ValueError):
-            _load_puzzles(str(pth))
+            puzzle_loader.load_puzzles(str(pth))
 
 
 # ── G-4 / G-5: PuzzleGauntletConfig ─────────────────────────────────────────
@@ -246,11 +249,13 @@ class TestRunPuzzleGauntlet:
     def _run(self, coro):
         return asyncio.run(coro)
 
-    def test_broadcasts_start_and_over(self, tmp_path):
+    def test_broadcasts_start_and_over(self, tmp_path, monkeypatch):
         """G-9: run_puzzle_gauntlet broadcasts start and over events, records scores."""
+        import puzzle_loader
         import arena as _arena
         from game import run_puzzle_gauntlet
 
+        monkeypatch.setattr(puzzle_loader, "_PROJECT_ROOT", tmp_path.resolve())
         toml_path = _write_toml(tmp_path, _SIMPLE_TOML)
         events = []
 
@@ -302,11 +307,13 @@ class TestRunPuzzleGauntlet:
         assert len(result["scores"]) == 1
         assert result["scores"][0]["total"] == 2
 
-    def test_aborted_gauntlet_status(self, tmp_path):
+    def test_aborted_gauntlet_status(self, tmp_path, monkeypatch):
         """G-10: TournamentAborted marks gauntlet as aborted in DB."""
+        import puzzle_loader
         import arena as _arena
         from game import run_puzzle_gauntlet
 
+        monkeypatch.setattr(puzzle_loader, "_PROJECT_ROOT", tmp_path.resolve())
         toml_path = _write_toml(tmp_path, _SIMPLE_TOML)
 
         player = _fake_puzzle_player("Bob")
@@ -402,11 +409,11 @@ class TestPuzzleHTTPRoutes:
             assert resp.status_code == 422
 
     def test_start_missing_file_returns_404(self, tmp_path):
-        """G-12: POST /api/puzzle/start with missing puzzle file returns 404."""
+        """G-12: POST /api/puzzle/start with a relative path to a missing file returns 404."""
         for client in _make_client(tmp_path):
             resp = client.post("/api/puzzle/start", json={
                 "players": [{"model_id": "test", "name": "T", "backend": "lmstudio"}],
-                "puzzles_file": "/nonexistent/path/puzzles.toml",
+                "puzzles_file": "this_file_does_not_exist_wave3_test.toml",
             })
             assert resp.status_code == 404
 

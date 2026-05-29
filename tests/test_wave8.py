@@ -78,9 +78,13 @@ class TestSSRFUrlAllowlist:
         from arena.routes.model_api import _check_proxy_url
         _check_proxy_url("http://127.0.0.1:1234/v1")
 
-    def test_0_0_0_0_allowed(self):
+    def test_0_0_0_0_blocked(self):
+        """0.0.0.0 was removed from the host allowlist (wave 3 fix m6)."""
         from arena.routes.model_api import _check_proxy_url
-        _check_proxy_url("http://0.0.0.0:1234/v1")
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            _check_proxy_url("http://0.0.0.0:1234/v1")
+        assert exc_info.value.status_code == 403
 
     def test_external_host_rejected(self):
         from arena.routes.model_api import _check_proxy_url
@@ -121,7 +125,7 @@ class TestSSRFUrlAllowlist:
         orig = mapi._PROXY_ALLOWED_HOSTS
         try:
             new_hosts = frozenset({
-                "localhost", "127.0.0.1", "::1", "0.0.0.0", "trusted.internal",
+                "localhost", "127.0.0.1", "::1", "trusted.internal",
             })
             monkeypatch.setattr(mapi, "_PROXY_ALLOWED_HOSTS", new_hosts)
             mapi._check_proxy_url("http://trusted.internal:1234/v1")  # should not raise

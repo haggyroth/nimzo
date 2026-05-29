@@ -10,24 +10,37 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# Canonical project root — all puzzle files must live under here.
+_PROJECT_ROOT: Path = Path(__file__).parent.resolve()
+
 
 def load_puzzles(puzzles_file: str) -> list[dict]:
     """
     Load puzzles from a TOML file.
 
-    Resolves relative paths against the directory containing this file
-    (the project root).  Returns a list of dicts with keys:
-      fen, solution_uci, description
+    Resolves relative paths against the project root (directory containing
+    this file).  Absolute paths and relative paths that escape the project
+    root via ``..`` are rejected with ``ValueError``.
+
+    Returns a list of dicts with keys: fen, solution_uci, description
 
     Raises:
+      ValueError        — path traversal detected, no [[puzzle]] entries,
+                          or missing required fields
       FileNotFoundError — file does not exist
-      ValueError        — no [[puzzle]] entries, or missing required fields
       RuntimeError      — TOML library not available (Python < 3.11 without tomli)
     """
     p = Path(puzzles_file)
     if not p.is_absolute():
-        # Resolve relative to the project root (directory of this file)
-        p = Path(__file__).parent / puzzles_file
+        p = _PROJECT_ROOT / puzzles_file
+    p = p.resolve()
+    # Containment check: resolved path must be under the project root.
+    try:
+        p.relative_to(_PROJECT_ROOT)
+    except ValueError:
+        raise ValueError(
+            f"Puzzle file path {puzzles_file!r} is outside the project directory"
+        )
     if not p.exists():
         raise FileNotFoundError(f"Puzzle file not found: {p}")
 
