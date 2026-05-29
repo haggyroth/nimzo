@@ -131,7 +131,7 @@ Set via `--white-style aggressive` or in `PlayerSpec.style`.
 
 ## Adaptive Difficulty
 
-When `adaptive_difficulty=True`, after each game the rolling 10-game win rate for each player is checked. If it exceeds 65% their `candidate_count` drops by 1 (harder); if it falls below 35% it rises by 1 (easier). Bounds are 3–10. Thresholds are named constants in `arena.py` (`_ADAPT_*`).
+When `adaptive_difficulty=True`, after each game the rolling 10-game win rate for each player is checked. If it exceeds 65% their `candidate_count` drops by 1 (harder); if it falls below 35% it rises by 1 (easier). Bounds are 3–10. Thresholds are named constants in `game.py` (`_ADAPT_*`).
 
 ## Reasoning Coherence Scoring
 
@@ -156,11 +156,11 @@ After each game:
 3. Lessons are stored in SQLite and appended to the player's `lesson_memory`
 4. On the next game, the last 10 lessons (or a compressed strategic profile) are injected into the system prompt
 
-If both models are local and no Anthropic key is set, disable lesson generation by commenting out the `generate_lessons()` call in `arena.py` around the game-over block, or configure a local `--tutor-model`.
+If both models are local and no Anthropic key is set, disable lesson generation by commenting out the `generate_lessons()` call in `game.py` around the game-over block, or configure a local `--tutor-model`.
 
 ## Database Schema
 
-`nimzo.db` — created automatically on first run, anchored to the directory containing `arena.py` regardless of working directory.
+`nimzo.db` — created automatically on first run, anchored to the directory containing `db.py` regardless of working directory.
 
 - `players` — name, model_id, backend, current ELO, portrait_path
 - `games` — result, termination, PGN, ELO before/after for both players

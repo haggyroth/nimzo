@@ -846,7 +846,7 @@ function _renderLeaderboard() {
       ? `<td class="lb-best" title="Replay best game (#${bestId})" onclick="openReplay(${bestId})">${Math.round(bestScore)}</td>`
       : `<td class="lb-best dim">—</td>`;
     const badgeCell = r.achievement_count > 0
-      ? `<td class="lb-badges-cell" title="${r.achievement_count} achievements — click name for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${r.achievement_count}</td>`
+      ? `<td class="lb-badges-cell" title="${r.achievement_count} achievements — click name for details" onclick="openModelCard('${escHtml(r.model_id).replace(/\\/g,'\\\\').replace(/'/g, "\\'")}')">${r.achievement_count}</td>`
       : `<td class="lb-badges-cell dim">—</td>`;
     // Recent form dots
     const formDots = (r.recent_form || []).map(o => {
@@ -855,7 +855,7 @@ function _renderLeaderboard() {
     }).join('');
     html += `<tr>
       <td class="lb-rank">${i+1}</td>
-      <td class="lb-name" title="${escHtml(r.model_id)} — click for details" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g, "\\'")}')">${escHtml(r.name)}</td>
+      <td class="lb-name" title="${escHtml(r.model_id)} — click for details" onclick="openModelCard('${escHtml(r.model_id).replace(/\\/g,'\\\\').replace(/'/g, "\\'")}')">${escHtml(r.name)}</td>
       <td class="lb-elo">${r.elo}</td>
       <td class="lb-wdl">${r.wins}/${r.draws}/${r.losses}</td>
       ${bestCell}
@@ -1201,13 +1201,13 @@ async function startTournament() {
     white_backend:   wBackend,
     white_name:      document.getElementById('whiteName').value || 'White',
     white_model:     wModel,
-    white_url:       document.getElementById('whiteUrl').value,
+    white_url:       (wBackend !== 'human' && wBackend !== 'anthropic' && !isCloudBackend(wBackend)) ? document.getElementById('whiteUrl').value : undefined,
     white_thinking:  document.getElementById('whiteThinking').checked,
     white_style:     document.getElementById('whiteStyle').value,
     black_backend:   bBackend,
     black_name:      document.getElementById('blackName').value || 'Black',
     black_model:     bModel,
-    black_url:       document.getElementById('blackUrl').value,
+    black_url:       (bBackend !== 'human' && bBackend !== 'anthropic' && !isCloudBackend(bBackend)) ? document.getElementById('blackUrl').value : undefined,
     black_thinking:  document.getElementById('blackThinking').checked,
     black_style:     document.getElementById('blackStyle').value,
     tutor_backend:   tutorBackend==='none' ? 'lmstudio' : tutorBackend,
@@ -1945,9 +1945,9 @@ function renderStatCard(color, p, eloHist, h2h) {
   const avgRank = m.avg_rank ? m.avg_rank.toFixed(1) : '—';
 
   // Mini sparkline from ELO history (last 10 data points)
-  const hist10 = (eloHist || []).slice(-10).map(e => e.elo || e);
+  const hist10 = (eloHist || []).slice(-10).map(e => typeof e === 'number' ? e : (e.elo_after ?? 0));
   const spark  = hist10.length >= 2
-    ? `<div class="sc-sparkline">${buildSparkline(hist10, 68, 18, 'var(--gold)')}</div>`
+    ? `<div class="sc-sparkline">${_buildValueSparkline(hist10, 68, 18, 'var(--gold)')}</div>`
     : '';
 
   // H2H vs current opponent
@@ -1999,7 +1999,7 @@ function renderStatCard(color, p, eloHist, h2h) {
       ${tournHtml}
       ${badge ? `<div class="sc-stat" style="border:none">${badge}</div>` : ''}
       <div class="sc-stat" style="border:none;cursor:pointer;color:var(--text-mid)"
-           onclick="openModelCard('${escHtml(p.model_id || '').replace(/'/g,"\\'")}')">
+           onclick="openModelCard('${escHtml(p.model_id || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">
         <span class="sc-val" style="font-size:9px">↗</span>
         <span class="sc-lbl">full card</span>
       </div>
@@ -2957,7 +2957,7 @@ buildUiThemeSwatches();
 
   function onPuzzleThinking(d) {
     // Show the current puzzle on the board
-    if (d.fen && window._board) window._board.setPosition(d.fen);
+    if (d.fen && _cmcb.ready && _cmcb.board) _cmcb.board.setPosition(d.fen, false);
 
     const total = Object.values(puzzleScores).reduce((s, p) => Math.max(s, p.total), 0);
     const count = d.puzzle_index + 1;
