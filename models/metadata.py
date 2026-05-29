@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -28,6 +29,7 @@ import httpx
 
 # Anchor cache to repo root regardless of CWD (see REVIEW.md MN-1)
 _CACHE_PATH = Path(__file__).parent.parent / "hf_metadata_cache.json"
+_cache_lock = threading.Lock()  # serialises concurrent cache reads and writes
 _CACHE_TTL_SECONDS = 24 * 3600   # 24 hours (1 day)
 _HF_API = "https://huggingface.co/api/models/{repo}"
 _REQUEST_TIMEOUT = 4.0    # seconds — strict, this is a UI call
@@ -169,11 +171,12 @@ def fetch_hf_metadata(model_id: str) -> dict:
     if not repo:
         return {}
 
-    cache = _load_cache()
-    entry = cache.get(repo)
-    now = time.time()
-    if entry and (now - entry.get("fetched_at", 0)) < _CACHE_TTL_SECONDS:
-        return entry.get("data", {})
+    with _cache_lock:
+        cache = _load_cache()
+        entry = cache.get(repo)
+        now = time.time()
+        if entry and (now - entry.get("fetched_at", 0)) < _CACHE_TTL_SECONDS:
+            return entry.get("data", {})
 
     data: dict = {}
     try:
@@ -234,8 +237,10 @@ def fetch_hf_metadata(model_id: str) -> dict:
         # Network / parse / DNS failure — just leave data empty
         pass
 
-    cache[repo] = {"fetched_at": now, "data": data}
-    _save_cache(cache)
+    with _cache_lock:
+        cache = _load_cache()
+        cache[repo] = {"fetched_at": now, "data": data}
+        _save_cache(cache)
     return data
 
 

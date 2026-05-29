@@ -826,36 +826,39 @@ def is_duplicate_lesson(
 
 # ── Family ELO prior ──────────────────────────────────────────────────────
 
-# Ordered list of (size-tag, elo-offset) pairs matched against lowercased model_id.
-# Applied once as a starting-ELO nudge for brand-new players; washes out within
-# ~8 games due to K_PROVISIONAL=40.  First match wins.
-_SIZE_ELO_PRIORS: list[tuple[str, float]] = [
-    ("70b",  +12.0),
-    ("72b",  +12.0),
-    ("65b",  +10.0),
-    ("34b",   +8.0),
-    ("30b",   +8.0),
-    ("27b",   +6.0),
-    ("14b",   +3.0),
-    ("13b",   +3.0),
-    ("12b",   +3.0),
-    ("7b",     0.0),
-    ("8b",     0.0),
-    ("6b",    -2.0),
-    ("4b",    -5.0),
-    ("3b",    -7.0),
-    ("2b",   -10.0),
-    ("1b",   -12.0),
-]
+# Dict keyed by the param_count string produced by models.metadata.parse_model_id
+# (e.g. "30B", "7B").  Applied once as a starting-ELO nudge for brand-new players;
+# washes out within ~8 games due to K_PROVISIONAL=40.
+_SIZE_ELO_PRIORS: dict[str, float] = {
+    "70B":  +12.0,
+    "72B":  +12.0,
+    "65B":  +10.0,
+    "34B":   +8.0,
+    "30B":   +8.0,
+    "27B":   +6.0,
+    "14B":   +3.0,
+    "13B":   +3.0,
+    "12B":   +3.0,
+    "7B":     0.0,
+    "8B":     0.0,
+    "6B":    -2.0,
+    "4B":    -5.0,
+    "3B":    -7.0,
+    "2B":   -10.0,
+    "1B":   -12.0,
+}
 
 
 def family_elo_prior(model_id: str) -> float:
-    """Return a small ELO starting offset inferred from size tags in the model_id."""
-    lower = model_id.lower()
-    for tag, prior in _SIZE_ELO_PRIORS:
-        if tag in lower:
-            return prior
-    return 0.0
+    """Return a small ELO starting offset inferred from the model's parameter count.
+
+    Uses ``models.metadata.parse_model_id`` to extract the parameter count so
+    that ambiguous substrings (e.g. "3b" inside "30b-a3b") are handled correctly
+    by the structured parser rather than a fragile first-match substring scan.
+    """
+    from models.metadata import parse_model_id as _parse_model_id
+    size = _parse_model_id(model_id).get("param_count", "")
+    return _SIZE_ELO_PRIORS.get(size, 0.0)
 
 
 def build_quality_summary(move_qualities: list[tuple[str, str]]) -> str:

@@ -16,6 +16,7 @@ Usage::
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -36,23 +37,25 @@ class ModelProfile:
 
 
 _PROFILES: list[ModelProfile] | None = None
+_profiles_lock = threading.Lock()
 
 
 def _load() -> list[ModelProfile]:
     """Load and cache profiles from ``model_profiles.json``; returns ``[]`` if missing."""
     global _PROFILES
-    if _PROFILES is not None:
+    with _profiles_lock:
+        if _PROFILES is not None:
+            return _PROFILES
+        path = Path(__file__).parent.parent / "model_profiles.json"
+        if not path.exists():
+            _PROFILES = []
+            return _PROFILES
+        data = json.loads(path.read_text())
+        _PROFILES = [
+            ModelProfile(**{k: v for k, v in p.items() if not k.startswith("_")})
+            for p in data.get("profiles", [])
+        ]
         return _PROFILES
-    path = Path(__file__).parent.parent / "model_profiles.json"
-    if not path.exists():
-        _PROFILES = []
-        return _PROFILES
-    data = json.loads(path.read_text())
-    _PROFILES = [
-        ModelProfile(**{k: v for k, v in p.items() if not k.startswith("_")})
-        for p in data.get("profiles", [])
-    ]
-    return _PROFILES
 
 
 def get_profile(model_id: str) -> Optional[ModelProfile]:
@@ -67,5 +70,6 @@ def get_profile(model_id: str) -> Optional[ModelProfile]:
 def reload():
     """Force a reload of model_profiles.json (useful in tests)."""
     global _PROFILES
-    _PROFILES = None
+    with _profiles_lock:
+        _PROFILES = None
     _load()
