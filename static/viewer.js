@@ -2796,7 +2796,7 @@ buildUiThemeSwatches();
     },
     extensions: [
       { class: Markers, props: { autoMarkers: MARKER_TYPE.frame } },
-      { class: Arrows,  props: { sprite: ASSETS + 'src/extensions/arrows/arrows.svg' } },
+      { class: Arrows,  props: { sprite: ASSETS + 'assets/extensions/arrows/arrows.svg' } },
     ],
   });
 

@@ -603,8 +603,7 @@ def get_coherence_stats(model_id: str) -> dict:
             SELECT
                 AVG(m.coherence_score)  AS avg_coherence,
                 COUNT(m.id)             AS scored_moves,
-                SUM(CASE WHEN m.timed_out = 1 THEN 1 ELSE 0 END) AS timeouts,
-                COUNT(m.id)             AS total_moves
+                SUM(CASE WHEN m.timed_out = 1 THEN 1 ELSE 0 END) AS timeouts
             FROM moves m
             JOIN players p ON m.player_id = p.id
             WHERE p.model_id = ?

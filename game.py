@@ -1552,7 +1552,6 @@ async def run_puzzle_gauntlet(
     await _arena.broadcast({"type": "tournament_status", **_arena._state})
 
     return {"gauntlet_id": gauntlet_id, "scores": final_scores}
-    logger.info("Tournament complete!")
 
 
 # ── Player builder ────────────────────────────────────────────────────────
