@@ -269,6 +269,15 @@
     #board {
       width: 100%; height: 100%;
       box-shadow: 0 20px 60px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.02);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* Prevent SVG coordinate labels from being selected during drag */
+    #board svg text, #board .cm-chessboard .coordinates {
+      user-select: none;
+      -webkit-user-select: none;
+      pointer-events: none;
     }
 
     /* ── cm-chessboard square color overrides ──────────────────────── */
