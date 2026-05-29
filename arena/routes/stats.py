@@ -8,7 +8,9 @@ import asyncio
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter
+from typing import List
+
+from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse
 
 import db as database
@@ -52,6 +54,18 @@ async def api_status():
 @router.get("/api/leaderboard")
 async def api_leaderboard():
     return await asyncio.to_thread(database.get_leaderboard)
+
+
+@router.get("/api/elo-history/batch")
+async def api_elo_history_batch(ids: List[str] = Query(default=[])):
+    """Fetch ELO history for multiple models in one request.
+
+    Pass model IDs as repeated ``ids`` query parameters:
+      GET /api/elo-history/batch?ids=modelA&ids=modelB
+
+    Returns a JSON object keyed by model_id.
+    """
+    return await asyncio.to_thread(database.get_elo_history_batch, ids)
 
 
 @router.get("/api/elo-history/{model_id:path}")

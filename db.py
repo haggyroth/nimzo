@@ -967,6 +967,37 @@ def get_elo_history(model_id: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_elo_history_batch(model_ids: list[str]) -> dict[str, list[dict]]:
+    """ELO trajectory for multiple models in a single query.
+
+    Returns a dict keyed by model_id; missing models map to an empty list.
+    """
+    if not model_ids:
+        return {}
+    placeholders = ",".join("?" * len(model_ids))
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT
+                p.model_id,
+                g.played_at,
+                CASE WHEN g.white_player_id = p.id THEN g.white_elo_after
+                     ELSE g.black_elo_after END AS elo_after
+            FROM games g
+            JOIN players p ON (g.white_player_id = p.id OR g.black_player_id = p.id)
+            WHERE p.model_id IN ({placeholders})
+            ORDER BY p.model_id, g.played_at ASC
+            """,
+            model_ids,
+        ).fetchall()
+    result: dict[str, list[dict]] = {mid: [] for mid in model_ids}
+    for r in rows:
+        result[r["model_id"]].append(
+            {"played_at": r["played_at"], "elo_after": r["elo_after"]}
+        )
+    return result
+
+
 # ── Stats page queries ────────────────────────────────────────────────────
 
 def get_player_move_stats() -> list[dict]:
