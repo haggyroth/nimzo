@@ -519,37 +519,50 @@ async function _cmcbRender(animate) {
     _cmcb.board.addMarker(MARKER_TYPE.square, toSq);
   }
 
+  // Clear any lingering legal-move dot markers from a prior selection
+  _cmcb.board.removeMarkers(MARKER_TYPE.dot);
+
   // Human input handling
   if (gameState.isHumanTurn) {
     const humanColorConst = gameState.humanColor === 'black' ? COLOR.black : COLOR.white;
-    // In assisted mode, prefer candidate moves; in free mode use all legal moves.
-    // Always fall back to humanLegalUci so pieces with no candidate move are still
-    // draggable (this guards against candidates not yet arriving, or a position
-    // where the top-N doesn't cover every piece the human might want to move).
     const candidateUci = gameState.humanAssisted ? gameState.humanCandidates : [];
     const legalUci     = gameState.humanLegalUci;
 
     _cmcb.board.enableMoveInput(event => {
       const { INPUT_EVENT_TYPE } = _cmcb;
+
       if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
-        // Allow drag if this piece appears in candidates OR has any legal move
-        return candidateUci.some(u => u.startsWith(event.squareFrom))
-            || legalUci.some(u => u.startsWith(event.squareFrom));
+        const sq = event.squareFrom;
+        if (!legalUci.some(u => u.startsWith(sq))) return false;
+        // Show a dot on every legal destination for this piece so the player
+        // can click-to-move without relying on the Stockfish candidate arrows.
+        _cmcb.board.removeMarkers(MARKER_TYPE.dot);
+        legalUci.forEach(u => {
+          if (u.startsWith(sq)) _cmcb.board.addMarker(MARKER_TYPE.dot, u.slice(2, 4));
+        });
+        return true;
       }
+
       if (event.type === INPUT_EVENT_TYPE.validateMoveInput) {
+        _cmcb.board.removeMarkers(MARKER_TYPE.dot);
         const uci = event.squareFrom + event.squareTo;
         // Prefer a candidate destination; fall back to any legal destination
         const candMatches  = candidateUci.filter(u => u.startsWith(uci));
         const legalMatches = legalUci.filter(u => u.startsWith(uci));
         const matches = candMatches.length > 0 ? candMatches : legalMatches;
         if (matches.length > 0) {
-          // Auto-promote to queen; can be extended later with a promotion dialog
           const chosen = matches.find(u => u.endsWith('q')) || matches[0];
           submitHumanMove(chosen);
           return true;
         }
         return false;
       }
+
+      // Piece put back / input canceled — clear dots
+      if (event.type === INPUT_EVENT_TYPE.moveInputCanceled) {
+        _cmcb.board.removeMarkers(MARKER_TYPE.dot);
+      }
+
       return true;
     }, humanColorConst);
   } else {
