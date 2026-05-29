@@ -137,7 +137,7 @@ async def api_start(config: TournamentStartConfig):
                         opening_pgn=config.opening_pgn,
                     )
                 except Exception as exc:
-                    logger.info("Elimination tournament ended: %s", type(exc).__name__)
+                    logger.warning("Elimination tournament ended: %s: %s", type(exc).__name__, exc)
                 finally:
                     _st._stop["requested"] = False
                     _st._pause_event.set()

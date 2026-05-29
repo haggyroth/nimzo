@@ -155,6 +155,8 @@ def _guess_hf_repo(model_id: str) -> Optional[str]:
         return None
     # Strip LM Studio's "@quant" suffix and any "-gguf" tail
     repo = model_id.split("@")[0]
+    if repo.lower().endswith("-gguf"):
+        repo = repo[:-5]
     return repo
 
 

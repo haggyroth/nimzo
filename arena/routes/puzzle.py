@@ -83,7 +83,7 @@ async def api_puzzle_start(config: PuzzleGauntletConfig):
                     move_timeout=config.move_timeout,
                 )
         except Exception as exc:
-            logger.info("Puzzle gauntlet ended: %s", type(exc).__name__)
+            logger.warning("Puzzle gauntlet ended: %s: %s", type(exc).__name__, exc)
         finally:
             _st._stop["requested"] = False
             _st._pause_event.set()
