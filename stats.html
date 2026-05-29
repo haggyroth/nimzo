@@ -544,14 +544,14 @@ async function loadEloCharts() {
     document.getElementById('eloLoading').textContent = 'No data yet.';
     return;
   }
-  const histories = await Promise.all(
-    lb.map(r => fetch(`${API}/api/elo-history/${encodeURIComponent(r.model_id)}`).then(r => r.json()).catch(() => []))
-  );
+  const batchParams = lb.map(r => `ids=${encodeURIComponent(r.model_id)}`).join('&');
+  const histMap = await fetch(`${API}/api/elo-history/batch?${batchParams}`)
+    .then(r => r.json()).catch(() => ({}));
   const wrap = document.getElementById('eloCharts');
-  lb.forEach((r, i) => {
+  lb.forEach((r) => {
     const block = document.createElement('div');
     block.className = 'elo-chart-block';
-    block.innerHTML = `<div class="elo-chart-name clickable-name" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g,"\\'")}')" title="Show model card">${escHtml(r.name)}</div>${buildEloSvg(histories[i], 260, 60)}`;
+    block.innerHTML = `<div class="elo-chart-name clickable-name" onclick="openModelCard('${escHtml(r.model_id).replace(/'/g,"\\'")}')" title="Show model card">${escHtml(r.name)}</div>${buildEloSvg(histMap[r.model_id] || [], 260, 60)}`;
     wrap.appendChild(block);
   });
   document.getElementById('eloLoading').style.display = 'none';

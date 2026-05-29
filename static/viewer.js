@@ -888,10 +888,10 @@ async function loadLeaderboard() {
       return;
     }
     _lbRows = rows;
-    _lbHistories = await Promise.all(
-      rows.map(r => fetch(`${API}/api/elo-history/${encodeURIComponent(r.model_id)}`)
-        .then(res => res.json()).catch(() => []))
-    );
+    const _batchParams = rows.map(r => `ids=${encodeURIComponent(r.model_id)}`).join('&');
+    const _histMap = await fetch(`${API}/api/elo-history/batch?${_batchParams}`)
+      .then(res => res.json()).catch(() => ({}));
+    _lbHistories = rows.map(r => _histMap[r.model_id] || []);
     _renderLeaderboard();
   } catch(e) { /* server not ready yet */ }
 }

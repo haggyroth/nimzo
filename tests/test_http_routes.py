@@ -282,6 +282,58 @@ class TestEloHistory:
         assert resp.status_code == 200
 
 
+# ── T-6b: /api/elo-history/batch ─────────────────────────────────────────────
+
+
+class TestEloHistoryBatch:
+    """T-6b — batch ELO history endpoint (m8 wave-4 fix)."""
+
+    def test_empty_ids_returns_empty_dict(self, client):
+        resp = client.get("/api/elo-history/batch")
+        assert resp.status_code == 200
+        assert resp.json() == {}
+
+    def test_unknown_ids_return_empty_lists(self, client):
+        resp = client.get("/api/elo-history/batch?ids=ghost1&ids=ghost2")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data == {"ghost1": [], "ghost2": []}
+
+    def test_known_models_return_history(self, client, _patched_db):
+        _seed_game(_patched_db, white_id="batch-w", black_id="batch-b")
+        resp = client.get("/api/elo-history/batch?ids=batch-w&ids=batch-b")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "batch-w" in data
+        assert "batch-b" in data
+        assert len(data["batch-w"]) >= 1
+        assert "elo_after" in data["batch-w"][0]
+
+    def test_mixed_known_and_unknown(self, client, _patched_db):
+        """Known model gets history; unknown model gets empty list."""
+        _seed_game(_patched_db, white_id="real-bot", black_id="other-bot")
+        resp = client.get("/api/elo-history/batch?ids=real-bot&ids=nonexistent")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["real-bot"]) >= 1
+        assert data["nonexistent"] == []
+
+    def test_single_id_matches_individual_endpoint(self, client, _patched_db):
+        """Batch result for a single ID should match the per-ID endpoint."""
+        _seed_game(_patched_db, white_id="solo", black_id="solo-opp")
+        single = client.get("/api/elo-history/solo").json()
+        batch  = client.get("/api/elo-history/batch?ids=solo").json()
+        assert batch["solo"] == single
+
+    def test_batch_does_not_collide_with_path_route(self, client):
+        """'batch' must not be captured by /api/elo-history/{model_id:path}."""
+        resp = client.get("/api/elo-history/batch")
+        # If routing is wrong this would return a 200 list instead of a dict
+        assert isinstance(resp.json(), dict), (
+            "/api/elo-history/batch was captured by the {model_id:path} route"
+        )
+
+
 # ── T-7: /api/models SSRF guard ──────────────────────────────────────────────
 
 
