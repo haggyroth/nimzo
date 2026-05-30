@@ -55,6 +55,7 @@ from analysis import (
     is_duplicate_lesson,
     family_elo_prior,
     ACHIEVEMENT_CATALOGUE,
+    generate_move_explanation,
 )
 
 if TYPE_CHECKING:
@@ -76,6 +77,47 @@ def _get_model_lock(base_url: str, model_id: str) -> asyncio.Lock:
     if key not in _model_locks:
         _model_locks[key] = asyncio.Lock()
     return _model_locks[key]
+
+
+# ── Mid-game move explanation (Phase 5c) ─────────────────────────────────
+
+async def _generate_explanation_task(
+    move_record: dict,
+    board_fen: str,
+    best_san: str | None,
+    cp_loss: float | None,
+    tutor: TutorConfig,
+) -> None:
+    """Generate a natural-language explanation for a blunder/mistake.
+
+    Fills ``move_record["explanation"]`` so the value is picked up when
+    ``_write_moves`` runs at game end.  Also broadcasts a
+    ``move_explanation`` WebSocket event so the live move card updates
+    without waiting for the game to finish.
+    """
+    try:
+        explanation = await asyncio.to_thread(
+            generate_move_explanation,
+            board_fen=board_fen,
+            played_san=move_record["move_san"],
+            best_san=best_san,
+            cp_loss=cp_loss,
+            quality=move_record["quality"],
+            model_reasoning=move_record.get("reasoning", ""),
+            tutor=tutor,
+        )
+        if explanation:
+            move_record["explanation"] = explanation
+            await _arena.broadcast({
+                "type":        "move_explanation",
+                "move_number": move_record["move_number"],
+                "explanation": explanation,
+            })
+    except Exception as exc:
+        logger.warning(
+            "Explanation task failed for move %s: %s",
+            move_record.get("move_number", "?"), exc,
+        )
 
 
 # ── Post-game depth-20 annotation ────────────────────────────────────────
@@ -271,6 +313,7 @@ async def play_game(
     move_qualities_white: list[tuple[str, str]] = []
     move_qualities_black: list[tuple[str, str]] = []
     move_records: list[dict] = []
+    _explanation_tasks: list[asyncio.Task] = []
 
     await _arena.broadcast({
         "type": "game_start",
@@ -502,7 +545,31 @@ async def play_game(
             "elapsed_ms":     elapsed_ms,
             "tokens_input":   decision.tokens_input,
             "tokens_output":  decision.tokens_output,
+            "explanation":    None,   # filled by _generate_explanation_task if applicable
         })
+
+        # ── Move explanation for blunders/mistakes ─────────────────────────
+        if (
+            quality in ("blunder", "mistake")
+            and tutor and tutor.model_id
+            and not timed_out
+            and not isinstance(current_player, HumanPlayer)
+        ):
+            _best_san = board.san(candidates[0][0]) if candidates else None
+            _top_cp   = candidates[0][1] if candidates else None
+            _cp_loss  = (
+                (_top_cp - chosen_score)
+                if _top_cp is not None and chosen_score is not None
+                else None
+            )
+            _explanation_tasks.append(
+                asyncio.create_task(
+                    _generate_explanation_task(
+                        move_records[-1], fen_before_push,
+                        _best_san, _cp_loss, tutor,
+                    )
+                )
+            )
 
         await _arena.broadcast({
             "type":           "move",
@@ -596,7 +663,12 @@ async def play_game(
                 elapsed_ms=rec.get("elapsed_ms"),
                 tokens_input=rec.get("tokens_input"),
                 tokens_output=rec.get("tokens_output"),
+                explanation=rec.get("explanation"),
             )
+    # ── Wait for pending explanation tasks (max 60 s) ─────────────────
+    if _explanation_tasks:
+        await asyncio.wait(_explanation_tasks, timeout=60.0)
+
     await asyncio.to_thread(_write_moves)
 
     # ── Background annotation (depth 20, non-blocking) ────────────────

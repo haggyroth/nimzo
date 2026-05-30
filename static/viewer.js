@@ -827,6 +827,7 @@ function addMoveCard(data) {
 
   const card = document.createElement('div');
   card.className = `move-card ${q}${isBook ? ' book' : ''}${data.timed_out ? ' timed-out' : ''}`;
+  card.dataset.move = num;
   card.innerHTML = `
     <div class="move-top">
       <span class="move-num-label">${label}</span>
@@ -2424,6 +2425,18 @@ function onLadderUpdate(d) {
   loadLeaderboard();
 }
 
+function onMoveExplanation(d) {
+  // Inject explanation text into the live move card for this move number.
+  const card = document.querySelector(`.move-card[data-move="${d.move_number}"]`);
+  if (!card) return;
+  // Avoid duplicates if the event fires more than once
+  if (card.querySelector('.move-explanation')) return;
+  const el = document.createElement('div');
+  el.className = 'move-explanation';
+  el.innerHTML = `<span class="move-expl-label">💡 Coach</span>${escHtml(d.explanation)}`;
+  card.appendChild(el);
+}
+
 async function onAnnotationsReady(d) {
   // If the replay modal is open for the just-annotated game, reload its
   // annotation data and re-render so depth-20 markers appear immediately.
@@ -2582,6 +2595,7 @@ function dispatch(msg) {
       case 'puzzle_gauntlet_over':   onPuzzleGauntletOver(d);   break;
       case 'ladder_update':          onLadderUpdate(d);         break;
       case 'annotations_ready':      onAnnotationsReady(d);     break;
+      case 'move_explanation':       onMoveExplanation(d);      break;
     }
   } catch(e) { console.warn('Bad WS message:', e); }
 }
@@ -2906,8 +2920,14 @@ function rpRender() {
         annBlock = `<div class="rp-annotation rp-ann-${_ann.annotation}">` +
           `📊 Depth-20: ${_annLabel}${_cpStr}${_bestStr}</div>`;
       }
+      // Coach explanation block (Phase 5c) — stored in moves.explanation
+      let explBlock = '';
+      if (m.explanation) {
+        explBlock = `<div class="rp-explanation"><span class="rp-expl-label">💡 Coach</span>${escHtml(m.explanation)}</div>`;
+      }
       rpReasEl.innerHTML = `<div class="rp-reas-mover">${escHtml(mover)}${elapsed}</div>`
         + `<div class="rp-reas-text">${renderMarkdown(m.reasoning)}</div>`
+        + explBlock
         + annBlock;
       rpReasEl.style.display = '';
     } else {
