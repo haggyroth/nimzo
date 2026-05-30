@@ -1364,7 +1364,13 @@ async function startTournament() {
     body: JSON.stringify(cfg),
   }).then(r=>r.json());
 
-  if (res.error) alert(res.error);
+  if (res.error) { alert(res.error); return; }
+
+  // Collapse Configure, expand Results so match progress is visible without scrolling
+  const cfgGroup = document.getElementById('rpConfigureGroup');
+  const resGroup = document.getElementById('rpResultsGroup');
+  if (cfgGroup) cfgGroup.classList.add('collapsed');
+  if (resGroup) resGroup.classList.remove('collapsed');
 }
 
 async function startBracketTournament() {
@@ -1415,7 +1421,13 @@ async function startBracketTournament() {
     body: JSON.stringify(cfg),
   }).then(r=>r.json());
 
-  if (res.error) alert(res.error);
+  if (res.error) { alert(res.error); return; }
+
+  // Collapse Configure, expand Results so match progress is visible without scrolling
+  const cfgGroup = document.getElementById('rpConfigureGroup');
+  const resGroup = document.getElementById('rpResultsGroup');
+  if (cfgGroup) cfgGroup.classList.add('collapsed');
+  if (resGroup) resGroup.classList.remove('collapsed');
 }
 
 async function pauseTournament() {
