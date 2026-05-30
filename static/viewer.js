@@ -1158,12 +1158,18 @@ function setMode(mode) {
   document.getElementById('tabMatch').classList.toggle('active', mode==='match');
   document.getElementById('tabTournament').classList.toggle('active', mode==='tournament');
   document.getElementById('tabPuzzle').classList.toggle('active', mode==='puzzle');
+  document.getElementById('tabLadder').classList.toggle('active', mode==='ladder');
   document.getElementById('matchForm').style.display      = mode==='match' ? '' : 'none';
   document.getElementById('tournamentForm').style.display = mode==='tournament' ? '' : 'none';
   document.getElementById('puzzleForm').style.display     = mode==='puzzle' ? '' : 'none';
+  document.getElementById('ladderForm').style.display     = mode==='ladder' ? '' : 'none';
   if (mode === 'puzzle') {
     document.getElementById('puzzleHistorySection').style.display = '';
     loadPuzzleHistory();
+  }
+  if (mode === 'ladder' && ladderPlayers.length === 0) {
+    ladderAddPlayer();
+    ladderAddPlayer();
   }
 }
 
@@ -1325,6 +1331,150 @@ document.addEventListener('DOMContentLoaded', () => {
   const fmt = document.getElementById('trnFormat');
   if (fmt) fmt.addEventListener('change', onTrnFormatChange);
 });
+
+// ── Ladder player slots ───────────────────────────────────────────────────
+let ladderPlayers = [];
+let ladderNextId = 0;
+
+function ladderAddPlayer() {
+  const id = ladderNextId++;
+  ladderPlayers.push({ id, name: '', backend: 'lmstudio', url: DEFAULT_LMSTUDIO_URL, model: '', thinking: false, style: '', candidate_count: null });
+  renderLadderPlayerList();
+}
+
+function ladderRemovePlayer(id) {
+  if (ladderPlayers.length <= 2) { alert('A ladder requires at least 2 players.'); return; }
+  ladderPlayers = ladderPlayers.filter(p => p.id !== id);
+  renderLadderPlayerList();
+}
+
+function renderLadderPlayerList() {
+  const list = document.getElementById('ladderPlayerList');
+  if (!list) return;
+  list.innerHTML = ladderPlayers.map((p, idx) => `
+    <div class="trn-player-row" id="ldRow_${p.id}">
+      <div class="trn-player-num">Player ${idx + 1}</div>
+      ${ladderPlayers.length > 2 ? `<button class="trn-remove-btn" onclick="ladderRemovePlayer(${p.id})" title="Remove">✕</button>` : ''}
+      <input class="ctrl-input" id="ldName_${p.id}" placeholder="Display name" value="${escHtml(p.name)}" oninput="ladderSync(${p.id})">
+      <select class="ctrl-select" id="ldBackend_${p.id}" onchange="ladderSyncBackend(${p.id})">
+        <option value="lmstudio" ${p.backend==='lmstudio'?'selected':''}>LM Studio</option>
+        <option value="anthropic" ${p.backend==='anthropic'?'selected':''}>Anthropic</option>
+        ${Object.entries(_providers).map(([name, prov]) =>
+          `<option value="${name}" ${p.backend===name?'selected':''}>${prov.configured ? prov.label : prov.label + ' (no key)'}</option>`
+        ).join('')}
+      </select>
+      <div class="url-row">
+        <input class="ctrl-input" id="ldUrl_${p.id}" placeholder="${DEFAULT_LMSTUDIO_URL}" value="${escHtml(p.url)}" oninput="ladderSync(${p.id})">
+        <button class="fetch-btn" onclick="ladderFetchModels(${p.id})" title="Load models">⟳</button>
+      </div>
+      <select class="ctrl-select" id="ldModel_${p.id}" onchange="ladderSyncModel(${p.id})">
+        <option value="">— select model —</option>
+        ${p.model ? `<option value="${escHtml(p.model)}" selected>${escHtml(p.model)}</option>` : ''}
+      </select>
+      <div class="games-row" title="Stockfish candidates shown to this model (0 = server default 5).">
+        <span>Candidates</span>
+        <input type="number" id="ldCandidates_${p.id}" value="${p.candidate_count ?? ''}" min="1" max="20" style="width:52px" placeholder="5" oninput="ladderSync(${p.id})">
+      </div>
+    </div>`
+  ).join('');
+}
+
+function ladderSync(id) {
+  const p = ladderPlayers.find(x => x.id === id);
+  if (!p) return;
+  p.name            = document.getElementById(`ldName_${id}`)?.value || '';
+  p.url             = document.getElementById(`ldUrl_${id}`)?.value  || DEFAULT_LMSTUDIO_URL;
+  p.candidate_count = parseInt(document.getElementById(`ldCandidates_${id}`)?.value) || null;
+}
+
+function ladderSyncBackend(id) {
+  const p = ladderPlayers.find(x => x.id === id);
+  if (!p) return;
+  p.backend = document.getElementById(`ldBackend_${id}`)?.value || 'lmstudio';
+  if (isCloudBackend(p.backend)) {
+    p.url = _providers[p.backend]?.base_url || DEFAULT_LMSTUDIO_URL;
+  }
+  renderLadderPlayerList();
+}
+
+function ladderSyncModel(id) {
+  const p = ladderPlayers.find(x => x.id === id);
+  if (!p) return;
+  p.model = document.getElementById(`ldModel_${id}`)?.value || '';
+}
+
+async function ladderFetchModels(id) {
+  const p = ladderPlayers.find(x => x.id === id);
+  if (!p) return;
+  const url = document.getElementById(`ldUrl_${id}`)?.value || p.url;
+  try {
+    const data = await fetch(`${API}/api/models?url=${encodeURIComponent(url)}`).then(r => r.json());
+    const sel  = document.getElementById(`ldModel_${id}`);
+    if (!sel) return;
+    const models = (data.data || []).map(m => m.id || m);
+    sel.innerHTML = '<option value="">— select model —</option>' +
+      models.map(m => `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('');
+    if (p.model) sel.value = p.model;
+  } catch(e) {}
+}
+
+async function startLadder() {
+  ladderPlayers.forEach(p => ladderSync(p.id));
+  const incomplete = ladderPlayers.filter(p => !p.model);
+  if (incomplete.length > 0) { alert('Select a model for every player.'); return; }
+  if (ladderPlayers.length < 2) { alert('Add at least 2 players.'); return; }
+
+  const cfg = {
+    players: ladderPlayers.map(p => ({
+      backend:         p.backend,
+      name:            p.name || extractModelName(p.model),
+      model_id:        p.model,
+      url:             p.url,
+      thinking:        p.thinking || false,
+      style:           '',
+      candidate_count: p.candidate_count || null,
+    })),
+    games_per_pair:  parseInt(document.getElementById('ladderGamesPair')?.value) || 0,
+    move_timeout:    parseInt(document.getElementById('ladderMoveTimeout')?.value) || 0,
+  };
+
+  const res = await fetch(`${API}/api/ladder/start`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(cfg),
+  }).then(r => r.json());
+
+  if (res.error) { alert(res.error); return; }
+
+  // Show ladder standings, collapse Configure, expand Results
+  document.getElementById('ladderSection').style.display = '';
+  const cfgGroup = document.getElementById('rpConfigureGroup');
+  const resGroup = document.getElementById('rpResultsGroup');
+  if (cfgGroup) cfgGroup.classList.add('collapsed');
+  if (resGroup) resGroup.classList.remove('collapsed');
+}
+
+function renderLadderStandings(standings) {
+  const sec  = document.getElementById('ladderSection');
+  const body = document.getElementById('ladderBody');
+  if (!sec || !body) return;
+  sec.style.display = '';
+  if (!standings || standings.length === 0) {
+    body.innerHTML = '<div class="lb-empty">No ladder data yet</div>';
+    return;
+  }
+  body.innerHTML = `<table class="lb-table">
+    <thead><tr><th>#</th><th>Player</th><th>ELO</th></tr></thead>
+    <tbody>
+      ${standings.map((p, i) => `
+        <tr>
+          <td class="lb-rank">${i + 1}</td>
+          <td class="lb-name">${escHtml(p.name)}</td>
+          <td class="lb-elo">${p.elo}</td>
+        </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
 
 // ── Tournament controls ───────────────────────────────────────────────────
 async function startTournament() {
@@ -2131,6 +2281,12 @@ function onInitialState(d) {
   loadTournamentHistory();
 }
 
+function onLadderUpdate(d) {
+  if (d.standings) renderLadderStandings(d.standings);
+  // Also refresh main leaderboard so ELO changes are immediately visible
+  loadLeaderboard();
+}
+
 // ── Inline stat cards ─────────────────────────────────────────────────────
 // Cache: { white: {open, profile, eloHist} | null, black: ... }
 const _statCardCache = { white: null, black: null };
@@ -2274,6 +2430,7 @@ function dispatch(msg) {
       case 'puzzle_thinking':        onPuzzleThinking(d);        break;
       case 'puzzle_result':          onPuzzleResult(d);          break;
       case 'puzzle_gauntlet_over':   onPuzzleGauntletOver(d);   break;
+      case 'ladder_update':          onLadderUpdate(d);         break;
     }
   } catch(e) { console.warn('Bad WS message:', e); }
 }

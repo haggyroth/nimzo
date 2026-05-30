@@ -105,6 +105,30 @@ class TournamentStartConfig(BaseModel):
     opening_pgn: str = ""
 
 
+class LadderConfig(BaseModel):
+    """
+    Request body for ``POST /api/ladder/start``.
+
+    Runs an endless round-robin ELO ladder: always picks the pair with the
+    fewest games played and runs one game.  Set ``games_per_pair`` to a
+    positive integer to stop after every pair has played that many games;
+    0 (default) = run indefinitely until manually stopped.
+    """
+
+    players: list[PlayerSpec] = []
+    # 0 = run indefinitely; >0 = stop after every pair reaches this count
+    games_per_pair: int = Field(default=0, ge=0, description="0 = run indefinitely")
+    move_timeout: int = Field(default=0, ge=0, le=3600)
+    max_moves: int = Field(default=0, ge=0, le=1000)
+    adaptive_difficulty: bool = False
+    tutor_backend: str = "lmstudio"
+    tutor_model: str = ""
+    tutor_url: str = _DEFAULT_LMSTUDIO_URL
+    judge_backend: str = "lmstudio"
+    judge_model: str = ""
+    judge_url: str = _DEFAULT_LMSTUDIO_URL
+
+
 class PuzzleGauntletConfig(BaseModel):
     """
     Request body for ``POST /api/puzzle/start``.
