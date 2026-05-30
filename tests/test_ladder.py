@@ -12,7 +12,6 @@ Covers:
 from __future__ import annotations
 
 import asyncio
-import itertools
 import sqlite3
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
