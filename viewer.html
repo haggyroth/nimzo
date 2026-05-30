@@ -153,26 +153,31 @@
                 <button class="fetch-btn" onclick="fetchModels('white')" title="Load models">⟳</button>
               </div>
               <select class="ctrl-select" id="whiteModel" onchange="onModelSelect('white')"><option value="">— select model —</option></select>
-              <select class="ctrl-select" id="whiteStyle" title="Playing style injected into the model's system prompt">
-                <option value="">⚖ Balanced (default)</option>
-                <option value="aggressive">⚔ Aggressive</option>
-                <option value="positional">♟ Positional</option>
-                <option value="defensive">🛡 Defensive</option>
-              </select>
-              <label class="toggle-row">
-                <input type="checkbox" id="whiteThinking"> Extended thinking
-              </label>
-              <div class="games-row" title="Stockfish candidates shown to this model (0 = default 5). Raise for weaker models, lower for stronger ones to create balanced handicap matches.">
-                <span>Candidates</span>
-                <input type="number" id="whiteCandidates" value="0" min="0" max="20" style="width:52px" placeholder="5">
-              </div>
-              <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
-                <span>Blind opening moves</span>
-                <input type="number" id="whiteBlindMoves" value="0" min="0" max="20" style="width:52px">
-              </div>
-              <label class="toggle-row" title="Full-game blind mode: Stockfish candidates are never shown — the model plays purely from its own chess knowledge for every move">
-                <input type="checkbox" id="whiteBlind" onchange="onBlindChange('white')"> Blind game (all moves)
-              </label>
+              <details class="adv-details">
+                <summary class="adv-summary">Advanced options</summary>
+                <div class="adv-body">
+                  <select class="ctrl-select" id="whiteStyle" title="Playing style injected into the model's system prompt">
+                    <option value="">⚖ Balanced (default)</option>
+                    <option value="aggressive">⚔ Aggressive</option>
+                    <option value="positional">♟ Positional</option>
+                    <option value="defensive">🛡 Defensive</option>
+                  </select>
+                  <label class="toggle-row">
+                    <input type="checkbox" id="whiteThinking"> Extended thinking
+                  </label>
+                  <div class="games-row" title="Stockfish candidates shown to this model (0 = default 5). Raise for weaker models, lower for stronger ones to create balanced handicap matches.">
+                    <span>Candidates</span>
+                    <input type="number" id="whiteCandidates" value="0" min="0" max="20" style="width:52px" placeholder="5">
+                  </div>
+                  <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
+                    <span>Blind opening moves</span>
+                    <input type="number" id="whiteBlindMoves" value="0" min="0" max="20" style="width:52px">
+                  </div>
+                  <label class="toggle-row" title="Full-game blind mode: Stockfish candidates are never shown — the model plays purely from its own chess knowledge for every move">
+                    <input type="checkbox" id="whiteBlind" onchange="onBlindChange('white')"> Blind game (all moves)
+                  </label>
+                </div>
+              </details>
             </div>
 
             <hr class="divider">
@@ -191,58 +196,31 @@
                 <button class="fetch-btn" onclick="fetchModels('black')" title="Load models">⟳</button>
               </div>
               <select class="ctrl-select" id="blackModel" onchange="onModelSelect('black')"><option value="">— select model —</option></select>
-              <select class="ctrl-select" id="blackStyle" title="Playing style injected into the model's system prompt">
-                <option value="">⚖ Balanced (default)</option>
-                <option value="aggressive">⚔ Aggressive</option>
-                <option value="positional">♟ Positional</option>
-                <option value="defensive">🛡 Defensive</option>
-              </select>
-              <label class="toggle-row">
-                <input type="checkbox" id="blackThinking"> Extended thinking
-              </label>
-              <div class="games-row" title="Stockfish candidates shown to this model (0 = default 5). Raise for weaker models, lower for stronger ones to create balanced handicap matches.">
-                <span>Candidates</span>
-                <input type="number" id="blackCandidates" value="0" min="0" max="20" style="width:52px" placeholder="5">
-              </div>
-              <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
-                <span>Blind opening moves</span>
-                <input type="number" id="blackBlindMoves" value="0" min="0" max="20" style="width:52px">
-              </div>
-              <label class="toggle-row" title="Full-game blind mode: Stockfish candidates are never shown — the model plays purely from its own chess knowledge for every move">
-                <input type="checkbox" id="blackBlind" onchange="onBlindChange('black')"> Blind game (all moves)
-              </label>
-            </div>
-
-            <hr class="divider">
-
-            <!-- Tutor -->
-            <div class="player-cfg">
-              <div class="cfg-label">📚 Tutor</div>
-              <select class="ctrl-select" id="tutorBackend" onchange="onBackendChange('tutor')">
-                <option value="lmstudio">LM Studio (local)</option>
-                <option value="anthropic">Anthropic (cloud)</option>
-                <option value="none">Disabled</option>
-              </select>
-              <div class="url-row" id="tutorUrlRow">
-                <input class="ctrl-input" id="tutorUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
-                <button class="fetch-btn" onclick="fetchModels('tutor')" title="Load models">⟳</button>
-              </div>
-              <select class="ctrl-select" id="tutorModel"><option value="">— select model —</option></select>
-            </div>
-
-            <!-- Judge (coherence scoring) -->
-            <div class="player-cfg">
-              <div class="cfg-label" title="Optional separate model for reasoning coherence scoring (0–10). Defaults to the tutor model when left as 'Same as tutor'.">🔎 Judge <span style="font-size:9px;color:var(--text-dim)">(coherence · defaults to tutor)</span></div>
-              <select class="ctrl-select" id="judgeBackend" onchange="onBackendChange('judge')">
-                <option value="none" selected>Same as tutor</option>
-                <option value="lmstudio">LM Studio (local)</option>
-                <option value="anthropic">Anthropic (cloud)</option>
-              </select>
-              <div class="url-row" id="judgeUrlRow" style="display:none">
-                <input class="ctrl-input" id="judgeUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
-                <button class="fetch-btn" onclick="fetchModels('judge')" title="Load models">⟳</button>
-              </div>
-              <select class="ctrl-select" id="judgeModel" style="display:none"><option value="">— select model —</option></select>
+              <details class="adv-details">
+                <summary class="adv-summary">Advanced options</summary>
+                <div class="adv-body">
+                  <select class="ctrl-select" id="blackStyle" title="Playing style injected into the model's system prompt">
+                    <option value="">⚖ Balanced (default)</option>
+                    <option value="aggressive">⚔ Aggressive</option>
+                    <option value="positional">♟ Positional</option>
+                    <option value="defensive">🛡 Defensive</option>
+                  </select>
+                  <label class="toggle-row">
+                    <input type="checkbox" id="blackThinking"> Extended thinking
+                  </label>
+                  <div class="games-row" title="Stockfish candidates shown to this model (0 = default 5). Raise for weaker models, lower for stronger ones to create balanced handicap matches.">
+                    <span>Candidates</span>
+                    <input type="number" id="blackCandidates" value="0" min="0" max="20" style="width:52px" placeholder="5">
+                  </div>
+                  <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
+                    <span>Blind opening moves</span>
+                    <input type="number" id="blackBlindMoves" value="0" min="0" max="20" style="width:52px">
+                  </div>
+                  <label class="toggle-row" title="Full-game blind mode: Stockfish candidates are never shown — the model plays purely from its own chess knowledge for every move">
+                    <input type="checkbox" id="blackBlind" onchange="onBlindChange('black')"> Blind game (all moves)
+                  </label>
+                </div>
+              </details>
             </div>
 
             <hr class="divider">
@@ -262,26 +240,65 @@
               </label>
             </div>
 
-            <hr class="divider">
-            <label class="toggle-row" title="Auto-adjust candidate count based on each model's rolling win rate (kicks in after 10 games)">
-              <input type="checkbox" id="adaptiveDifficulty">
-              Adaptive difficulty
-            </label>
+            <!-- Analysis & advanced settings -->
+            <details class="adv-details" id="matchAdvDetails">
+              <summary class="adv-summary">Analysis &amp; advanced settings</summary>
+              <div class="adv-body">
 
-            <div class="games-row" title="Declare a draw after this many half-moves (plies). 0 = no limit. 500 plies ≈ 250 moves per side.">
-              <span>Move limit (plies)</span>
-              <input type="number" id="maxMoves" value="0" min="0" max="5000" style="width:60px" placeholder="0">
-            </div>
+                <!-- Tutor -->
+                <div class="player-cfg">
+                  <div class="cfg-label">📚 Tutor</div>
+                  <select class="ctrl-select" id="tutorBackend" onchange="onBackendChange('tutor')">
+                    <option value="lmstudio">LM Studio (local)</option>
+                    <option value="anthropic">Anthropic (cloud)</option>
+                    <option value="none">Disabled</option>
+                  </select>
+                  <div class="url-row" id="tutorUrlRow">
+                    <input class="ctrl-input" id="tutorUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+                    <button class="fetch-btn" onclick="fetchModels('tutor')" title="Load models">⟳</button>
+                  </div>
+                  <select class="ctrl-select" id="tutorModel"><option value="">— select model —</option></select>
+                </div>
 
-            <div class="games-row" title="Per-move time limit in seconds. If a model takes longer it is skipped and the best candidate is played automatically. 0 = no limit.">
-              <span>Move timeout (s)</span>
-              <input type="number" id="moveTimeout" value="0" min="0" max="3600" style="width:60px" placeholder="0">
-            </div>
+                <!-- Judge (coherence scoring) -->
+                <div class="player-cfg">
+                  <div class="cfg-label" title="Optional separate model for reasoning coherence scoring (0–10). Defaults to the tutor model when left as 'Same as tutor'.">🔎 Judge <span style="font-size:9px;color:var(--text-dim)">(coherence · defaults to tutor)</span></div>
+                  <select class="ctrl-select" id="judgeBackend" onchange="onBackendChange('judge')">
+                    <option value="none" selected>Same as tutor</option>
+                    <option value="lmstudio">LM Studio (local)</option>
+                    <option value="anthropic">Anthropic (cloud)</option>
+                  </select>
+                  <div class="url-row" id="judgeUrlRow" style="display:none">
+                    <input class="ctrl-input" id="judgeUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+                    <button class="fetch-btn" onclick="fetchModels('judge')" title="Load models">⟳</button>
+                  </div>
+                  <select class="ctrl-select" id="judgeModel" style="display:none"><option value="">— select model —</option></select>
+                </div>
 
-            <div title="PGN move sequence to play automatically before guided play begins (e.g. &quot;1. e4 e5 2. Nf3 Nc6&quot;). Leave blank for a normal game. Both models step through these moves; the viewer shows them as greyed-out book moves.">
-              <span class="games-label">Opening prefix (PGN)</span>
-              <textarea id="openingPgn" rows="2" placeholder="e.g. 1. e4 e5 2. Nf3 Nc6" style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:11px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;margin-top:4px"></textarea>
-            </div>
+                <hr class="divider">
+
+                <label class="toggle-row" title="Auto-adjust candidate count based on each model's rolling win rate (kicks in after 10 games)">
+                  <input type="checkbox" id="adaptiveDifficulty">
+                  Adaptive difficulty
+                </label>
+
+                <div class="games-row" title="Declare a draw after this many half-moves (plies). 0 = no limit. 500 plies ≈ 250 moves per side.">
+                  <span>Move limit (plies)</span>
+                  <input type="number" id="maxMoves" value="0" min="0" max="5000" style="width:60px" placeholder="0">
+                </div>
+
+                <div class="games-row" title="Per-move time limit in seconds. If a model takes longer it is skipped and the best candidate is played automatically. 0 = no limit.">
+                  <span>Move timeout (s)</span>
+                  <input type="number" id="moveTimeout" value="0" min="0" max="3600" style="width:60px" placeholder="0">
+                </div>
+
+                <div title="PGN move sequence to play automatically before guided play begins (e.g. &quot;1. e4 e5 2. Nf3 Nc6&quot;). Leave blank for a normal game. Both models step through these moves; the viewer shows them as greyed-out book moves.">
+                  <span class="games-label">Opening prefix (PGN)</span>
+                  <textarea id="openingPgn" rows="2" placeholder="e.g. 1. e4 e5 2. Nf3 Nc6" style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:11px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;margin-top:4px"></textarea>
+                </div>
+
+              </div>
+            </details>
 
             <button class="start-btn" id="startBtn" onclick="startTournament()">▶ Start Match</button>
           </div>
@@ -314,59 +331,65 @@
 
             <button class="trn-add-btn" onclick="trnAddPlayer()">+ Add Player</button>
 
-            <hr class="divider">
+            <!-- Analysis & advanced settings -->
+            <details class="adv-details" id="trnAdvDetails">
+              <summary class="adv-summary">Analysis &amp; advanced settings</summary>
+              <div class="adv-body">
 
-            <!-- Tutor (shared with match form via separate IDs) -->
-            <div class="player-cfg">
-              <div class="cfg-label">📚 Tutor</div>
-              <select class="ctrl-select" id="trnTutorBackend" onchange="onBackendChange('trnTutor')">
-                <option value="lmstudio">LM Studio (local)</option>
-                <option value="anthropic">Anthropic (cloud)</option>
-                <option value="none">Disabled</option>
-              </select>
-              <div class="url-row" id="trnTutorUrlRow">
-                <input class="ctrl-input" id="trnTutorUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
-                <button class="fetch-btn" onclick="fetchModels('trnTutor')" title="Load models">⟳</button>
+                <!-- Tutor (shared with match form via separate IDs) -->
+                <div class="player-cfg">
+                  <div class="cfg-label">📚 Tutor</div>
+                  <select class="ctrl-select" id="trnTutorBackend" onchange="onBackendChange('trnTutor')">
+                    <option value="lmstudio">LM Studio (local)</option>
+                    <option value="anthropic">Anthropic (cloud)</option>
+                    <option value="none">Disabled</option>
+                  </select>
+                  <div class="url-row" id="trnTutorUrlRow">
+                    <input class="ctrl-input" id="trnTutorUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+                    <button class="fetch-btn" onclick="fetchModels('trnTutor')" title="Load models">⟳</button>
+                  </div>
+                  <select class="ctrl-select" id="trnTutorModel"><option value="">— select model —</option></select>
+                </div>
+
+                <!-- Judge (coherence scoring) -->
+                <div class="player-cfg">
+                  <div class="cfg-label" title="Optional separate model for reasoning coherence scoring (0–10). Defaults to the tutor model when left as 'Same as tutor'.">🔎 Judge <span style="font-size:9px;color:var(--text-dim)">(coherence · defaults to tutor)</span></div>
+                  <select class="ctrl-select" id="trnJudgeBackend" onchange="onBackendChange('trnJudge')">
+                    <option value="none" selected>Same as tutor</option>
+                    <option value="lmstudio">LM Studio (local)</option>
+                    <option value="anthropic">Anthropic (cloud)</option>
+                  </select>
+                  <div class="url-row" id="trnJudgeUrlRow" style="display:none">
+                    <input class="ctrl-input" id="trnJudgeUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+                    <button class="fetch-btn" onclick="fetchModels('trnJudge')" title="Load models">⟳</button>
+                  </div>
+                  <select class="ctrl-select" id="trnJudgeModel" style="display:none"><option value="">— select model —</option></select>
+                </div>
+
+                <hr class="divider">
+
+                <label class="toggle-row" title="Auto-adjust candidate count based on each model's rolling win rate (kicks in after 10 games)">
+                  <input type="checkbox" id="trnAdaptiveDifficulty">
+                  Adaptive difficulty
+                </label>
+
+                <div class="games-row" title="Declare a draw after this many half-moves (plies). 0 = no limit. 500 plies ≈ 250 moves per side.">
+                  <span>Move limit (plies)</span>
+                  <input type="number" id="trnMaxMoves" value="0" min="0" max="5000" style="width:60px" placeholder="0">
+                </div>
+
+                <div class="games-row" title="Per-move time limit in seconds. If a model takes longer it is skipped and the best candidate is played automatically. 0 = no limit.">
+                  <span>Move timeout (s)</span>
+                  <input type="number" id="trnMoveTimeout" value="0" min="0" max="3600" style="width:60px" placeholder="0">
+                </div>
+
+                <div title="PGN move sequence to play automatically before guided play begins (e.g. &quot;1. e4 e5 2. Nf3 Nc6&quot;). Leave blank for a normal game. Both models step through these moves; the viewer shows them as greyed-out book moves.">
+                  <span class="games-label">Opening prefix (PGN)</span>
+                  <textarea id="trnOpeningPgn" rows="2" placeholder="e.g. 1. e4 e5 2. Nf3 Nc6" style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:11px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;margin-top:4px"></textarea>
+                </div>
+
               </div>
-              <select class="ctrl-select" id="trnTutorModel"><option value="">— select model —</option></select>
-            </div>
-
-            <!-- Judge (coherence scoring) -->
-            <div class="player-cfg">
-              <div class="cfg-label" title="Optional separate model for reasoning coherence scoring (0–10). Defaults to the tutor model when left as 'Same as tutor'.">🔎 Judge <span style="font-size:9px;color:var(--text-dim)">(coherence · defaults to tutor)</span></div>
-              <select class="ctrl-select" id="trnJudgeBackend" onchange="onBackendChange('trnJudge')">
-                <option value="none" selected>Same as tutor</option>
-                <option value="lmstudio">LM Studio (local)</option>
-                <option value="anthropic">Anthropic (cloud)</option>
-              </select>
-              <div class="url-row" id="trnJudgeUrlRow" style="display:none">
-                <input class="ctrl-input" id="trnJudgeUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
-                <button class="fetch-btn" onclick="fetchModels('trnJudge')" title="Load models">⟳</button>
-              </div>
-              <select class="ctrl-select" id="trnJudgeModel" style="display:none"><option value="">— select model —</option></select>
-            </div>
-
-            <hr class="divider">
-
-            <label class="toggle-row" title="Auto-adjust candidate count based on each model's rolling win rate (kicks in after 10 games)">
-              <input type="checkbox" id="trnAdaptiveDifficulty">
-              Adaptive difficulty
-            </label>
-
-            <div class="games-row" title="Declare a draw after this many half-moves (plies). 0 = no limit. 500 plies ≈ 250 moves per side.">
-              <span>Move limit (plies)</span>
-              <input type="number" id="trnMaxMoves" value="0" min="0" max="5000" style="width:60px" placeholder="0">
-            </div>
-
-            <div class="games-row" title="Per-move time limit in seconds. If a model takes longer it is skipped and the best candidate is played automatically. 0 = no limit.">
-              <span>Move timeout (s)</span>
-              <input type="number" id="trnMoveTimeout" value="0" min="0" max="3600" style="width:60px" placeholder="0">
-            </div>
-
-            <div title="PGN move sequence to play automatically before guided play begins (e.g. &quot;1. e4 e5 2. Nf3 Nc6&quot;). Leave blank for a normal game. Both models step through these moves; the viewer shows them as greyed-out book moves.">
-              <span class="games-label">Opening prefix (PGN)</span>
-              <textarea id="trnOpeningPgn" rows="2" placeholder="e.g. 1. e4 e5 2. Nf3 Nc6" style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:11px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;margin-top:4px"></textarea>
-            </div>
+            </details>
 
             <button class="start-btn" onclick="startBracketTournament()">▶ Start Tournament</button>
           </div>

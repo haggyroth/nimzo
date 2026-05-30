@@ -590,6 +590,34 @@
       text-align: right;
     }
 
+    /* ── Progressive disclosure (details/summary) ──────────────── */
+    .adv-details { margin-top: 3px; }
+
+    .adv-summary {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+      padding: 2px 0;
+      transition: color .15s;
+    }
+    .adv-summary::-webkit-details-marker { display: none; }
+    .adv-summary::before { content: '▸ '; font-size: 8px; }
+    .adv-details[open] .adv-summary::before { content: '▾ '; }
+    .adv-summary:hover { color: var(--text-mid); }
+
+    .adv-body {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding-top: 5px;
+      border-left: 1px solid var(--border);
+      padding-left: 8px;
+      margin-top: 3px;
+    }
+
     .start-btn {
       padding: 8px;
       background: rgba(200, 146, 30, 0.08);
