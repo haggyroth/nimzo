@@ -199,7 +199,11 @@ class TestRunLadderPairSelection:
         async def _run():
             await run_ladder(players=players, games_per_pair=0)
 
-        asyncio.run(_run())
+        with patch("game.StockfishEngine") as mock_sf:
+            mock_sf.return_value.__enter__ = lambda s: MagicMock()
+            mock_sf.return_value.__exit__ = MagicMock(return_value=False)
+            asyncio.run(_run())
+
         _st._stop["requested"] = False
 
     def test_games_per_pair_stops_after_limit(self):
