@@ -24,8 +24,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 import arena  # noqa: F401 — pre-init the package
 
 
@@ -67,15 +65,12 @@ class TestAnnotateGame:
 
     def _make_engine(self, top_cp=50, actual_cp=30):
         """Build a mock chess.engine.SimpleEngine whose analyse returns fixed scores."""
-        import chess.engine
-
         mock_score_top    = MagicMock()
         mock_score_actual = MagicMock()
         mock_score_top.pov.return_value    = MagicMock(is_mate=MagicMock(return_value=False), score=MagicMock(return_value=top_cp))
         mock_score_actual.pov.return_value = MagicMock(is_mate=MagicMock(return_value=False), score=MagicMock(return_value=actual_cp))
 
         def _analyse(board, limit, multipv=None, root_moves=None):
-            import chess
             legal = list(board.legal_moves)
             if not legal:
                 return {"pv": [], "score": mock_score_top}
