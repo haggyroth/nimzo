@@ -755,6 +755,17 @@
   </div>
 </div>
 
+<div id="stopModal" style="display:none;position:fixed;inset:0;background:rgba(7,9,12,.88);backdrop-filter:blur(10px);z-index:400;align-items:center;justify-content:center" onclick="if(event.target.id==='stopModal')closeStopModal()">
+  <div style="background:var(--bg-panel);border:1px solid var(--border-hi);box-shadow:0 24px 64px rgba(0,0,0,.85);padding:22px 24px 20px;max-width:300px;width:90vw">
+    <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold);letter-spacing:.5px;margin-bottom:10px">Stop tournament?</div>
+    <p style="font-size:10px;color:var(--text-mid);margin:0 0 18px;line-height:1.6">This will end the current match. Incomplete games are not saved.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="hdr-btn" onclick="closeStopModal()">Cancel</button>
+      <button class="hdr-btn danger" onclick="confirmStop()">■ Stop</button>
+    </div>
+  </div>
+</div>
+
 <script src="/static/viewer_utils.js"></script>
 <script src="/static/viewer.js"></script>
 </body>

@@ -717,6 +717,26 @@ function updateAnalysis() {
   body.innerHTML = html;
 }
 
+// ── Markdown renderer (safe subset for LLM reasoning output) ─────────────
+function renderMarkdown(text) {
+  if (!text) return '';
+  // 1. Escape HTML first (XSS safety)
+  let s = escHtml(text);
+  // 2. Headings: ### / ## / # at line start → bold
+  s = s.replace(/^#{1,3} (.+)$/gm, '<strong>$1</strong>');
+  // 3. Bold **text**
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // 4. Italic *text* (not inside **)
+  s = s.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+  // 5. Inline code `text`
+  s = s.replace(/`([^`\n]+?)`/g, '<code>$1</code>');
+  // 6. Double newlines → paragraph break
+  s = s.replace(/\n{2,}/g, '<br><br>');
+  // 7. Single newlines → space (inline flow)
+  s = s.replace(/\n/g, ' ');
+  return s;
+}
+
 // ── Move history ──────────────────────────────────────────────────────────
 function addMoveCard(data) {
   const pane = document.getElementById('historyPane');
@@ -758,8 +778,8 @@ function addMoveCard(data) {
       ${coherenceHtml}${timeoutHtml}${blindHtml}${bookHtml}${latencyHtml}
     </div>
     ${rankStr && !data.is_blind_move && !isBook ? `<div class="move-rank-text">${rankStr}</div>` : ''}
-    ${showReason && !isBook ? `<div class="move-reason">${escHtml(data.reasoning)}</div>` : ''}
-    ${showThink ? `<span class="move-think-toggle">🧠 thinking</span><div class="move-think-body">${escHtml(data.thinking_content.trim())}</div>` : ''}`;
+    ${showReason && !isBook ? `<div class="move-reason">${renderMarkdown(data.reasoning)}</div>` : ''}
+    ${showThink ? `<span class="move-think-toggle">🧠 thinking</span><div class="move-think-body">${renderMarkdown(data.thinking_content.trim())}</div>` : ''}`;
 
   if (showThink) {
     const toggle = card.querySelector('.move-think-toggle');
@@ -1350,8 +1370,16 @@ async function resumeTournament() {
   await fetch(`${API}/api/tournament/resume`, { method: 'POST', headers: authHeaders() });
 }
 
-async function stopTournament() {
-  if (!confirm('Stop the current tournament?')) return;
+function stopTournament() {
+  const modal = document.getElementById('stopModal');
+  if (modal) modal.style.display = 'flex';
+}
+function closeStopModal() {
+  const modal = document.getElementById('stopModal');
+  if (modal) modal.style.display = 'none';
+}
+async function confirmStop() {
+  closeStopModal();
   await fetch(`${API}/api/tournament/stop`, { method: 'POST', headers: authHeaders() });
 }
 
@@ -1476,6 +1504,12 @@ async function fetchModels(side) {
       sel.appendChild(opt);
     });
     if (!prev && models.length === 1) sel.value = models[0];
+    if (models.length === 0) {
+      const warn = document.createElement('option');
+      warn.disabled = true;
+      warn.textContent = '⚠ No models found — is LM Studio running?';
+      sel.appendChild(warn);
+    }
     onModelSelect(side);
   } catch(e) {
     console.warn('Failed to fetch models:', e);
@@ -2629,6 +2663,10 @@ buildUiThemeSwatches();
   sizeBoard();
   connect();
   loadProviders();
+  // Apply initial backend UI state for all sides (onBackendChange only fires on DOM change events)
+  ['white', 'black', 'tutor', 'judge', 'trnTutor', 'trnJudge'].forEach(s => {
+    if (document.getElementById(s + 'Backend')) onBackendChange(s);
+  });
   loadLeaderboard();
   loadHistory();
   loadTournamentHistory();
