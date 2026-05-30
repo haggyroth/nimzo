@@ -230,6 +230,21 @@
               <select class="ctrl-select" id="tutorModel"><option value="">— select model —</option></select>
             </div>
 
+            <!-- Judge (coherence scoring) -->
+            <div class="player-cfg">
+              <div class="cfg-label" title="Optional separate model for reasoning coherence scoring (0–10). Defaults to the tutor model when left as 'Same as tutor'.">🔎 Judge <span style="font-size:9px;color:var(--text-dim)">(coherence · defaults to tutor)</span></div>
+              <select class="ctrl-select" id="judgeBackend" onchange="onBackendChange('judge')">
+                <option value="none" selected>Same as tutor</option>
+                <option value="lmstudio">LM Studio (local)</option>
+                <option value="anthropic">Anthropic (cloud)</option>
+              </select>
+              <div class="url-row" id="judgeUrlRow" style="display:none">
+                <input class="ctrl-input" id="judgeUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+                <button class="fetch-btn" onclick="fetchModels('judge')" title="Load models">⟳</button>
+              </div>
+              <select class="ctrl-select" id="judgeModel" style="display:none"><option value="">— select model —</option></select>
+            </div>
+
             <hr class="divider">
 
             <!-- Games count -->
@@ -256,6 +271,11 @@
             <div class="games-row" title="Declare a draw after this many half-moves (plies). 0 = no limit. 500 plies ≈ 250 moves per side.">
               <span>Move limit (plies)</span>
               <input type="number" id="maxMoves" value="0" min="0" max="5000" style="width:60px" placeholder="0">
+            </div>
+
+            <div class="games-row" title="Per-move time limit in seconds. If a model takes longer it is skipped and the best candidate is played automatically. 0 = no limit.">
+              <span>Move timeout (s)</span>
+              <input type="number" id="moveTimeout" value="0" min="0" max="3600" style="width:60px" placeholder="0">
             </div>
 
             <div title="PGN move sequence to play automatically before guided play begins (e.g. &quot;1. e4 e5 2. Nf3 Nc6&quot;). Leave blank for a normal game. Both models step through these moves; the viewer shows them as greyed-out book moves.">
@@ -309,6 +329,43 @@
                 <button class="fetch-btn" onclick="fetchModels('trnTutor')" title="Load models">⟳</button>
               </div>
               <select class="ctrl-select" id="trnTutorModel"><option value="">— select model —</option></select>
+            </div>
+
+            <!-- Judge (coherence scoring) -->
+            <div class="player-cfg">
+              <div class="cfg-label" title="Optional separate model for reasoning coherence scoring (0–10). Defaults to the tutor model when left as 'Same as tutor'.">🔎 Judge <span style="font-size:9px;color:var(--text-dim)">(coherence · defaults to tutor)</span></div>
+              <select class="ctrl-select" id="trnJudgeBackend" onchange="onBackendChange('trnJudge')">
+                <option value="none" selected>Same as tutor</option>
+                <option value="lmstudio">LM Studio (local)</option>
+                <option value="anthropic">Anthropic (cloud)</option>
+              </select>
+              <div class="url-row" id="trnJudgeUrlRow" style="display:none">
+                <input class="ctrl-input" id="trnJudgeUrl" placeholder="http://localhost:1234/v1" value="http://localhost:1234/v1">
+                <button class="fetch-btn" onclick="fetchModels('trnJudge')" title="Load models">⟳</button>
+              </div>
+              <select class="ctrl-select" id="trnJudgeModel" style="display:none"><option value="">— select model —</option></select>
+            </div>
+
+            <hr class="divider">
+
+            <label class="toggle-row" title="Auto-adjust candidate count based on each model's rolling win rate (kicks in after 10 games)">
+              <input type="checkbox" id="trnAdaptiveDifficulty">
+              Adaptive difficulty
+            </label>
+
+            <div class="games-row" title="Declare a draw after this many half-moves (plies). 0 = no limit. 500 plies ≈ 250 moves per side.">
+              <span>Move limit (plies)</span>
+              <input type="number" id="trnMaxMoves" value="0" min="0" max="5000" style="width:60px" placeholder="0">
+            </div>
+
+            <div class="games-row" title="Per-move time limit in seconds. If a model takes longer it is skipped and the best candidate is played automatically. 0 = no limit.">
+              <span>Move timeout (s)</span>
+              <input type="number" id="trnMoveTimeout" value="0" min="0" max="3600" style="width:60px" placeholder="0">
+            </div>
+
+            <div title="PGN move sequence to play automatically before guided play begins (e.g. &quot;1. e4 e5 2. Nf3 Nc6&quot;). Leave blank for a normal game. Both models step through these moves; the viewer shows them as greyed-out book moves.">
+              <span class="games-label">Opening prefix (PGN)</span>
+              <textarea id="trnOpeningPgn" rows="2" placeholder="e.g. 1. e4 e5 2. Nf3 Nc6" style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:11px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;margin-top:4px"></textarea>
             </div>
 
             <button class="start-btn" onclick="startBracketTournament()">▶ Start Tournament</button>

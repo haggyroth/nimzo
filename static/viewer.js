@@ -1060,7 +1060,7 @@ let trnNextId = 0;
 
 function trnAddPlayer() {
   const id = trnNextId++;
-  trnPlayers.push({ id, name: '', backend: 'lmstudio', url: DEFAULT_LMSTUDIO_URL, model: '', thinking: false, style: '' });
+  trnPlayers.push({ id, name: '', backend: 'lmstudio', url: DEFAULT_LMSTUDIO_URL, model: '', thinking: false, style: '', candidate_count: null, blind_opening_moves: 0, blind: false });
   renderTrnPlayerList();
 }
 
@@ -1103,6 +1103,17 @@ function renderTrnPlayerList() {
       <label class="toggle-row">
         <input type="checkbox" id="trnThink_${p.id}" ${p.thinking?'checked':''} onchange="trnSync(${p.id})"> Extended thinking
       </label>
+      <div class="games-row" title="Stockfish candidates shown to this model (0 = server default 5). Raise for weaker models, lower for stronger ones.">
+        <span>Candidates</span>
+        <input type="number" id="trnCandidates_${p.id}" value="${p.candidate_count ?? ''}" min="1" max="20" style="width:52px" placeholder="5" oninput="trnSync(${p.id})">
+      </div>
+      <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
+        <span>Blind opening moves</span>
+        <input type="number" id="trnBlindMoves_${p.id}" value="${p.blind_opening_moves}" min="0" max="20" style="width:52px" oninput="trnSync(${p.id})">
+      </div>
+      <label class="toggle-row" title="Full-game blind mode: Stockfish candidates are never shown — the model plays purely from its own chess knowledge for every move">
+        <input type="checkbox" id="trnBlind_${p.id}" ${p.blind?'checked':''} onchange="trnSync(${p.id})"> Blind game (all moves)
+      </label>
     </div>`;
   }).join('');
 }
@@ -1114,6 +1125,10 @@ function trnSync(id) {
   p.url      = document.getElementById(`trnUrl_${id}`).value;
   p.thinking = document.getElementById(`trnThink_${id}`).checked;
   p.style    = document.getElementById(`trnStyle_${id}`)?.value || '';
+  const candVal = parseInt(document.getElementById(`trnCandidates_${id}`)?.value);
+  p.candidate_count    = isNaN(candVal) || candVal <= 0 ? null : candVal;
+  p.blind_opening_moves = parseInt(document.getElementById(`trnBlindMoves_${id}`)?.value) || 0;
+  p.blind               = document.getElementById(`trnBlind_${id}`)?.checked ?? false;
 }
 
 function trnSyncBackend(id) {
@@ -1210,6 +1225,10 @@ async function startTournament() {
   const tutorModel   = tutorBackend==='none' ? '' : document.getElementById('tutorModel').value;
   const tutorUrl     = tutorBackend==='none' ? '' : document.getElementById('tutorUrl').value;
 
+  const judgeBackend = document.getElementById('judgeBackend').value;
+  const judgeModel   = judgeBackend==='none' ? '' : document.getElementById('judgeModel').value;
+  const judgeUrl     = judgeBackend==='none' ? '' : document.getElementById('judgeUrl').value;
+
   const cfg = {
     white_backend:   wBackend,
     white_name:      document.getElementById('whiteName').value || 'White',
@@ -1226,6 +1245,9 @@ async function startTournament() {
     tutor_backend:   tutorBackend==='none' ? 'lmstudio' : tutorBackend,
     tutor_model:     tutorModel,
     tutor_url:       tutorUrl || DEFAULT_LMSTUDIO_URL,
+    judge_backend:   judgeBackend==='none' ? 'lmstudio' : judgeBackend,
+    judge_model:     judgeModel,
+    judge_url:       judgeUrl || DEFAULT_LMSTUDIO_URL,
     games:                    parseInt(document.getElementById('gamesCount').value) || 10,
     human_assisted:           document.getElementById('humanAssisted') ? document.getElementById('humanAssisted').checked : true,
     adaptive_difficulty:      document.getElementById('adaptiveDifficulty') ? document.getElementById('adaptiveDifficulty').checked : false,
@@ -1236,6 +1258,7 @@ async function startTournament() {
     white_candidate_count: parseInt(document.getElementById('whiteCandidates')?.value) || null,
     black_candidate_count: parseInt(document.getElementById('blackCandidates')?.value) || null,
     max_moves:                parseInt(document.getElementById('maxMoves')?.value) || 0,
+    move_timeout:             parseInt(document.getElementById('moveTimeout')?.value) || 0,
     opening_pgn:              (document.getElementById('openingPgn')?.value || '').trim(),
   };
 
@@ -1260,20 +1283,34 @@ async function startBracketTournament() {
   const tutorModel   = tutorBackend==='none' ? '' : document.getElementById('trnTutorModel').value;
   const tutorUrl     = tutorBackend==='none' ? '' : document.getElementById('trnTutorUrl').value;
 
+  const trnJudgeBackend = document.getElementById('trnJudgeBackend').value;
+  const trnJudgeModel   = trnJudgeBackend==='none' ? '' : document.getElementById('trnJudgeModel').value;
+  const trnJudgeUrl     = trnJudgeBackend==='none' ? '' : document.getElementById('trnJudgeUrl').value;
+
   const cfg = {
     players: trnPlayers.map(p => ({
-      backend:  p.backend,
-      name:     p.name || extractModelName(p.model),
-      model_id: p.model,
-      url:      p.url,
-      thinking: p.thinking,
-      style:    p.style || '',
+      backend:              p.backend,
+      name:                 p.name || extractModelName(p.model),
+      model_id:             p.model,
+      url:                  p.url,
+      thinking:             p.thinking,
+      style:                p.style || '',
+      candidate_count:      p.candidate_count || null,
+      blind_opening_moves:  p.blind_opening_moves || 0,
+      blind:                p.blind || false,
     })),
-    format:         document.getElementById('trnFormat').value,
-    games_per_pair: parseInt(document.getElementById('trnGamesPair').value) || 2,
-    tutor_backend:  tutorBackend==='none' ? 'lmstudio' : tutorBackend,
-    tutor_model:    tutorModel,
-    tutor_url:      tutorUrl || DEFAULT_LMSTUDIO_URL,
+    format:              document.getElementById('trnFormat').value,
+    games_per_pair:      parseInt(document.getElementById('trnGamesPair').value) || 2,
+    tutor_backend:       tutorBackend==='none' ? 'lmstudio' : tutorBackend,
+    tutor_model:         tutorModel,
+    tutor_url:           tutorUrl || DEFAULT_LMSTUDIO_URL,
+    judge_backend:       trnJudgeBackend==='none' ? 'lmstudio' : trnJudgeBackend,
+    judge_model:         trnJudgeModel,
+    judge_url:           trnJudgeUrl || DEFAULT_LMSTUDIO_URL,
+    adaptive_difficulty: document.getElementById('trnAdaptiveDifficulty')?.checked ?? false,
+    max_moves:           parseInt(document.getElementById('trnMaxMoves')?.value) || 0,
+    move_timeout:        parseInt(document.getElementById('trnMoveTimeout')?.value) || 0,
+    opening_pgn:         (document.getElementById('trnOpeningPgn')?.value || '').trim(),
   };
 
   const res = await fetch(`${API}/api/tournament/start`, {
@@ -1363,7 +1400,7 @@ async function loadProviders() {
     return;
   }
   // Inject cloud provider options into the static backend <select> elements
-  const selIds = ['whiteBackend', 'blackBackend', 'tutorBackend', 'trnTutorBackend'];
+  const selIds = ['whiteBackend', 'blackBackend', 'tutorBackend', 'judgeBackend', 'trnTutorBackend', 'trnJudgeBackend'];
   selIds.forEach(selId => {
     const sel = document.getElementById(selId);
     if (!sel) return;
@@ -1390,8 +1427,16 @@ function isCloudBackend(backend) {
 }
 
 async function fetchModels(side) {
-  const urlId = side === 'tutor' ? 'tutorUrl' : side === 'trnTutor' ? 'trnTutorUrl' : side + 'Url';
-  const selId = side === 'tutor' ? 'tutorModel' : side === 'trnTutor' ? 'trnTutorModel' : side + 'Model';
+  const urlId = side === 'tutor' ? 'tutorUrl'
+    : side === 'trnTutor' ? 'trnTutorUrl'
+    : side === 'judge' ? 'judgeUrl'
+    : side === 'trnJudge' ? 'trnJudgeUrl'
+    : side + 'Url';
+  const selId = side === 'tutor' ? 'tutorModel'
+    : side === 'trnTutor' ? 'trnTutorModel'
+    : side === 'judge' ? 'judgeModel'
+    : side === 'trnJudge' ? 'trnJudgeModel'
+    : side + 'Model';
   const url   = document.getElementById(urlId).value.trim();
   if (!url) return;
 
@@ -1417,9 +1462,12 @@ async function fetchModels(side) {
 function onBackendChange(side) {
   const backend = document.getElementById(side + 'Backend').value;
   const urlRow  = document.getElementById(side + 'UrlRow');
-  // Handle "none" for both tutor variants
-  const isTutor = side === 'tutor' || side === 'trnTutor';
-  const modelId = side === 'trnTutor' ? 'trnTutorModel' : side + 'Model';
+  // Handle "none" for tutor and judge variants
+  const isTutor = side === 'tutor' || side === 'trnTutor' || side === 'judge' || side === 'trnJudge';
+  const modelId = side === 'trnTutor' ? 'trnTutorModel'
+    : side === 'trnJudge' ? 'trnJudgeModel'
+    : side === 'judge' ? 'judgeModel'
+    : side + 'Model';
 
   if (isTutor && backend === 'none') {
     if (urlRow) urlRow.style.display = 'none';
