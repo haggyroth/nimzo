@@ -65,3 +65,5 @@ Bigger features for power users and long-running deployments.
 - [x] Styled abort confirmation modal
 - [x] Empty model dropdown warning
 - [x] Init-time backend hook for correct initial UI state
+- [x] Eval bar SVG viewBox corrected to match 56px CSS height
+- [x] Reasoning expand/collapse DOM-timing fix — prepend card before measuring scrollHeight
