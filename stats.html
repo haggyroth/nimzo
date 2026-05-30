@@ -510,6 +510,7 @@
 
 </div>
 
+<script src="/static/viewer_utils.js"></script>
 <script>
 const API = '';
 
@@ -669,161 +670,6 @@ async function loadH2H() {
   });
   document.getElementById('h2hLoading').style.display = 'none';
   document.getElementById('h2hTable').style.display = 'table';
-}
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// ── Model card modal ──────────────────────────────────────────────────────
-function renderPortraitBlock(p) {
-  if (p.portrait_url) {
-    return `<img class="mc-portrait" src="${escHtml(p.portrait_url)}" alt="${escHtml(p.name || '')} portrait">`;
-  }
-  const family = (p.metadata && p.metadata.family) || '';
-  const icon = family ? family[0].toUpperCase() : '♟';
-  return `<div class="mc-portrait-placeholder">${icon}</div>`;
-}
-
-async function openModelCard(modelId) {
-  if (!modelId) return;
-  try {
-    const p = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/profile`)
-      .then(r => r.json());
-    renderModelCard(p);
-    document.getElementById('modelModal').classList.add('show');
-    if (!p.portrait_url) {
-      const portraitEl = document.getElementById('mcCard').querySelector('.mc-portrait-placeholder, .mc-portrait');
-      if (portraitEl) portraitEl.outerHTML = `<div class="mc-portrait-generating"><div class="spinner"></div>Painting…</div>`;
-      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' })
-        .then(r => r.json())
-        .then(j => {
-          if (j.portrait_url) {
-            const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
-            if (gen) {
-              const img = document.createElement('img');
-              img.className = 'mc-portrait'; img.src = j.portrait_url;
-              img.alt = (p.name || '') + ' portrait';
-              gen.replaceWith(img);
-            }
-          } else {
-            const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
-            if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
-          }
-        })
-        .catch(() => {
-          const gen = document.getElementById('mcCard').querySelector('.mc-portrait-generating');
-          if (gen) gen.outerHTML = `<div class="mc-portrait-placeholder">♟</div>`;
-        });
-    }
-  } catch (e) { console.error('Model card load failed:', e); }
-}
-function closeModelCard() { document.getElementById('modelModal').classList.remove('show'); }
-
-function renderModelCard(p) {
-  const m = p.moves || {}, c = p.color || {}, g = p.games || {};
-  const total = m.total_moves || 0;
-  const wGames = (c.white_wins||0) + (c.white_draws||0) + (c.white_losses||0);
-  const bGames = (c.black_wins||0) + (c.black_draws||0) + (c.black_losses||0);
-  const wins   = (c.white_wins||0) + (c.black_wins||0);
-  const draws  = (c.white_draws||0) + (c.black_draws||0);
-  const losses = (c.white_losses||0) + (c.black_losses||0);
-
-  const qkeys = ['q_best','q_excellent','q_good','q_inaccuracy','q_mistake','q_blunder'];
-  const qcls  = { q_best:'q-best', q_excellent:'q-excellent', q_good:'q-good',
-                  q_inaccuracy:'q-inaccuracy', q_mistake:'q-mistake', q_blunder:'q-blunder' };
-  const qSum = qkeys.reduce((s,k) => s + (m[k]||0), 0);
-  const qBar = total && qSum
-    ? qkeys.map(k => {
-        const n = m[k] || 0;
-        if (!n) return '';
-        const pct = (n / qSum * 100).toFixed(2);
-        return `<span class="${qcls[k]}" style="width:${pct}%" title="${k.slice(2)}: ${n}"></span>`;
-      }).join('')
-    : '<span style="width:100%;background:var(--border)"></span>';
-
-  const traits = (p.traits && p.traits.length)
-    ? p.traits.map(t =>
-        `<div class="mc-trait">
-           <span class="mc-trait-label">${escHtml(t.label)}</span>
-           <span class="mc-trait-detail">${escHtml(t.detail)}</span>
-         </div>`).join('')
-    : `<div class="mc-no-traits">No personality signal yet — play more games.</div>`;
-
-  const lessons = (p.recent_lessons || []).map(l => {
-    const tag = l.lesson_type === 'strength' ? 'strength' : 'improve';
-    return `<div class="mc-lesson"><span class="tag ${tag}">${tag}</span>${escHtml(l.lesson)}</div>`;
-  }).join('') || `<div class="mc-no-traits">No lessons yet.</div>`;
-
-  const profileHtml = p.strategic_profile
-    ? `<div class="mc-profile">${escHtml(p.strategic_profile).replace(/\n/g,'<br>')}</div>`
-    : null;
-
-  const fmtScore = (w, d, t) => t ? `${(((w + 0.5*d)/t)*100).toFixed(0)}%` : '—';
-
-  document.getElementById('mcBody').innerHTML = `
-    ${renderPortraitBlock(p)}
-    <div class="mc-name">${escHtml(p.name || '—')}</div>
-    <div class="mc-modelid">${escHtml(p.model_id || '')} · ${escHtml(p.backend || '')}</div>
-    ${renderMetadata(p.metadata)}
-    <div class="mc-row">
-      <div><div class="mc-stat-label">ELO</div><div class="mc-stat-value">${p.elo ?? '—'}</div></div>
-      <div><div class="mc-stat-label">Record</div><div class="mc-stat-value">${wins}/${draws}/${losses}</div><div class="mc-stat-sub">${g.total_games || 0} games</div></div>
-      <div><div class="mc-stat-label">As White</div><div class="mc-stat-value">${fmtScore(c.white_wins||0, c.white_draws||0, wGames)}</div><div class="mc-stat-sub">${wGames} games</div></div>
-      <div><div class="mc-stat-label">As Black</div><div class="mc-stat-value">${fmtScore(c.black_wins||0, c.black_draws||0, bGames)}</div><div class="mc-stat-sub">${bGames} games</div></div>
-    </div>
-    <div class="mc-section-head">Move quality (${total} moves)</div>
-    <div class="mc-qbar">${qBar}</div>
-    <div class="mc-qbar-legend">
-      <span class="lb-best">best ${m.q_best || 0}</span>
-      <span class="lb-excellent">excellent ${m.q_excellent || 0}</span>
-      <span class="lb-good">good ${m.q_good || 0}</span>
-      <span class="lb-inaccuracy">inaccuracy ${m.q_inaccuracy || 0}</span>
-      <span class="lb-mistake">mistake ${m.q_mistake || 0}</span>
-      <span class="lb-blunder">blunder ${m.q_blunder || 0}</span>
-    </div>
-    <div class="mc-section-head">Achievements ${(p.achievements && p.achievements.length) ? '· ' + p.achievements.reduce((s,a)=>s+a.times, 0) : ''}</div>
-    ${renderBadges(p.achievements)}
-    <div class="mc-section-head">Personality</div>${traits}
-    ${profileHtml
-      ? `<div class="mc-section-head">Strategic profile</div>${profileHtml}
-         <div class="mc-section-head">Recent lessons</div>${lessons}`
-      : `<div class="mc-section-head">Coach notes</div>${lessons}`
-    }`;
-}
-
-function renderBadges(achievements) {
-  if (!achievements || !achievements.length) {
-    return `<div class="mc-no-traits">No achievements yet — keep playing.</div>`;
-  }
-  return `<div class="mc-badges">` + achievements.map(a => {
-    const times = a.times > 1 ? `<span class="b-times">×${a.times}</span>` : '';
-    return `<span class="mc-badge badge-${a.code}" title="${escHtml(a.desc)}">${escHtml(a.label)}${times}</span>`;
-  }).join('') + `</div>`;
-}
-
-function renderMetadata(meta) {
-  if (!meta) return '';
-  const chips = [];
-  const chip = (k, v, href) => {
-    const inner = href
-      ? `<a href="${href}" target="_blank" rel="noopener">${escHtml(v)}</a>`
-      : escHtml(v);
-    chips.push(`<span class="mc-meta-chip"><span class="k">${escHtml(k)}</span><span class="v">${inner}</span></span>`);
-  };
-  if (meta.family)          chip('Family',  meta.family);
-  if (meta.param_count) {
-    const ap = meta.active_params ? ` (${meta.active_params} active)` : '';
-    chip('Params',  meta.param_count + ap);
-  }
-  if (meta.quantization)    chip('Quant',   meta.quantization);
-  if (meta.architecture)    chip('Arch',    meta.architecture);
-  if (meta.context_length)  chip('Ctx',     meta.context_length.toLocaleString());
-  if (meta.file_size_label) chip('Size',    meta.file_size_label);
-  if (meta.license)         chip('License', meta.license);
-  if (meta.hf_url)          chip('HF',      'open ↗', meta.hf_url);
-  if (!chips.length) return '';
-  return `<div class="mc-meta">${chips.join('')}</div>`;
 }
 
 document.addEventListener('keydown', e => {
@@ -1141,7 +987,7 @@ Promise.all([initCompare(), loadEloCharts(), loadQuality(), loadColorStats(), lo
 
 <!-- ── Model card modal ───────────────────────────────────────────────── -->
 <div id="modelModal" onclick="if(event.target.id==='modelModal') closeModelCard()">
-  <div class="mc-card">
+  <div class="mc-card" id="mcCard">
     <div class="mc-close" onclick="closeModelCard()">Close ✕</div>
     <div id="mcBody"></div>
   </div>
