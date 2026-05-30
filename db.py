@@ -211,6 +211,8 @@ def _migrate(conn: sqlite3.Connection):
     _add_column_if_missing(conn, "players", "user_provided_portrait", "INTEGER DEFAULT 0")
     _add_column_if_missing(conn, "tournaments", "bracket_json",    "TEXT")
     _add_column_if_missing(conn, "moves",   "elapsed_ms",          "INTEGER")
+    _add_column_if_missing(conn, "moves",   "tokens_input",        "INTEGER")
+    _add_column_if_missing(conn, "moves",   "tokens_output",       "INTEGER")
     _add_column_if_missing(conn, "games",  "eco_code",            "TEXT")
     _add_column_if_missing(conn, "games",  "opening_name",        "TEXT")
     # Create tournament tables for existing DBs (CREATE TABLE IF NOT EXISTS is idempotent
@@ -539,6 +541,8 @@ def record_move(
     coherence_score: Optional[float] = None,
     timed_out: bool = False,
     elapsed_ms: Optional[int] = None,
+    tokens_input: Optional[int] = None,
+    tokens_output: Optional[int] = None,
 ):
     with get_conn() as conn:
         player_id = conn.execute(
@@ -549,14 +553,16 @@ def record_move(
             INSERT INTO moves
               (game_id, move_number, player_id, move_uci, move_san,
                candidate_rank, quality, score_cp, reasoning, fen_after,
-               thinking_content, coherence_score, timed_out, elapsed_ms)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               thinking_content, coherence_score, timed_out, elapsed_ms,
+               tokens_input, tokens_output)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 game_id, move_number, player_id, move_uci, move_san,
                 candidate_rank, quality, score_cp, reasoning, fen_after,
                 thinking_content or "", coherence_score,
                 1 if timed_out else 0, elapsed_ms,
+                tokens_input, tokens_output,
             ),
         )
 
@@ -584,7 +590,8 @@ def get_game_moves(game_id: int) -> list[dict]:
             """
             SELECT m.move_number, m.move_san, m.move_uci, m.quality,
                    m.candidate_rank, m.reasoning, m.score_cp, m.thinking_content,
-                   m.coherence_score, m.timed_out, m.elapsed_ms, m.fen_after
+                   m.coherence_score, m.timed_out, m.elapsed_ms, m.fen_after,
+                   m.tokens_input, m.tokens_output
             FROM moves m
             WHERE m.game_id = ?
             ORDER BY m.move_number ASC
@@ -677,6 +684,37 @@ def get_coherence_stats(model_id: str) -> dict:
             "total_moves":    total_row["total"] or 0,
             "timeout_count":  total_row["timeouts"] or 0,
         }
+
+
+def get_token_stats(model_id: str) -> dict:
+    """
+    Return aggregate token usage for a model.
+
+    Returns ``{total_input, total_output, avg_input_per_move, avg_output_per_move,
+    moves_with_tokens}`` — only moves where token data is available are counted.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                SUM(m.tokens_input)                AS total_input,
+                SUM(m.tokens_output)               AS total_output,
+                AVG(m.tokens_input)                AS avg_input,
+                AVG(m.tokens_output)               AS avg_output,
+                COUNT(CASE WHEN m.tokens_input IS NOT NULL THEN 1 END) AS moves_with_tokens
+            FROM moves m
+            JOIN players p ON m.player_id = p.id
+            WHERE p.model_id = ?
+            """,
+            (model_id,),
+        ).fetchone()
+    return {
+        "total_input":        int(row["total_input"])  if row["total_input"]  is not None else None,
+        "total_output":       int(row["total_output"]) if row["total_output"] is not None else None,
+        "avg_input_per_move": round(row["avg_input"],  1) if row["avg_input"]  is not None else None,
+        "avg_output_per_move":round(row["avg_output"], 1) if row["avg_output"] is not None else None,
+        "moves_with_tokens":  row["moves_with_tokens"] or 0,
+    }
 
 
 def get_coherence_history(model_id: str) -> list[dict]:

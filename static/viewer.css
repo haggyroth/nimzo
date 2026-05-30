@@ -450,6 +450,7 @@
     .move-timeout  { font-size: 7px; color: var(--q-mistake); margin-left: 4px; letter-spacing: .5px; }
     .move-latency  { font-size: 7px; color: var(--text-dim);  margin-left: 4px; letter-spacing: .5px; }
     .move-book     { font-size: 7px; color: var(--text-dim);  margin-left: 4px; letter-spacing: .5px; }
+    .move-tokens   { font-size: 7px; color: var(--text-dim);  margin-left: 4px; letter-spacing: .5px; opacity: .7; }
     /* Timed-out move cards: red left border + subtle red tint */
     .move-card.timed-out {
       border-left-color: var(--q-blunder) !important;

@@ -48,7 +48,7 @@ Bigger features for power users and long-running deployments.
 - [ ] **ELO ladder / auto-scheduler** — round-robin scheduler that auto-queues matchups between all registered players and continuously updates ratings without manual setup
 - [x] **Model parameter sliders** — per-player temperature and candidate count inputs in Advanced options, wired all the way through PlayerSpec → build_player → PlayerConfig
 - [ ] **Concurrent games** — deferred; run 2–4 games in parallel (separate boards, separate WebSocket channels)
-- [ ] **Cost/token tracking** — for cloud backends, track token counts per move and display estimated cost-per-game in the model card modal
+- [x] **Cost/token tracking** — token counts (input/output) captured from all backends, stored per move in DB (`tokens_input`/`tokens_output` columns), shown as a chip on each move card and as a total in the model stat card; `GET /api/models/{id}/tokens` endpoint
 - [x] **Reasoning dataset export** — `GET /api/export/reasoning-dataset` streams JSONL with `(game_id, move_number, san, uci, fen_after, quality, candidate_rank, score_cp, reasoning, thinking_content, model_id, model_name)`; supports `?quality=` and `?model_id=` filters
 - [x] **Spectator URL** — `?spectate=true` hides the control panel, header controls and toggle buttons for a clean embeddable read-only view
 - [ ] **Lichess integration** — deferred

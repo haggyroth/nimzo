@@ -39,11 +39,13 @@ class PlayerConfig:
 class MoveDecision:
     """The outcome of a single ``choose_move`` call: the chosen move and its context."""
 
-    move_uci: str                  # Chosen move in UCI format (e.g. "e2e4")
-    reasoning: str                 # Model's explanation
-    candidate_rank: int            # Which candidate was chosen (1 = Stockfish's top pick)
-    raw_response: str              # Full model output for logging
-    thinking_content: str = ""     # Extracted <think>…</think> block, if any
+    move_uci: str                      # Chosen move in UCI format (e.g. "e2e4")
+    reasoning: str                     # Model's explanation
+    candidate_rank: int                # Which candidate was chosen (1 = Stockfish's top pick)
+    raw_response: str                  # Full model output for logging
+    thinking_content: str = ""         # Extracted <think>…</think> block, if any
+    tokens_input: Optional[int] = None  # Prompt tokens consumed (None for local/human)
+    tokens_output: Optional[int] = None # Completion tokens generated
 
 
 class ChessPlayer(ABC):

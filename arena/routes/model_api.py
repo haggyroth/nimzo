@@ -82,6 +82,12 @@ async def api_model_openings(model_id: str):
     return await asyncio.to_thread(database.get_openings_for_model, model_id)
 
 
+@router.get("/api/models/{model_id:path}/tokens")
+async def api_model_tokens(model_id: str):
+    """Aggregate token usage for a model (total and per-move averages)."""
+    return await asyncio.to_thread(database.get_token_stats, model_id)
+
+
 @router.get("/api/models/{model_id:path}/quality")
 async def api_model_quality(model_id: str):
     """
