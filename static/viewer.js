@@ -776,10 +776,10 @@ const _lessonsRendered = new Set();  // tracks which player names have been show
 
 function setRightTab(tab) {
   _rightTab = tab;
-  document.getElementById('rpTabConfigure').classList.toggle('active', tab === 'configure');
-  document.getElementById('rpTabResults').classList.toggle('active', tab === 'results');
-  document.getElementById('rpConfigureContent').style.display = tab === 'configure' ? '' : 'none';
-  document.getElementById('rpResultsContent').style.display   = tab === 'results'   ? '' : 'none';
+  const cfg = document.getElementById('rpConfigureGroup');
+  const res = document.getElementById('rpResultsGroup');
+  if (cfg) cfg.classList.toggle('collapsed', tab !== 'configure');
+  if (res) res.classList.toggle('collapsed', tab !== 'results');
 }
 
 // ── Lessons panel ─────────────────────────────────────────────────────────

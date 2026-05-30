@@ -115,14 +115,9 @@
   <!-- ── Right control panel ──────────────────────────────────────── -->
   <div class="right-panel" id="rightPanel">
 
-    <!-- Tab bar -->
-    <div class="rp-tab-bar">
-      <button class="rp-tab active" id="rpTabConfigure" onclick="setRightTab('configure')">Configure</button>
-      <button class="rp-tab" id="rpTabResults" onclick="setRightTab('results')">Results</button>
-    </div>
-
-    <!-- Configure content -->
-    <div id="rpConfigureContent">
+    <!-- Configure group (open by default) -->
+    <div class="rp-group" id="rpConfigureGroup">
+    <div class="ctrl-head" onclick="setRightTab('configure')">Configure <span class="chevron">▾</span></div>
 
     <!-- Tournament section -->
     <div class="ctrl-section" id="tournamentSection">
@@ -559,10 +554,11 @@
       </div>
     </div>
 
-    </div><!-- end rpConfigureContent -->
+    </div><!-- end rpConfigureGroup -->
 
-    <!-- Results content -->
-    <div id="rpResultsContent" style="display:none">
+    <!-- Results group (collapsed by default) -->
+    <div class="rp-group collapsed" id="rpResultsGroup">
+    <div class="ctrl-head" onclick="setRightTab('results')">Results <span class="chevron">▾</span></div>
 
     <!-- Live standings (tournament mode only) -->
     <div class="ctrl-section" id="standingsSection" style="display:none">
@@ -664,7 +660,7 @@
       </div>
     </div>
 
-    </div><!-- end rpResultsContent -->
+    </div><!-- end rpResultsGroup -->
 
   </div>
 </main>
