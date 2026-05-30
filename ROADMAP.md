@@ -11,9 +11,9 @@ Small, high-ROI changes that improve the experience on every session.
 - [x] **Reasoning expand/collapse** — move cards show first 3 lines; `▾ more` toggle reveals full reasoning
 - [x] **localStorage form persistence** — match setup (models, names, game count, tutor/judge) survives page reloads
 - [x] **Eval bar visibility** — stronger SVG fill opacities, 2px line, taller canvas; `analysis-section` gets `flex-shrink:0`
-- [ ] **Full reasoning in replay modal** — the per-move detail panel in the replay modal should include the full reasoning string
+- [x] **Full reasoning in replay modal** — the per-move detail panel in the replay modal should include the full reasoning string
 - [x] **Auto-collapse Configure on match start** — after clicking ▶ START MATCH, collapse Configure and expand Results so progress is visible without scrolling
-- [ ] **Keyboard shortcuts** — Space = pause/resume, `F` = flip board, `←/→` = replay modal step navigation
+- [x] **Keyboard shortcuts** — Space = pause/resume, `F` = flip board, `←/→` = replay modal step navigation
 
 ---
 
