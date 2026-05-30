@@ -111,11 +111,15 @@ class LMStudioPlayer(ChessPlayer):
 
         raw = response.choices[0].message.content or ""
 
+        # ── Token usage ───────────────────────────────────────────────
+        usage = getattr(response, "usage", None)
+        tokens_input  = getattr(usage, "prompt_tokens",     None)
+        tokens_output = getattr(usage, "completion_tokens", None)
+
         # ── Thinking audit: warn if model appears to be thinking
         # despite being told not to ───────────────────────────────────
         if not thinking:
             thinking_found = bool(_THINK_RE.search(raw))
-            usage = getattr(response, "usage", None)
             total_tokens = getattr(usage, "total_tokens", None)
             if thinking_found or (elapsed > 15 and total_tokens and total_tokens > 800):
                 logger.warning(
@@ -125,7 +129,10 @@ class LMStudioPlayer(ChessPlayer):
                     "yes" if thinking_found else "no",
                 )
 
-        return self._parse_response(raw, candidates, board)
+        decision = self._parse_response(raw, candidates, board)
+        decision.tokens_input  = tokens_input
+        decision.tokens_output = tokens_output
+        return decision
 
     def _parse_response(
         self,

@@ -473,6 +473,8 @@ async def play_game(
             "timed_out":      timed_out,
             "is_blind_move":  is_blind,
             "elapsed_ms":     elapsed_ms,
+            "tokens_input":   decision.tokens_input,
+            "tokens_output":  decision.tokens_output,
         })
 
         await _arena.broadcast({
@@ -491,6 +493,8 @@ async def play_game(
             "is_blind_move":  is_blind,
             "score_cp_white": score_cp_white,
             "elapsed_ms":     elapsed_ms,
+            "tokens_input":   decision.tokens_input,
+            "tokens_output":  decision.tokens_output,
             "fen":            board.fen(),
         })
 
@@ -563,6 +567,8 @@ async def play_game(
                 coherence_score=rec.get("coherence_score"),
                 timed_out=rec.get("timed_out", False),
                 elapsed_ms=rec.get("elapsed_ms"),
+                tokens_input=rec.get("tokens_input"),
+                tokens_output=rec.get("tokens_output"),
             )
     await asyncio.to_thread(_write_moves)
 

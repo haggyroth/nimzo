@@ -76,7 +76,14 @@ class AnthropicPlayer(ChessPlayer):
         raw              = "\n".join(text_parts)
         thinking_content = "\n\n".join(thinking_parts)
 
-        return self._parse_response(raw, candidates, board, thinking_content)
+        # ── Token usage ───────────────────────────────────────────────
+        tokens_input  = getattr(message.usage, "input_tokens",  None)
+        tokens_output = getattr(message.usage, "output_tokens", None)
+
+        decision = self._parse_response(raw, candidates, board, thinking_content)
+        decision.tokens_input  = tokens_input
+        decision.tokens_output = tokens_output
+        return decision
 
     def _parse_response(
         self,

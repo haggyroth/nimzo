@@ -819,6 +819,11 @@ function addMoveCard(data) {
   const latencyHtml  = (data.elapsed_ms != null && !data.timed_out && !isBook)
     ? `<span class="move-latency" title="Model response time">${(data.elapsed_ms / 1000).toFixed(1)}s</span>`
     : '';
+  const tokTotal = (data.tokens_input != null || data.tokens_output != null)
+    ? (data.tokens_input || 0) + (data.tokens_output || 0) : null;
+  const tokHtml = (tokTotal != null && !isBook)
+    ? `<span class="move-tokens" title="Tokens: ${data.tokens_input ?? '?'} in / ${data.tokens_output ?? '?'} out">${tokTotal >= 1000 ? (tokTotal/1000).toFixed(1)+'k' : tokTotal} tok</span>`
+    : '';
 
   const card = document.createElement('div');
   card.className = `move-card ${q}${isBook ? ' book' : ''}${data.timed_out ? ' timed-out' : ''}`;
@@ -827,7 +832,7 @@ function addMoveCard(data) {
       <span class="move-num-label">${label}</span>
       <span class="move-san-text">${escHtml(data.san)}</span>
       ${isBook ? '' : `<span class="move-badge ${q}">${q}</span>`}
-      ${coherenceHtml}${timeoutHtml}${blindHtml}${bookHtml}${latencyHtml}
+      ${coherenceHtml}${timeoutHtml}${blindHtml}${bookHtml}${latencyHtml}${tokHtml}
     </div>
     ${rankStr && !data.is_blind_move && !isBook ? `<div class="move-rank-text">${rankStr}</div>` : ''}
     ${showReason && !isBook ? `<div class="move-reason">${renderMarkdown(data.reasoning)}</div>` : ''}
@@ -2152,21 +2157,22 @@ async function loadStatCard(color) {
   try {
     const oppColor  = color === 'white' ? 'black' : 'white';
     const oppId     = gameState[oppColor].model_id;
-    const [profile, eloHist, h2h] = await Promise.all([
+    const [profile, eloHist, h2h, tokenStats] = await Promise.all([
       fetch(`${API}/api/models/${encodeURIComponent(player.model_id)}/profile`).then(r => r.json()),
       fetch(`${API}/api/elo-history/${encodeURIComponent(player.model_id)}`).then(r => r.json()).catch(() => []),
       oppId
         ? fetch(`${API}/api/models/${encodeURIComponent(player.model_id)}/h2h/${encodeURIComponent(oppId)}`).then(r => r.json()).catch(() => null)
         : Promise.resolve(null),
+      fetch(`${API}/api/models/${encodeURIComponent(player.model_id)}/tokens`).then(r => r.json()).catch(() => null),
     ]);
-    _statCardCache[color] = { profile, eloHist, h2h };
-    renderStatCard(color, profile, eloHist, h2h);
+    _statCardCache[color] = { profile, eloHist, h2h, tokenStats };
+    renderStatCard(color, profile, eloHist, h2h, tokenStats);
   } catch(e) {
     if (card) card.innerHTML = '<div class="sc-row" style="padding:4px 0;color:var(--text-dim);font-size:9px">Failed to load</div>';
   }
 }
 
-function renderStatCard(color, p, eloHist, h2h) {
+function renderStatCard(color, p, eloHist, h2h, tokenStats) {
   const cap  = color[0].toUpperCase() + color.slice(1);
   const card = document.getElementById(`statCard${cap}`);
   if (!card) return;
@@ -2234,6 +2240,11 @@ function renderStatCard(color, p, eloHist, h2h) {
       </div>
       ${h2hHtml}
       ${tournHtml}
+      ${tokenStats && tokenStats.moves_with_tokens > 0 ? `
+      <div class="sc-stat" title="Total tokens used (${tokenStats.total_input ?? '?'} in / ${tokenStats.total_output ?? '?'} out) · avg ${tokenStats.avg_input_per_move ?? '?'} in / ${tokenStats.avg_output_per_move ?? '?'} out per move">
+        <span class="sc-val">${((tokenStats.total_input||0)+(tokenStats.total_output||0)) >= 1000000 ? (((tokenStats.total_input||0)+(tokenStats.total_output||0))/1000000).toFixed(1)+'M' : ((tokenStats.total_input||0)+(tokenStats.total_output||0)) >= 1000 ? (((tokenStats.total_input||0)+(tokenStats.total_output||0))/1000).toFixed(0)+'k' : ((tokenStats.total_input||0)+(tokenStats.total_output||0))}</span>
+        <span class="sc-lbl">tokens</span>
+      </div>` : ''}
       ${badge ? `<div class="sc-stat" style="border:none">${badge}</div>` : ''}
       <div class="sc-stat" style="border:none;cursor:pointer;color:var(--text-mid)"
            onclick="openModelCard('${escHtml(p.model_id || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">
