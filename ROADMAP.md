@@ -63,7 +63,7 @@ Smarter analysis and richer insight across the whole arena.
 - [x] **ELO trend on stat card** — inline ELO history sparkline on the live player stat card (already present via `_buildValueSparkline`)
 - [x] **Model comparison modal** — `GET /api/compare?a=...&b=...` bundles profiles, ELO histories, coherence, openings, and H2H; "⊞ Full Compare" in the H2H section opens a two-column modal with quality bars, ELO sparklines, and top openings
 - [x] **Per-game Stockfish annotation** — post-game depth-20 re-analysis marks blunders/mistakes/inaccuracies as a second quality layer; annotations stored in `move_annotations` table, surfaced in the replay modal as colored dots in the move strip and an annotation block in the reasoning panel
-- [ ] **Move explanation mode** — when a model deviates from Stockfish's top pick by a large margin, generate a short natural-language explanation via a local model and display it on the move card
+- [x] **Move explanation mode** — when a model plays a blunder or mistake, the tutor model generates a 1–3 sentence explanation (stored in `moves.explanation`); surfaced as a "💡 Coach" block on the live move card and in the replay modal reasoning panel
 
 ---
 

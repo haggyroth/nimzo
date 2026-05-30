@@ -486,6 +486,33 @@
     }
     .move-think-body.open { display: block; }
 
+    /* ── Phase 5c: move explanation block ───────────────────────── */
+    .move-explanation {
+      font-size: 9px; color: var(--text-mid); line-height: 1.55;
+      margin-top: 5px; padding: 4px 7px;
+      background: color-mix(in srgb, var(--gold) 8%, transparent);
+      border-left: 2px solid var(--gold);
+      border-radius: 0 3px 3px 0;
+    }
+    .move-expl-label {
+      display: inline-block; font-size: 7px; font-weight: 700;
+      color: var(--gold); letter-spacing: .04em; margin-right: 5px;
+      text-transform: uppercase;
+    }
+    /* Replay modal explanation block */
+    .rp-explanation {
+      font-size: 9px; color: var(--text-mid); line-height: 1.55;
+      margin-top: 8px; padding: 5px 8px;
+      background: color-mix(in srgb, var(--gold) 8%, transparent);
+      border-left: 2px solid var(--gold);
+      border-radius: 0 3px 3px 0;
+    }
+    .rp-expl-label {
+      display: inline-block; font-size: 7px; font-weight: 700;
+      color: var(--gold); letter-spacing: .04em; margin-right: 5px;
+      text-transform: uppercase;
+    }
+
     /* ── Eval graph ──────────────────────────────────────────────── */
     .eval-pane { border-bottom: 1px solid var(--border); flex-shrink: 0; }
     .eval-svg  { display: block; width: 100%; height: 56px; }

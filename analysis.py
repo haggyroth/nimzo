@@ -381,6 +381,71 @@ def _call_tutor_like(
     return resp.choices[0].message.content or ""
 
 
+# ── Move explanation (Phase 5c) ──────────────────────────────────────────
+
+_EXPLANATION_SYSTEM = (
+    "You are a concise chess coach. Explain in 1–3 sentences why a specific "
+    "move was an error and what the better move achieves. "
+    "Be direct and tactical — no preamble, no 'In this position'."
+)
+
+_EXPLANATION_TEMPLATE = """\
+Position (FEN): {fen}
+
+The player played: {played_san}{cp_loss_str}
+Stockfish's best move: {best_san}
+{reasoning_block}\
+In 1–3 sentences, explain:
+1. Why {played_san} is a {quality}
+2. What {best_san} achieves that {played_san} does not"""
+
+
+def generate_move_explanation(
+    *,
+    board_fen: str,
+    played_san: str,
+    best_san: Optional[str],
+    cp_loss: Optional[float],
+    quality: str,
+    model_reasoning: str = "",
+    tutor: "TutorConfig",
+) -> Optional[str]:
+    """Generate a 1–3 sentence explanation of why a move was a blunder or mistake.
+
+    Returns ``None`` if no tutor is configured, if the quality doesn't
+    warrant explanation, or if the LLM call fails.
+    """
+    if not tutor or not tutor.model_id:
+        return None
+    if quality not in ("blunder", "mistake"):
+        return None
+
+    best_part = best_san or "a stronger alternative"
+    cp_loss_str = f" (−{cp_loss / 100:.1f})" if cp_loss is not None else ""
+
+    reasoning_block = ""
+    if model_reasoning and not model_reasoning.startswith("("):
+        snippet = model_reasoning[:200].replace("\n", " ").strip()
+        reasoning_block = f'Model\'s reasoning: "{snippet}"\n\n'
+
+    prompt = _EXPLANATION_TEMPLATE.format(
+        fen=board_fen,
+        played_san=played_san,
+        cp_loss_str=cp_loss_str,
+        best_san=best_part,
+        reasoning_block=reasoning_block,
+        quality=quality,
+    )
+
+    try:
+        raw = _call_tutor_like(tutor, prompt, system=_EXPLANATION_SYSTEM, max_tokens=200)
+        raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE).strip()
+        return raw if len(raw) >= 20 else None
+    except Exception as exc:
+        logger.warning("Move explanation generation failed: %s", exc)
+        return None
+
+
 # ── Lesson parser ─────────────────────────────────────────────────────────
 
 def _parse_lessons(raw: str) -> dict[str, list[str]]:

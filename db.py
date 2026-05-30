@@ -225,6 +225,7 @@ def _migrate(conn: sqlite3.Connection):
     _add_column_if_missing(conn, "moves",   "tokens_output",       "INTEGER")
     _add_column_if_missing(conn, "games",  "eco_code",            "TEXT")
     _add_column_if_missing(conn, "games",  "opening_name",        "TEXT")
+    _add_column_if_missing(conn, "moves",  "explanation",         "TEXT")
     # move_annotations table for depth-20 post-game Stockfish analysis
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS move_annotations (
@@ -566,6 +567,7 @@ def record_move(
     elapsed_ms: Optional[int] = None,
     tokens_input: Optional[int] = None,
     tokens_output: Optional[int] = None,
+    explanation: Optional[str] = None,
 ):
     with get_conn() as conn:
         player_id = conn.execute(
@@ -577,15 +579,15 @@ def record_move(
               (game_id, move_number, player_id, move_uci, move_san,
                candidate_rank, quality, score_cp, reasoning, fen_after,
                thinking_content, coherence_score, timed_out, elapsed_ms,
-               tokens_input, tokens_output)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               tokens_input, tokens_output, explanation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 game_id, move_number, player_id, move_uci, move_san,
                 candidate_rank, quality, score_cp, reasoning, fen_after,
                 thinking_content or "", coherence_score,
                 1 if timed_out else 0, elapsed_ms,
-                tokens_input, tokens_output,
+                tokens_input, tokens_output, explanation,
             ),
         )
 
@@ -614,7 +616,7 @@ def get_game_moves(game_id: int) -> list[dict]:
             SELECT m.move_number, m.move_san, m.move_uci, m.quality,
                    m.candidate_rank, m.reasoning, m.score_cp, m.thinking_content,
                    m.coherence_score, m.timed_out, m.elapsed_ms, m.fen_after,
-                   m.tokens_input, m.tokens_output
+                   m.tokens_input, m.tokens_output, m.explanation
             FROM moves m
             WHERE m.game_id = ?
             ORDER BY m.move_number ASC
