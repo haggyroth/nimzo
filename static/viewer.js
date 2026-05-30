@@ -2512,7 +2512,7 @@ function rpRender() {
         : (replay.meta && replay.meta.black_name ? replay.meta.black_name : 'Black');
       const elapsed = m.elapsed_ms != null ? `<span class="rp-reas-time">${(m.elapsed_ms/1000).toFixed(1)}s</span>` : '';
       rpReasEl.innerHTML = `<div class="rp-reas-mover">${escHtml(mover)}${elapsed}</div>`
-        + `<div class="rp-reas-text">${escHtml(m.reasoning)}</div>`;
+        + `<div class="rp-reas-text">${renderMarkdown(m.reasoning)}</div>`;
       rpReasEl.style.display = '';
     } else {
       rpReasEl.style.display = 'none';
@@ -2608,14 +2608,34 @@ function rpRenderEvalChart() {
   </svg>`;
 }
 
-// Keyboard navigation for replay
+// Keyboard shortcuts — global and replay-modal navigation
 document.addEventListener('keydown', e => {
+  // Never fire shortcuts when typing in a form field
+  const tag = (e.target.tagName || '').toUpperCase();
+  const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable;
+
   // Escape closes whichever modal is open
   if (e.key === 'Escape') {
     if (document.getElementById('modelModal').classList.contains('show')) closeModelCard();
     if (document.getElementById('replayModal').classList.contains('show')) closeReplay();
     return;
   }
+
+  // Global shortcuts (fire regardless of replay modal state)
+  if (!isInput) {
+    if (e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();  // prevent page scroll
+      if (tournamentStatus === 'running') pauseTournament();
+      else if (tournamentStatus === 'paused') resumeTournament();
+      return;
+    }
+    if (e.key === 'f' || e.key === 'F') {
+      toggleFlip();
+      return;
+    }
+  }
+
+  // Replay-modal shortcuts
   if (!document.getElementById('replayModal').classList.contains('show')) return;
   if (e.key === 'ArrowLeft'  || e.key === 'ArrowDown')  rpGo(replay.cursor - 1);
   if (e.key === 'ArrowRight' || e.key === 'ArrowUp')    rpGo(replay.cursor + 1);
