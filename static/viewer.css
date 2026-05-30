@@ -286,16 +286,22 @@
     .cm-chessboard .board .square.black { fill: var(--sq-dark)  !important; }
     /* Last-move highlight marker */
     .cm-chessboard .marker-square { fill: rgba(255,200,30,.55) !important; }
-    /* ── Candidate arrow rank colors ──────────────────────────────── */
-    /* Rank 1: gold */
-    .cm-chessboard .arrow-rank1 .arrow-head { fill: #e8b84a; fill-rule: nonzero; }
-    .cm-chessboard .arrow-rank1 .arrow-line { stroke: #e8b84a; stroke-linecap: round; opacity: 0.85; }
-    /* Rank 2: silver */
-    .cm-chessboard .arrow-rank2 .arrow-head { fill: #b0b8c8; fill-rule: nonzero; }
-    .cm-chessboard .arrow-rank2 .arrow-line { stroke: #b0b8c8; stroke-linecap: round; opacity: 0.65; }
-    /* Rank 3–5: dim grey */
-    .cm-chessboard .arrow-rank3 .arrow-head { fill: #666; fill-rule: nonzero; }
-    .cm-chessboard .arrow-rank3 .arrow-line { stroke: #666; stroke-linecap: round; opacity: 0.35; }
+    /* ── Candidate arrow rank colors (match move quality palette) ─── */
+    /* Rank 1 — best */
+    .cm-chessboard .arrow-rank1 .arrow-head { fill: var(--q-best); fill-rule: nonzero; }
+    .cm-chessboard .arrow-rank1 .arrow-line { stroke: var(--q-best); stroke-linecap: round; opacity: 0.85; }
+    /* Rank 2 — excellent */
+    .cm-chessboard .arrow-rank2 .arrow-head { fill: var(--q-excellent); fill-rule: nonzero; }
+    .cm-chessboard .arrow-rank2 .arrow-line { stroke: var(--q-excellent); stroke-linecap: round; opacity: 0.70; }
+    /* Rank 3 — good */
+    .cm-chessboard .arrow-rank3 .arrow-head { fill: var(--q-good); fill-rule: nonzero; }
+    .cm-chessboard .arrow-rank3 .arrow-line { stroke: var(--q-good); stroke-linecap: round; opacity: 0.55; }
+    /* Rank 4 — mistake */
+    .cm-chessboard .arrow-rank4 .arrow-head { fill: var(--q-mistake); fill-rule: nonzero; }
+    .cm-chessboard .arrow-rank4 .arrow-line { stroke: var(--q-mistake); stroke-linecap: round; opacity: 0.40; }
+    /* Rank 5 — blunder */
+    .cm-chessboard .arrow-rank5 .arrow-head { fill: var(--q-blunder); fill-rule: nonzero; }
+    .cm-chessboard .arrow-rank5 .arrow-line { stroke: var(--q-blunder); stroke-linecap: round; opacity: 0.30; }
 
     /* ── Human turn banner ─────────────────────────────────────────── */
     #humanTurnBanner {
