@@ -45,13 +45,25 @@ Deeper post-game insight without requiring external tools.
 
 Bigger features for power users and long-running deployments.
 
-- [ ] **ELO ladder / auto-scheduler** — round-robin scheduler that auto-queues matchups between all registered players and continuously updates ratings without manual setup
+- [x] **ELO ladder / auto-scheduler** — round-robin scheduler that auto-queues matchups between all registered players and continuously updates ratings without manual setup
 - [x] **Model parameter sliders** — per-player temperature and candidate count inputs in Advanced options, wired all the way through PlayerSpec → build_player → PlayerConfig
 - [ ] **Concurrent games** — deferred; run 2–4 games in parallel (separate boards, separate WebSocket channels)
 - [x] **Cost/token tracking** — token counts (input/output) captured from all backends, stored per move in DB (`tokens_input`/`tokens_output` columns), shown as a chip on each move card and as a total in the model stat card; `GET /api/models/{id}/tokens` endpoint
 - [x] **Reasoning dataset export** — `GET /api/export/reasoning-dataset` streams JSONL with `(game_id, move_number, san, uci, fen_after, quality, candidate_rank, score_cp, reasoning, thinking_content, model_id, model_name)`; supports `?quality=` and `?model_id=` filters
 - [x] **Spectator URL** — `?spectate=true` hides the control panel, header controls and toggle buttons for a clean embeddable read-only view
 - [ ] **Lichess integration** — deferred
+
+---
+
+## Phase 5 — Intelligence & Depth
+
+Smarter analysis and richer insight across the whole arena.
+
+- [x] **Recent games filter** — search/filter the Recent Games list by player name, opening (ECO), or result (W/D/L); client-side instant filter with clear button
+- [x] **ELO trend on stat card** — inline ELO history sparkline on the live player stat card (already present via `_buildValueSparkline`)
+- [x] **Model comparison modal** — `GET /api/compare?a=...&b=...` bundles profiles, ELO histories, coherence, openings, and H2H; "⊞ Full Compare" in the H2H section opens a two-column modal with quality bars, ELO sparklines, and top openings
+- [ ] **Per-game Stockfish annotation** — post-game depth-20 re-analysis marks blunders/mistakes/inaccuracies as a second quality layer; annotated PGN stored in DB, surfaced in the replay modal
+- [ ] **Move explanation mode** — when a model deviates from Stockfish's top pick by a large margin, generate a short natural-language explanation via a local model and display it on the move card
 
 ---
 

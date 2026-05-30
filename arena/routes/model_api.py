@@ -212,6 +212,41 @@ async def api_h2h(model_id_a: str, model_id_b: str):
     return await asyncio.to_thread(database.get_h2h_record, model_id_a, model_id_b)
 
 
+@router.get("/api/compare")
+async def api_compare(a: str, b: str):
+    """
+    Full comparison bundle for two models.
+
+    Returns profiles, ELO histories, coherence stats, top openings, and the
+    head-to-head record for models *a* and *b* in a single round-trip.
+    """
+    if not a or not b:
+        raise HTTPException(status_code=400, detail="Both 'a' and 'b' query params are required")
+
+    def _gather():
+        profile_a  = database.get_model_profile(a)
+        profile_b  = database.get_model_profile(b)
+        if not profile_a or not profile_b:
+            return None
+        elo_a      = database.get_elo_history(a)
+        elo_b      = database.get_elo_history(b)
+        coh_a      = database.get_coherence_stats(a)
+        coh_b      = database.get_coherence_stats(b)
+        openings_a = database.get_openings_for_model(a)[:5]
+        openings_b = database.get_openings_for_model(b)[:5]
+        h2h        = database.get_h2h_record(a, b)
+        return {
+            "a":           {**profile_a, "elo_history": elo_a, "coherence": coh_a, "openings": openings_a},
+            "b":           {**profile_b, "elo_history": elo_b, "coherence": coh_b, "openings": openings_b},
+            "h2h":         h2h,
+        }
+
+    result = await asyncio.to_thread(_gather)
+    if result is None:
+        raise HTTPException(status_code=404, detail="One or both models not found")
+    return result
+
+
 # Hosts allowed for the /api/models proxy.  Prevents SSRF when the server is
 # exposed on a LAN (NIMZO_HOST=0.0.0.0).  Extend via the env var if you run
 # LM Studio on a remote host inside your trusted network.

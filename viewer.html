@@ -683,7 +683,10 @@
       <div class="h2h-form">
         <select class="ctrl-select" id="h2hPlayerA" style="flex:1"><option value="">— Player A —</option></select>
         <select class="ctrl-select" id="h2hPlayerB" style="flex:1"><option value="">— Player B —</option></select>
-        <button class="start-btn" style="margin-top:4px;padding:5px" onclick="runH2H()">Compare</button>
+        <div style="display:flex;gap:4px;margin-top:4px">
+          <button class="start-btn" style="flex:1;padding:5px" onclick="runH2H()">Quick Compare</button>
+          <button class="start-btn" style="flex:1;padding:5px" onclick="openCompareModal(document.getElementById('h2hPlayerA').value, document.getElementById('h2hPlayerB').value)" title="Full side-by-side comparison">⊞ Full Compare</button>
+        </div>
       </div>
       <div id="h2hBody"></div>
     </div>
@@ -705,6 +708,10 @@
           <span title="Export all games as PGN" style="font-size:10px;color:var(--text-dim);cursor:pointer" onclick="event.stopPropagation();exportAllPgn()">⬇ PGN</span>
           <span class="chevron">▾</span>
         </div>
+      </div>
+      <div class="hist-filter-row">
+        <input id="historyFilter" class="ctrl-input hist-filter-input" placeholder="Filter by player or result…" oninput="filterHistory(this.value)">
+        <button class="fetch-btn" id="historyFilterClear" onclick="clearHistoryFilter()" title="Clear filter" style="display:none">✕</button>
       </div>
       <div id="historyBody">
         <div class="lb-empty">No games yet</div>
@@ -828,6 +835,14 @@
       <button class="hdr-btn show" onclick="closeStopModal()">Cancel</button>
       <button class="hdr-btn danger show" onclick="confirmStop()">■ Stop</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Model comparison modal ──────────────────────────────────────────── -->
+<div id="compareModal" onclick="if(event.target.id==='compareModal')closeCompareModal()">
+  <div class="cmp-card" id="cmpCard">
+    <div class="cmp-close" onclick="closeCompareModal()">Close ✕</div>
+    <div id="cmpBody"></div>
   </div>
 </div>
 
