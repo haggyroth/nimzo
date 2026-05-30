@@ -417,8 +417,11 @@ function renderMetadata(meta) {
 
 // ── Export (Node) / attach to window (browser) ────────────────────────────────
 
+// Test-only helper: set _apiKey from Node tests (localStorage not available there).
+function _setApiKey(k) { _apiKey = k; }
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseFen, uciToSquares, computeCaptures, extractModelName, buildSparkline, escHtml, authHeaders, renderBadges, renderMetadata };
+  module.exports = { parseFen, uciToSquares, computeCaptures, extractModelName, buildSparkline, escHtml, authHeaders, _buildValueSparkline, _setApiKey, renderBadges, renderMetadata };
 } else {
   // Browser: functions are already in the global scope; nothing extra needed.
 }
