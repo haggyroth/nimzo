@@ -78,6 +78,33 @@ def _get_model_lock(base_url: str, model_id: str) -> asyncio.Lock:
     return _model_locks[key]
 
 
+# ── Post-game depth-20 annotation ────────────────────────────────────────
+
+def _run_annotation_sync(pgn_string: str) -> list[dict]:
+    """Run Stockfish depth-20 annotation synchronously (called via to_thread)."""
+    with StockfishEngine() as sf:
+        return sf.annotate_game(pgn_string, depth=20)
+
+
+async def _annotate_game_background(game_id: int, pgn_string: str) -> None:
+    """Re-analyse a completed game at depth 20 and persist move annotations.
+
+    Runs entirely in the background — never awaited by the game loop so it
+    cannot delay the ``game_over`` broadcast or lesson generation.
+    """
+    try:
+        logger.info("Background annotation starting for game %d…", game_id)
+        annotations = await asyncio.to_thread(_run_annotation_sync, pgn_string)
+        await asyncio.to_thread(database.record_move_annotations, game_id, annotations)
+        logger.info(
+            "Background annotation done for game %d (%d moves annotated)",
+            game_id, len(annotations),
+        )
+        await _arena.broadcast({"type": "annotations_ready", "game_id": game_id})
+    except Exception as exc:
+        logger.warning("Background annotation failed for game %d: %s", game_id, exc)
+
+
 # ── Adaptive difficulty constants ─────────────────────────────────────────
 # Also re-exported so arena.py (and CLAUDE.md) can reference them there.
 _ADAPT_CANDIDATE_MIN = 3
@@ -571,6 +598,9 @@ async def play_game(
                 tokens_output=rec.get("tokens_output"),
             )
     await asyncio.to_thread(_write_moves)
+
+    # ── Background annotation (depth 20, non-blocking) ────────────────
+    asyncio.create_task(_annotate_game_background(game_id, pgn_string))
 
     # ── Achievements ───────────────────────────────────────────────────
     score_history_white = [rec["score_cp"] for rec in move_records]

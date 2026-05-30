@@ -119,6 +119,16 @@ CREATE TABLE IF NOT EXISTS puzzle_results (
     played_at       TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS move_annotations (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id       INTEGER REFERENCES games(id),
+    move_number   INTEGER,
+    annotation    TEXT,      -- best|excellent|good|inaccuracy|mistake|blunder|unknown
+    cp_loss       REAL,      -- centipawn loss vs Stockfish best at depth 20
+    best_move_san TEXT,      -- Stockfish top choice in SAN (NULL when played move was best)
+    annotated_at  TEXT DEFAULT (datetime('now'))
+);
+
 -- Indexes on frequently-queried foreign keys and sort columns (MN-3).
 -- IF NOT EXISTS makes these safe to add to an existing database.
 CREATE INDEX IF NOT EXISTS idx_moves_game      ON moves(game_id);
@@ -215,6 +225,19 @@ def _migrate(conn: sqlite3.Connection):
     _add_column_if_missing(conn, "moves",   "tokens_output",       "INTEGER")
     _add_column_if_missing(conn, "games",  "eco_code",            "TEXT")
     _add_column_if_missing(conn, "games",  "opening_name",        "TEXT")
+    # move_annotations table for depth-20 post-game Stockfish analysis
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS move_annotations (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            game_id       INTEGER REFERENCES games(id),
+            move_number   INTEGER,
+            annotation    TEXT,
+            cp_loss       REAL,
+            best_move_san TEXT,
+            annotated_at  TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_mannotations_game ON move_annotations(game_id);
+    """)
     # Create tournament tables for existing DBs (CREATE TABLE IF NOT EXISTS is idempotent
     # in the schema, but the schema only runs once so we ensure them here too)
     conn.executescript("""
@@ -599,6 +622,56 @@ def get_game_moves(game_id: int) -> list[dict]:
             (game_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def record_move_annotations(game_id: int, annotations: list[dict]) -> None:
+    """Persist depth-20 Stockfish annotations for all moves in a game.
+
+    Replaces any previously stored annotations for the same ``game_id``
+    so that re-annotation (e.g. at higher depth) is idempotent.
+    """
+    with get_conn() as conn:
+        conn.execute("DELETE FROM move_annotations WHERE game_id = ?", (game_id,))
+        conn.executemany(
+            """
+            INSERT INTO move_annotations (game_id, move_number, annotation, cp_loss, best_move_san)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    game_id,
+                    ann["move_number"],
+                    ann.get("annotation"),
+                    ann.get("cp_loss"),
+                    ann.get("best_move_san"),
+                )
+                for ann in annotations
+            ],
+        )
+
+
+def get_game_annotations(game_id: int) -> list[dict]:
+    """Return depth-20 annotations for all moves in a game, in ply order."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT move_number, annotation, cp_loss, best_move_san
+            FROM move_annotations
+            WHERE game_id = ?
+            ORDER BY move_number ASC
+            """,
+            (game_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_annotation_status(game_id: int) -> str:
+    """Return 'done', 'partial', or 'none' for this game's annotation state."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM move_annotations WHERE game_id = ?", (game_id,)
+        ).fetchone()
+    return "done" if (row and row["n"] > 0) else "none"
 
 
 def get_reasoning_dataset(

@@ -198,6 +198,18 @@ async def api_game_moves(game_id: int):
     return await asyncio.to_thread(database.get_game_moves, game_id)
 
 
+@router.get("/api/games/{game_id}/annotations")
+async def api_game_annotations(game_id: int):
+    """Return depth-20 Stockfish annotations for all moves in a game.
+
+    Each item contains ``move_number``, ``annotation``, ``cp_loss``, and
+    ``best_move_san``.  Returns an empty list while annotation is still
+    running (client should retry after receiving an ``annotations_ready``
+    WebSocket event).
+    """
+    return await asyncio.to_thread(database.get_game_annotations, game_id)
+
+
 @router.get("/api/games/{game_id}/pgn")
 async def api_game_pgn(game_id: int):
     """Download a single game as an annotated PGN file."""
