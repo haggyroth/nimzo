@@ -9,8 +9,8 @@ import logging
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import PlainTextResponse
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import PlainTextResponse, StreamingResponse
 
 import db as database
 
@@ -156,6 +156,41 @@ async def api_game(game_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="Game not found")
     return row
+
+
+@router.get("/api/export/reasoning-dataset")
+async def api_export_reasoning_dataset(
+    limit: int = Query(default=10000, ge=1, le=100000),
+    quality: Optional[str] = Query(default=None, description="Filter to a single quality label"),
+    model_id: Optional[str] = Query(default=None, description="Filter to a single model_id"),
+):
+    """
+    Export the reasoning dataset as JSONL (one JSON object per line).
+
+    Each record contains the fields most useful for fine-tuning or research:
+    ``game_id``, ``move_number``, ``san``, ``uci``, ``fen_after``,
+    ``quality``, ``candidate_rank``, ``score_cp``, ``reasoning``,
+    ``thinking_content``, ``model_id``, ``model_name``.
+
+    Note: the Stockfish candidate list is not stored per-move; only the
+    chosen move and its rank are available.
+    """
+    rows = await asyncio.to_thread(
+        database.get_reasoning_dataset, limit=limit, quality=quality, model_id=model_id
+    )
+
+    import json
+
+    def _stream():
+        for row in rows:
+            yield json.dumps(row, ensure_ascii=False) + "\n"
+
+    filename = "nimzo_reasoning_dataset.jsonl"
+    return StreamingResponse(
+        _stream(),
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.get("/api/games/{game_id}/moves")
