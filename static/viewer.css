@@ -485,29 +485,14 @@
     .right-panel::-webkit-scrollbar { width: 2px; }
     .right-panel::-webkit-scrollbar-thumb { background: var(--border-hi); }
 
-    /* ── Right-panel tab bar ─────────────────────────────────────── */
-    .rp-tab-bar {
-      display: flex;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-    .rp-tab {
-      flex: 1;
-      padding: 8px 4px;
-      font-family: var(--ui-font);
-      font-size: 9px;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      color: var(--text-dim);
-      background: transparent;
-      border: none;
-      border-bottom: 2px solid transparent;
-      cursor: pointer;
-      transition: color .15s, border-color .15s;
-      text-align: center;
-    }
-    .rp-tab.active       { color: var(--gold); border-bottom-color: var(--gold); }
-    .rp-tab:hover:not(.active) { color: var(--text); }
+    /* ── Right-panel Configure / Results groups ──────────────────── */
+    /* Groups behave like ctrl-sections but are mutually exclusive.  */
+    .rp-group { flex-shrink: 0; }
+    .rp-group.collapsed > *:not(.ctrl-head) { display: none !important; }
+    .rp-group.collapsed .chevron { transform: rotate(-90deg); }
+    /* Collapsed group's ctrl-head needs a bottom border (expanded groups
+       get their border from their last child ctrl-section) */
+    .rp-group.collapsed > .ctrl-head { border-bottom: 1px solid var(--border); }
 
     .ctrl-section {
       border-bottom: 1px solid var(--border);
