@@ -826,6 +826,9 @@ function addMoveCard(data) {
     toggle.addEventListener('click', () => body.classList.toggle('open'));
   }
 
+  // Prepend first so the card is in the DOM before we measure scrollHeight
+  pane.prepend(card);
+
   // Reasoning expand/collapse — only show toggle if text is actually clamped
   if (showReason && !isBook) {
     const reason = card.querySelector('.move-reason');
@@ -840,8 +843,6 @@ function addMoveCard(data) {
       });
     }
   }
-
-  pane.prepend(card);
 }
 
 // ── Right-panel tab ───────────────────────────────────────────────────────
