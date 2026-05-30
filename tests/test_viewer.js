@@ -17,6 +17,11 @@ const {
   extractModelName,
   buildSparkline,
   escHtml,
+  authHeaders,
+  _buildValueSparkline,
+  _setApiKey,
+  renderBadges,
+  renderMetadata,
 } = require(path.join(__dirname, '..', 'static', 'viewer_utils.js'));
 
 const STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -305,4 +310,196 @@ test('S-4: known format labels pass through escHtml unchanged', () => {
   assert.equal(escHtml('Round Robin'), 'Round Robin');
   assert.equal(escHtml('Gauntlet'), 'Gauntlet');
   assert.equal(escHtml('Match'), 'Match');
+});
+
+// ── _buildValueSparkline ──────────────────────────────────────────────────────
+
+test('_buildValueSparkline: fewer than 2 points returns empty string', () => {
+  assert.equal(_buildValueSparkline([], 60, 20, 'red'), '');
+  assert.equal(_buildValueSparkline([5], 60, 20, 'red'), '');
+  assert.equal(_buildValueSparkline(null, 60, 20, 'red'), '');
+});
+
+test('_buildValueSparkline: returns an SVG string for valid data', () => {
+  const svg = _buildValueSparkline([1, 5, 3, 7], 60, 20, '#ff0000');
+  assert.ok(svg.includes('<svg'), 'should contain <svg');
+  assert.ok(svg.includes('polyline'), 'should contain polyline element');
+  assert.ok(svg.includes('polygon'), 'should contain polygon fill element');
+});
+
+test('_buildValueSparkline: SVG honours supplied width and height', () => {
+  const svg = _buildValueSparkline([1, 2, 3], 80, 30, 'blue');
+  assert.ok(svg.includes('width="80"'), 'width attribute should be 80');
+  assert.ok(svg.includes('height="30"'), 'height attribute should be 30');
+  assert.ok(svg.includes('viewBox="0 0 80 30"'), 'viewBox should match dimensions');
+});
+
+test('_buildValueSparkline: SVG uses supplied stroke color', () => {
+  const svg = _buildValueSparkline([1, 2, 3], 60, 20, 'var(--accent)');
+  assert.ok(svg.includes('stroke="var(--accent)"'), 'stroke should match supplied color');
+});
+
+test('_buildValueSparkline: handles flat data (all same value)', () => {
+  // range becomes 1 (guarded) so the sparkline should still render without NaN
+  const svg = _buildValueSparkline([5, 5, 5], 60, 20, 'red');
+  assert.ok(svg.includes('<svg'), 'flat data should still produce SVG');
+  assert.ok(!svg.includes('NaN'), 'no NaN values in output');
+});
+
+test('_buildValueSparkline: single-digit and high-value data produce finite coords', () => {
+  const svg = _buildValueSparkline([0, 1000, 500, 750, 250], 100, 40, 'green');
+  assert.ok(!svg.includes('NaN'), 'no NaN coords');
+  assert.ok(!svg.includes('Infinity'), 'no Infinity coords');
+});
+
+// ── authHeaders ───────────────────────────────────────────────────────────────
+
+test('authHeaders: no key set — returns empty object when no extras', () => {
+  _setApiKey('');
+  assert.deepEqual(authHeaders(), {});
+});
+
+test('authHeaders: no key set — returns copy of extra headers unchanged', () => {
+  _setApiKey('');
+  const h = authHeaders({ 'Content-Type': 'application/json' });
+  assert.deepEqual(h, { 'Content-Type': 'application/json' });
+});
+
+test('authHeaders: key set — injects X-API-Key header', () => {
+  _setApiKey('secret-1234');
+  const h = authHeaders();
+  assert.equal(h['X-API-Key'], 'secret-1234');
+  _setApiKey('');
+});
+
+test('authHeaders: key set — merges X-API-Key with caller-supplied headers', () => {
+  _setApiKey('mytoken');
+  const h = authHeaders({ 'Content-Type': 'application/json' });
+  assert.equal(h['X-API-Key'], 'mytoken');
+  assert.equal(h['Content-Type'], 'application/json');
+  _setApiKey('');
+});
+
+test('authHeaders: does not mutate the extra argument', () => {
+  _setApiKey('mutcheck');
+  const extra = { foo: 'bar' };
+  authHeaders(extra);
+  assert.equal(Object.keys(extra).length, 1, 'extra object must not gain X-API-Key');
+  _setApiKey('');
+});
+
+test('authHeaders: no X-API-Key when key is empty string', () => {
+  _setApiKey('');
+  const h = authHeaders({ Authorization: 'Bearer tok' });
+  assert.ok(!Object.prototype.hasOwnProperty.call(h, 'X-API-Key'), 'X-API-Key must be absent');
+});
+
+// ── renderBadges ──────────────────────────────────────────────────────────────
+
+test('renderBadges: null returns placeholder div', () => {
+  const html = renderBadges(null);
+  assert.ok(html.includes('No achievements'), 'should show placeholder text');
+});
+
+test('renderBadges: empty array returns placeholder div', () => {
+  const html = renderBadges([]);
+  assert.ok(html.includes('No achievements'), 'empty list should show placeholder');
+});
+
+test('renderBadges: times=1 — no ×N multiplier chip', () => {
+  const html = renderBadges([{ code: 'first-blood', label: 'First Blood', desc: 'First win', times: 1 }]);
+  assert.ok(!html.includes('×'), 'times=1 should not show ×N chip');
+  assert.ok(html.includes('First Blood'), 'label should appear in output');
+});
+
+test('renderBadges: times>1 — shows ×N multiplier chip', () => {
+  const html = renderBadges([{ code: 'hattrick', label: 'Hat Trick', desc: 'Three in a row', times: 3 }]);
+  assert.ok(html.includes('×3'), '×3 chip should appear for times=3');
+});
+
+test('renderBadges: label and desc are HTML-escaped', () => {
+  const html = renderBadges([{ code: 'x', label: '<b>XSS</b>', desc: '<img src=x>', times: 1 }]);
+  assert.ok(!html.includes('<b>'),   'raw <b> tag must not appear in label');
+  assert.ok(!html.includes('<img'),  'raw <img> tag must not appear in desc title');
+  assert.ok(html.includes('&lt;b&gt;'), 'label must be HTML-entity escaped');
+});
+
+test('renderBadges: multiple achievements all rendered', () => {
+  const html = renderBadges([
+    { code: 'a', label: 'Alpha', desc: 'First',  times: 1 },
+    { code: 'b', label: 'Beta',  desc: 'Second', times: 2 },
+  ]);
+  assert.ok(html.includes('Alpha'), 'first badge label should appear');
+  assert.ok(html.includes('Beta'),  'second badge label should appear');
+  assert.ok(html.includes('×2'),    '×2 chip should appear for second badge');
+});
+
+test('renderBadges: uses badge-<code> CSS class', () => {
+  const html = renderBadges([{ code: 'topgun', label: 'Top Gun', desc: 'Ace', times: 1 }]);
+  assert.ok(html.includes('badge-topgun'), 'badge-<code> class should be present');
+});
+
+// ── renderMetadata ────────────────────────────────────────────────────────────
+
+test('renderMetadata: null returns empty string', () => {
+  assert.equal(renderMetadata(null), '');
+});
+
+test('renderMetadata: undefined returns empty string', () => {
+  assert.equal(renderMetadata(undefined), '');
+});
+
+test('renderMetadata: empty object returns empty string (no chips)', () => {
+  assert.equal(renderMetadata({}), '');
+});
+
+test('renderMetadata: family chip is rendered', () => {
+  const html = renderMetadata({ family: 'Llama 3' });
+  assert.ok(html.includes('Llama 3'), 'family value should appear');
+  assert.ok(html.includes('Family'),  'Family label should appear');
+});
+
+test('renderMetadata: param_count chip is rendered', () => {
+  const html = renderMetadata({ param_count: '7B' });
+  assert.ok(html.includes('7B'),     'param_count value should appear');
+  assert.ok(html.includes('Params'), 'Params label should appear');
+});
+
+test('renderMetadata: active_params appended to param_count chip', () => {
+  const html = renderMetadata({ param_count: '30B', active_params: '3B' });
+  assert.ok(html.includes('30B'),       'total params should appear');
+  assert.ok(html.includes('3B active'), 'active params annotation should appear');
+});
+
+test('renderMetadata: quantization chip is rendered', () => {
+  const html = renderMetadata({ quantization: 'Q4_K_M' });
+  assert.ok(html.includes('Q4_K_M'), 'quantization value should appear');
+  assert.ok(html.includes('Quant'),  'Quant label should appear');
+});
+
+test('renderMetadata: hf_url produces an anchor tag opening in new tab', () => {
+  const html = renderMetadata({ hf_url: 'https://huggingface.co/meta-llama/Llama-3' });
+  assert.ok(html.includes('<a '),            'should contain an anchor tag');
+  assert.ok(html.includes('target="_blank"'), 'link should open in new tab');
+  assert.ok(html.includes('rel="noopener"'), 'link should have noopener rel');
+});
+
+test('renderMetadata: context_length rendered with toLocaleString formatting', () => {
+  const html = renderMetadata({ context_length: 131072 });
+  assert.ok(html.includes('Ctx'), 'Ctx label should appear');
+  // toLocaleString is locale-dependent, just check that it renders at all
+  assert.ok(html.length > 0, 'should produce output');
+});
+
+test('renderMetadata: values are HTML-escaped', () => {
+  const html = renderMetadata({ family: '<script>alert(1)</script>' });
+  assert.ok(!html.includes('<script>'),       'raw script tag must not appear');
+  assert.ok(html.includes('&lt;script&gt;'), 'family value must be HTML-escaped');
+});
+
+test('renderMetadata: multiple chips all rendered', () => {
+  const html = renderMetadata({ family: 'Qwen3', param_count: '30B', quantization: 'Q8_0' });
+  assert.ok(html.includes('Qwen3'),  'family chip');
+  assert.ok(html.includes('30B'),    'params chip');
+  assert.ok(html.includes('Q8_0'),   'quant chip');
 });
