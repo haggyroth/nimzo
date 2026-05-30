@@ -2424,6 +2424,19 @@ function onLadderUpdate(d) {
   loadLeaderboard();
 }
 
+async function onAnnotationsReady(d) {
+  // If the replay modal is open for the just-annotated game, reload its
+  // annotation data and re-render so depth-20 markers appear immediately.
+  if (!replay.gameId || replay.gameId !== d.game_id) return;
+  try {
+    const annList = await fetch(`${API}/api/games/${d.game_id}/annotations`).then(r => r.json());
+    replay.annotations = {};
+    (annList || []).forEach(a => { replay.annotations[a.move_number] = a; });
+    // Rebuild move list HTML to include the new annotation dots
+    await openReplay(d.game_id, replay.meta);
+  } catch(e) { /* ignore — annotation dots will appear next time modal opens */ }
+}
+
 // ── Inline stat cards ─────────────────────────────────────────────────────
 // Cache: { white: {open, profile, eloHist} | null, black: ... }
 const _statCardCache = { white: null, black: null };
@@ -2568,6 +2581,7 @@ function dispatch(msg) {
       case 'puzzle_result':          onPuzzleResult(d);          break;
       case 'puzzle_gauntlet_over':   onPuzzleGauntletOver(d);   break;
       case 'ladder_update':          onLadderUpdate(d);         break;
+      case 'annotations_ready':      onAnnotationsReady(d);     break;
     }
   } catch(e) { console.warn('Bad WS message:', e); }
 }
@@ -2645,7 +2659,7 @@ function exportAllPgn(modelId) {
 const QUALITY_GLYPH = { best:'!!', excellent:'!', inaccuracy:'?!', mistake:'?', blunder:'??' };
 const QUALITY_COLOR = { best:'#ffd700', excellent:'#56c45a', good:'', inaccuracy:'#f0d030', mistake:'#f09020', blunder:'#e83030' };
 
-const replay = { moves: [], cursor: 0, meta: null, gameId: null };
+const replay = { moves: [], cursor: 0, meta: null, gameId: null, annotations: {} };
 let _rpAutoplayTimer = null;
 
 function rpToggleAutoplay() {
@@ -2674,8 +2688,15 @@ async function openReplay(gameId, meta) {
     if (!meta) {
       meta = await fetch(`${API}/api/games/${gameId}`).then(r => r.json());
     }
-    const moves = await fetch(`${API}/api/games/${gameId}/moves`).then(r => r.json());
-    replay.moves  = moves;
+    const [moves, annList] = await Promise.all([
+      fetch(`${API}/api/games/${gameId}/moves`).then(r => r.json()),
+      fetch(`${API}/api/games/${gameId}/annotations`).then(r => r.json()).catch(() => []),
+    ]);
+    // Build a move_number → annotation map for O(1) lookup in rpRender
+    const annotationsMap = {};
+    (annList || []).forEach(a => { annotationsMap[a.move_number] = a; });
+    replay.moves       = moves;
+    replay.annotations = annotationsMap;
     replay.cursor = 0;
     replay.meta   = meta;
     replay.gameId = gameId;
@@ -2723,11 +2744,16 @@ async function openReplay(gameId, meta) {
         ? `<span class="rp-elapsed">${(m.elapsed_ms/1000).toFixed(1)}s</span>` : '';
       const evalBadge = m.score_cp != null
         ? `<span class="rp-eval-badge">${m.score_cp > 0 ? '+' : ''}${(m.score_cp/100).toFixed(2)}</span>` : '';
+      // Depth-20 annotation dot (shown when annotation is worse than 'good')
+      const ann = annotationsMap[m.move_number];
+      const _badAnns = ['blunder','mistake','inaccuracy'];
+      const annDot = (ann && _badAnns.includes(ann.annotation))
+        ? `<span class="rp-ann-dot rp-ann-${ann.annotation}" title="SF depth-20: ${ann.annotation}${ann.best_move_san ? ' · ' + ann.best_move_san + ' was better' : ''}"></span>` : '';
       listHtml += `<div class="rp-move-item" data-idx="${i+1}" onclick="rpGo(${i+1})">
         <span class="rp-move-num">${numLabel}</span>
         <span class="rp-move-san" style="color:${color}">${m.move_san}${glyph}</span>
         <span class="rp-move-qual" style="color:${color}">${glyph}</span>
-        ${latency}${evalBadge}
+        ${annDot}${latency}${evalBadge}
       </div>`;
     });
     list.innerHTML = listHtml;
@@ -2866,8 +2892,23 @@ function rpRender() {
         ? (replay.meta && replay.meta.white_name ? replay.meta.white_name : 'White')
         : (replay.meta && replay.meta.black_name ? replay.meta.black_name : 'Black');
       const elapsed = m.elapsed_ms != null ? `<span class="rp-reas-time">${(m.elapsed_ms/1000).toFixed(1)}s</span>` : '';
+      // Depth-20 Stockfish annotation block (shown when annotation is meaningful)
+      const _ann = replay.annotations && replay.annotations[m.move_number];
+      let annBlock = '';
+      if (_ann && _ann.annotation && _ann.annotation !== 'unknown') {
+        const _annLabels = { best:'best ✓', excellent:'excellent', good:'good',
+                             inaccuracy:'inaccuracy ?!', mistake:'mistake ?', blunder:'blunder ??' };
+        const _annLabel = _annLabels[_ann.annotation] || _ann.annotation;
+        const _cpStr   = (_ann.cp_loss != null && _ann.cp_loss > 0)
+          ? ` (−${(_ann.cp_loss / 100).toFixed(1)})` : '';
+        const _bestStr = (_ann.best_move_san && _ann.annotation !== 'best')
+          ? ` · <strong>${escHtml(_ann.best_move_san)}</strong> was better` : '';
+        annBlock = `<div class="rp-annotation rp-ann-${_ann.annotation}">` +
+          `📊 Depth-20: ${_annLabel}${_cpStr}${_bestStr}</div>`;
+      }
       rpReasEl.innerHTML = `<div class="rp-reas-mover">${escHtml(mover)}${elapsed}</div>`
-        + `<div class="rp-reas-text">${renderMarkdown(m.reasoning)}</div>`;
+        + `<div class="rp-reas-text">${renderMarkdown(m.reasoning)}</div>`
+        + annBlock;
       rpReasEl.style.display = '';
     } else {
       rpReasEl.style.display = 'none';

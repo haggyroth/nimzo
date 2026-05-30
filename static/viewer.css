@@ -1842,6 +1842,29 @@
     .rp-sum-chip.inaccuracy { background: var(--q-inaccuracy); color: #fff; }
     .rp-sum-chip.clean      { background: var(--q-best);       color: #fff; }
 
+    /* ── Phase 5b: depth-20 annotation markers ──────────────────────────── */
+    /* Small dot in the move list strip */
+    .rp-ann-dot {
+      display: inline-block; width: 6px; height: 6px;
+      border-radius: 50%; margin-left: 3px; vertical-align: middle;
+      flex-shrink: 0;
+    }
+    .rp-ann-dot.rp-ann-blunder    { background: var(--q-blunder); }
+    .rp-ann-dot.rp-ann-mistake    { background: var(--q-mistake); }
+    .rp-ann-dot.rp-ann-inaccuracy { background: var(--q-inaccuracy); }
+
+    /* Annotation block in reasoning panel */
+    .rp-annotation {
+      margin-top: 8px; padding: 5px 8px; border-radius: 4px;
+      font-size: 9px; line-height: 1.5; border-left: 3px solid transparent;
+    }
+    .rp-ann-best        { background: color-mix(in srgb, var(--q-best)       20%, transparent); border-left-color: var(--q-best); }
+    .rp-ann-excellent   { background: color-mix(in srgb, var(--q-excellent)   20%, transparent); border-left-color: var(--q-excellent); }
+    .rp-ann-good        { background: color-mix(in srgb, var(--q-good)        20%, transparent); border-left-color: var(--q-good); }
+    .rp-ann-inaccuracy  { background: color-mix(in srgb, var(--q-inaccuracy)  20%, transparent); border-left-color: var(--q-inaccuracy); }
+    .rp-ann-mistake     { background: color-mix(in srgb, var(--q-mistake)     20%, transparent); border-left-color: var(--q-mistake); }
+    .rp-ann-blunder     { background: color-mix(in srgb, var(--q-blunder)     20%, transparent); border-left-color: var(--q-blunder); }
+
     /* ── Replay header PGN download link ────────────────────────────────── */
     .rp-pgn-dl {
       font-size: 10px; color: var(--text-dim); cursor: pointer;

@@ -6,6 +6,7 @@ Also used for post-game analysis.
 
 import chess
 import chess.engine
+import io
 from dataclasses import dataclass
 from typing import Optional
 import os
@@ -164,6 +165,104 @@ class StockfishEngine:
             depth=info.get("depth", self.depth),
             pv=info.get("pv", []),
         )
+
+    def annotate_game(self, pgn_string: str, depth: int = 20) -> list[dict]:
+        """
+        Replay a PGN and annotate each move at *depth* using Stockfish.
+
+        For every move the engine evaluates the position before the move
+        (to find the best line) and—if the played move differs from the
+        top suggestion—evaluates the played move to measure the CP loss.
+
+        Returns a list of dicts, one per ply:
+            ``move_number``   — 1-based ply index
+            ``move_san``      — SAN notation of the played move
+            ``annotation``    — quality label (best / excellent / good /
+                                inaccuracy / mistake / blunder / unknown)
+            ``cp_loss``       — centipawn loss vs best at depth (int or None)
+            ``best_move_san`` — Stockfish's top choice (SAN), or None
+        """
+        import chess.pgn
+
+        if self._engine is None:
+            raise RuntimeError("Engine not started — use as context manager")
+
+        pgn_io = io.StringIO(pgn_string)
+        game_obj = chess.pgn.read_game(pgn_io)
+        if not game_obj:
+            return []
+
+        board = game_obj.board()
+        annotations: list[dict] = []
+        move_number = 0
+
+        for node in game_obj.mainline():
+            move = node.move
+            move_number += 1
+
+            try:
+                # Evaluate the position before the move (Stockfish top choice)
+                top_info = self._engine.analyse(
+                    board, chess.engine.Limit(depth=depth)
+                )
+                top_pv   = top_info.get("pv") or []
+                top_move = top_pv[0] if top_pv else None
+                top_score = top_info.get("score")
+                top_cp: Optional[int] = None
+                if top_score is not None:
+                    pov = top_score.pov(board.turn)
+                    top_cp = 10000 if (pov.is_mate() and pov.mate() > 0) else \
+                             -10000 if pov.is_mate() else pov.score()
+
+                if top_move and move == top_move:
+                    annotation   = "best"
+                    cp_loss: Optional[int] = 0
+                    best_san     = board.san(top_move)
+                else:
+                    # Score the actual move via root_moves
+                    actual_info  = self._engine.analyse(
+                        board, chess.engine.Limit(depth=depth), root_moves=[move]
+                    )
+                    actual_score = actual_info.get("score")
+                    actual_cp: Optional[int] = None
+                    if actual_score is not None:
+                        pov2 = actual_score.pov(board.turn)
+                        actual_cp = 10000 if (pov2.is_mate() and pov2.mate() > 0) else \
+                                    -10000 if pov2.is_mate() else pov2.score()
+
+                    best_san = board.san(top_move) if top_move else None
+
+                    if top_cp is None or actual_cp is None:
+                        annotation = "unknown"
+                        cp_loss    = None
+                    else:
+                        cp_loss = top_cp - actual_cp
+                        if cp_loss < CP_LOSS_EXCELLENT:
+                            annotation = "excellent"
+                        elif cp_loss < CP_LOSS_GOOD:
+                            annotation = "good"
+                        elif cp_loss < CP_LOSS_INACCURACY:
+                            annotation = "inaccuracy"
+                        elif cp_loss < CP_LOSS_MISTAKE:
+                            annotation = "mistake"
+                        else:
+                            annotation = "blunder"
+
+            except Exception:
+                annotation = "unknown"
+                cp_loss    = None
+                best_san   = None
+
+            annotations.append({
+                "move_number":  move_number,
+                "move_san":     board.san(move),
+                "annotation":   annotation,
+                "cp_loss":      round(cp_loss) if cp_loss is not None else None,
+                "best_move_san": best_san,
+            })
+            board.push(move)
+
+        return annotations
 
     def score_move(
         self,
