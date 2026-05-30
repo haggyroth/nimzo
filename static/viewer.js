@@ -776,10 +776,10 @@ const _lessonsRendered = new Set();  // tracks which player names have been show
 
 function setRightTab(tab) {
   _rightTab = tab;
-  const cfg = document.getElementById('rpConfigureGroup');
-  const res = document.getElementById('rpResultsGroup');
-  if (cfg) cfg.classList.toggle('collapsed', tab !== 'configure');
-  if (res) res.classList.toggle('collapsed', tab !== 'results');
+  // Just open the target group; user can collapse either group independently via the header
+  const target = tab === 'configure' ? 'rpConfigureGroup' : 'rpResultsGroup';
+  const el = document.getElementById(target);
+  if (el) el.classList.remove('collapsed');
 }
 
 // ── Lessons panel ─────────────────────────────────────────────────────────
