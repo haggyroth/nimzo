@@ -1784,11 +1784,15 @@ function onThinking(d) {
         const uci = cand.uci || cand.move || '';
         if (uci.length >= 4) {
           const from = uci.slice(0, 2), to = uci.slice(2, 4);
-          // Rank 1: gold, Rank 2: silver, Rank 3+: dim
-          const type = i === 0 ? { class: 'arrow-rank1' }
-                     : i === 1 ? { class: 'arrow-rank2' }
-                               : { class: 'arrow-rank3' };
-          _cmcb.board.addArrow(type, from, to);
+          // Rank colors match move quality palette (best→blunder)
+          const RANK_ARROW = [
+            { class: 'arrow-rank1' },
+            { class: 'arrow-rank2' },
+            { class: 'arrow-rank3' },
+            { class: 'arrow-rank4' },
+            { class: 'arrow-rank5' },
+          ];
+          _cmcb.board.addArrow(RANK_ARROW[Math.min(i, 4)], from, to);
         }
       });
     }
