@@ -95,7 +95,7 @@
       background: transparent;
       border: 1px solid var(--border-hi);
       color: var(--text-mid);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 9px;
       letter-spacing: 1.5px;
       text-transform: uppercase;
@@ -237,7 +237,7 @@
     }
     .p-graveyard .gv-piece { display: inline-block; }
     .p-graveyard .gv-adv {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 9px; font-weight: 500;
       letter-spacing: .5px;
       color: var(--gold-bright);
@@ -254,7 +254,7 @@
       overflow: hidden; white-space: nowrap;
     }
     .rp-graveyard .gv-adv {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 8px; letter-spacing: .4px;
       color: var(--gold-bright);
       margin-left: 6px;
@@ -592,7 +592,7 @@
       background: var(--bg-input);
       border: 1px solid var(--border);
       color: var(--text);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 10px;
       padding: 4px 7px;
       outline: none;
@@ -664,7 +664,7 @@
     .lb-wdl   { color: var(--text-mid); font-size: 9px; }
     .lb-best  {
       color: var(--gold-bright);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 10px;
       letter-spacing: .3px;
       text-align: right;
@@ -762,7 +762,7 @@
     }
     .rp-btn {
       background: transparent; border: 1px solid var(--border-hi);
-      color: var(--text-mid); font-family: 'JetBrains Mono', monospace;
+      color: var(--text-mid); font-family: var(--ui-font);
       font-size: 11px; padding: 5px 14px; cursor: pointer;
       transition: border-color .12s, color .12s;
     }
@@ -842,7 +842,7 @@
       color: var(--text); letter-spacing: .8px; margin-bottom: 2px;
     }
     .mc-modelid {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 9px; color: var(--text-dim); letter-spacing: .5px;
       word-break: break-all;
     }
@@ -857,7 +857,7 @@
       border: 1px solid var(--border);
       font-size: 9px; letter-spacing: .5px;
       color: var(--text-mid);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
     }
     .mc-meta-chip .k { color: var(--text-dim); text-transform: uppercase; font-size: 8px; }
     .mc-meta-chip .v { color: var(--gold-bright); font-weight: 500; }
@@ -987,14 +987,14 @@
     .mc-badge.badge-iron_wall    { border-left-color: #6a8aaa; }
     .mc-badge.badge-theorist     { border-left-color: #d09a4a; }
     .mc-badge .b-times {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 9px; color: var(--gold-bright);
       letter-spacing: 0;
     }
 
     /* Leaderboard achievement chip */
     .lb-badges-cell {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 10px; color: var(--gold-bright);
       text-align: right; letter-spacing: .3px;
       cursor: help;
@@ -1034,11 +1034,11 @@
     /* Replay reasoning panel */
     .rp-reasoning {
       padding: 6px 8px; background: var(--bg2); border-top: 1px solid var(--border);
-      font-size: 8.5px; color: var(--text-mid); line-height: 1.5;
+      font-size: 9px; color: var(--text-mid); line-height: 1.5;
       max-height: 100px; overflow-y: auto;
     }
     .rp-reas-mover {
-      font-size: 7.5px; text-transform: uppercase; letter-spacing: 1px;
+      font-size: 8px; text-transform: uppercase; letter-spacing: 1px;
       color: var(--text-dim); margin-bottom: 3px; display: flex; gap: 6px;
     }
     .rp-reas-time  { color: var(--gold); }
@@ -1060,8 +1060,8 @@
     }
     @keyframes spinPiece { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
     .ls-icon  { font-size: 2.2rem; display: inline-block; animation: spinPiece 1.6s linear infinite; margin-bottom: 10px; }
-    .ls-title { font-size: .9rem; color: var(--text); letter-spacing: .06em; text-transform: uppercase; }
-    .ls-tutor { margin-top: 6px; font-size: .75rem; color: var(--text-mid); }
+    .ls-title { font-size: 11px; color: var(--text); letter-spacing: 1.5px; text-transform: uppercase; }
+    .ls-tutor { margin-top: 6px; font-size: 9px; color: var(--text-mid); }
 
     /* ── Game-over overlay ───────────────────────────────────────── */
     #overlay {
@@ -1084,7 +1084,7 @@
     .ov-btn {
       padding: 8px 26px;
       background: transparent; border: 1px solid var(--border-hi);
-      color: var(--text-mid); font-family: 'JetBrains Mono', monospace;
+      color: var(--text-mid); font-family: var(--ui-font);
       font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
       cursor: pointer; transition: border-color .2s, color .2s;
     }
@@ -1248,7 +1248,7 @@
     .trn-add-btn {
       padding: 5px; background: transparent;
       border: 1px dashed var(--border-hi); color: var(--text-dim);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
       cursor: pointer; transition: border-color .15s, color .15s;
       width: 100%;
@@ -1258,12 +1258,12 @@
     /* ── Live standings table ───────────────────────────────────── */
     .standings-wrap { padding: 8px 10px 12px; }
     .standings-title {
-      font-size: 8px; letter-spacing: 2px; text-transform: uppercase;
+      font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
       color: var(--text-dim); margin-bottom: 8px;
     }
     .stn-table { width: 100%; border-collapse: collapse; font-size: 10px; }
     .stn-table th {
-      padding: 4px 6px; text-align: left; font-size: 7px; letter-spacing: 1.5px;
+      padding: 4px 6px; text-align: left; font-size: 8px; letter-spacing: 1.5px;
       text-transform: uppercase; color: var(--text-dim); font-weight: 400;
       border-bottom: 1px solid var(--border);
     }
@@ -1508,7 +1508,7 @@
     }
     .player-graveyard .gv-piece { display: inline-block; }
     .player-graveyard .gv-adv {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--ui-font);
       font-size: 9px; font-weight: 500;
       letter-spacing: .5px;
       color: var(--gold-bright);
@@ -1619,7 +1619,7 @@
       margin-bottom: 3px;
       font-size: 8px;
       text-transform: uppercase;
-      letter-spacing: .6px;
+      letter-spacing: 1px;
     }
     .puzzle-hist-score {
       color: var(--text);
