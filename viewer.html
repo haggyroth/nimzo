@@ -544,6 +544,13 @@
             <button id="boardBgClear" class="piece-set-btn" onclick="clearBoardBg()" style="width:100%;display:none">✕ Clear image</button>
           </div>
 
+          <div class="settings-row" id="apiKeyRow" style="flex-direction:column;gap:4px">
+            <label style="font-size:10px;color:var(--text-dim)">API Key (LAN mode)</label>
+            <input type="password" id="apiKeyInput" placeholder="Paste key from server console…"
+              style="width:100%;font-size:11px;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px"
+              oninput="onApiKeyChange(this.value)">
+          </div>
+
           <div class="settings-reset" onclick="resetSettings()">↺ Reset to defaults</div>
         </div>
       </div>

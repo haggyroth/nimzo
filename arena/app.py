@@ -12,6 +12,9 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 import db as database
 from analysis import detect_opening_depth, evaluate_achievements
@@ -19,6 +22,31 @@ from models.portraits import generate_portrait
 from arena.state import _PORTRAITS_DIR
 
 logger = logging.getLogger(__name__)
+
+
+# ── API-key middleware ────────────────────────────────────────────────────────
+
+class ApiKeyMiddleware(BaseHTTPMiddleware):
+    """Require ``X-API-Key`` on every state-mutating request when a key is set.
+
+    Only active when ``arena.state._api_key`` is not None — which only happens
+    when the server is bound to a non-loopback interface.  Localhost deployments
+    sail through unconditionally.
+
+    GET / HEAD / OPTIONS are always passed through (read-only or CORS preflight).
+    WebSocket upgrade handshakes arrive as GET and are therefore also exempt.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        from arena.state import _api_key
+        if _api_key is not None and request.method not in ("GET", "HEAD", "OPTIONS"):
+            token = request.headers.get("X-API-Key", "")
+            if token != _api_key:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Unauthorized: valid X-API-Key required for mutating requests"},
+                )
+        return await call_next(request)
 
 
 def backfill_achievements() -> int:
@@ -108,6 +136,7 @@ async def lifespan(app: FastAPI):
 # ── FastAPI app ───────────────────────────────────────────────────────────
 
 app = FastAPI(title="Nimzo", lifespan=lifespan)
+app.add_middleware(ApiKeyMiddleware)
 
 app.mount("/portraits", StaticFiles(directory=str(_PORTRAITS_DIR)), name="portraits")
 

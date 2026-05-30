@@ -497,35 +497,10 @@ class TestCoherenceStatsEmpty:
 
 
 class TestLANWarning:
-    """S-1 — a warning is printed to stderr when binding to a non-loopback interface."""
-
-    def _capture_warning(self, host: str) -> str:
-        """Call the warning logic directly by importing cli and exercising it."""
-        buf = io.StringIO()
-        # Import the check logic directly
-        if host not in ("127.0.0.1", "::1", "localhost"):
-            print(
-                f"\n  ⚠  WARNING: Nimzo is listening on {host} (all interfaces). "
-                "There is no authentication — only run this on a trusted private network.\n",
-                file=buf,
-            )
-        return buf.getvalue()
-
-    def test_warning_printed_for_0_0_0_0(self):
-        out = self._capture_warning("0.0.0.0")
-        assert "WARNING" in out
-        assert "unauthenticated" in out.lower() or "no authentication" in out.lower()
-
-    def test_no_warning_for_localhost(self):
-        out = self._capture_warning("127.0.0.1")
-        assert out == ""
-
-    def test_no_warning_for_ipv6_loopback(self):
-        out = self._capture_warning("::1")
-        assert out == ""
+    """S-1 — API-key notice printed to stderr when binding to a non-loopback interface."""
 
     def test_warning_in_cli_main(self, monkeypatch, capsys):
-        """The warning appears in real cli.main() output when host=0.0.0.0."""
+        """The LAN auth notice appears in real cli.main() output when host=0.0.0.0."""
         import arena.cli as cli
 
         # Patch uvicorn.run to do nothing so we don't actually start a server
@@ -540,4 +515,68 @@ class TestLANWarning:
                 pass
 
         captured = capsys.readouterr()
-        assert "WARNING" in captured.err
+        # New behaviour: shows API key notice instead of plain WARNING
+        assert "api key" in captured.err.lower() or "authentication" in captured.err.lower()
+
+    def test_api_key_set_for_non_loopback(self, monkeypatch):
+        """cli.main() sets arena.state._api_key when binding to a non-loopback address."""
+        import arena.cli as cli
+        import arena.state as _st
+
+        monkeypatch.setattr("uvicorn.run", lambda *a, **kw: None)
+        monkeypatch.setattr("webbrowser.open", lambda *a, **kw: None)
+
+        original_key = _st._api_key
+        try:
+            with monkeypatch.context() as m:
+                m.setattr(sys, "argv", ["nimzo", "--listen", "0.0.0.0", "--no-browser"])
+                try:
+                    cli.main()
+                except SystemExit:
+                    pass
+            assert _st._api_key is not None
+            assert len(_st._api_key) > 0
+        finally:
+            _st._api_key = original_key
+
+    def test_api_key_not_set_for_loopback(self, monkeypatch):
+        """cli.main() leaves _api_key None when binding to localhost."""
+        import arena.cli as cli
+        import arena.state as _st
+
+        monkeypatch.setattr("uvicorn.run", lambda *a, **kw: None)
+        monkeypatch.setattr("webbrowser.open", lambda *a, **kw: None)
+
+        original_key = _st._api_key
+        _st._api_key = None
+        try:
+            with monkeypatch.context() as m:
+                m.setattr(sys, "argv", ["nimzo", "--listen", "127.0.0.1", "--no-browser"])
+                try:
+                    cli.main()
+                except SystemExit:
+                    pass
+            assert _st._api_key is None
+        finally:
+            _st._api_key = original_key
+
+    def test_nimzo_api_key_env_var_respected(self, monkeypatch):
+        """NIMZO_API_KEY env var is used as the API key when set."""
+        import arena.cli as cli
+        import arena.state as _st
+
+        monkeypatch.setattr("uvicorn.run", lambda *a, **kw: None)
+        monkeypatch.setattr("webbrowser.open", lambda *a, **kw: None)
+        monkeypatch.setenv("NIMZO_API_KEY", "my-custom-secret")
+
+        original_key = _st._api_key
+        try:
+            with monkeypatch.context() as m:
+                m.setattr(sys, "argv", ["nimzo", "--listen", "0.0.0.0", "--no-browser"])
+                try:
+                    cli.main()
+                except SystemExit:
+                    pass
+            assert _st._api_key == "my-custom-secret"
+        finally:
+            _st._api_key = original_key

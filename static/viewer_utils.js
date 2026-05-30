@@ -98,6 +98,24 @@ function buildSparkline(history) {
   </svg>`;
 }
 
+// ── API key auth ──────────────────────────────────────────────────────────────
+// Used when the server is bound to a non-loopback interface (LAN mode).
+// The key is stored in localStorage so it survives page reloads.
+
+let _apiKey = (typeof localStorage !== 'undefined')
+  ? (localStorage.getItem('nimzo_api_key') || '')
+  : '';
+
+/**
+ * Return headers merged with X-API-Key when a key is stored.
+ *   fetch(url, { method: 'POST', headers: authHeaders({'Content-Type': 'application/json'}) })
+ */
+function authHeaders(extra) {
+  const h = extra ? { ...extra } : {};
+  if (_apiKey) h['X-API-Key'] = _apiKey;
+  return h;
+}
+
 // ── HTML escaping ─────────────────────────────────────────────────────────────
 
 function escHtml(s) {
@@ -171,7 +189,7 @@ async function openModelCard(modelId) {
       if (portraitEl) {
         portraitEl.outerHTML = `<div class="mc-portrait-generating"><div class="spinner"></div>Painting…</div>`;
       }
-      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' })
+      fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST', headers: authHeaders() })
         .then(r => r.json())
         .then(j => {
           if (j.quota_exhausted) _portraitQuotaExhausted = true;
@@ -400,7 +418,7 @@ function renderMetadata(meta) {
 // ── Export (Node) / attach to window (browser) ────────────────────────────────
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseFen, uciToSquares, computeCaptures, extractModelName, buildSparkline, escHtml, renderBadges, renderMetadata };
+  module.exports = { parseFen, uciToSquares, computeCaptures, extractModelName, buildSparkline, escHtml, authHeaders, renderBadges, renderMetadata };
 } else {
   // Browser: functions are already in the global scope; nothing extra needed.
 }
