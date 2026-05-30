@@ -343,10 +343,10 @@
 
     .pane-head {
       padding: 9px 13px 7px;
-      font-size: 8px;
+      font-size: 10px;
       letter-spacing: 2px;
       text-transform: uppercase;
-      color: var(--text-dim);
+      color: var(--text-mid);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       display: flex;
@@ -460,9 +460,9 @@
 
     /* ── Collapsible panels ──────────────────────────────────────── */
     .ctrl-head { cursor: pointer; user-select: none; }
-    .ctrl-head:hover { color: var(--text-mid); }
+    .ctrl-head:hover { color: var(--text); }
     .pane-head { cursor: pointer; user-select: none; }
-    .pane-head:hover { color: var(--text-mid); }
+    .pane-head:hover { color: var(--text); }
     .chevron { font-size: 11px; color: var(--text-mid); transition: transform .15s; line-height: 1; }
     .ctrl-section.collapsed .chevron { transform: rotate(-90deg); }
     .ctrl-section.collapsed > *:not(.ctrl-head) { display: none !important; }
@@ -492,10 +492,10 @@
 
     .ctrl-head {
       padding: 9px 13px 7px;
-      font-size: 8px;
+      font-size: 10px;
       letter-spacing: 2px;
       text-transform: uppercase;
-      color: var(--text-dim);
+      color: var(--text-mid);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -592,18 +592,18 @@
 
     .start-btn {
       padding: 8px;
-      background: transparent;
-      border: 1px solid var(--border-hi);
-      color: var(--text-mid);
+      background: rgba(200, 146, 30, 0.08);
+      border: 1px solid var(--gold);
+      color: var(--gold);
       font-family: var(--ui-font);
       font-size: 10px;
       letter-spacing: 2px;
       text-transform: uppercase;
       cursor: pointer;
-      transition: border-color .15s, color .15s;
+      transition: background .15s, border-color .15s, color .15s;
       width: 100%;
     }
-    .start-btn:hover { border-color: var(--gold); color: var(--gold); }
+    .start-btn:hover { background: rgba(200, 146, 30, 0.18); border-color: var(--gold-bright); color: var(--gold-bright); }
     .start-btn:disabled { opacity: .3; cursor: default; pointer-events: none; }
 
     /* progress bar */
