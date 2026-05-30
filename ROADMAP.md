@@ -21,11 +21,11 @@ Small, high-ROI changes that improve the experience on every session.
 
 Features that directly improve the live game experience.
 
-- [ ] **Candidate arrow rank-coding** — color board arrows by rank during thinking: gold = #1, silver = #2, dimmer for #3–5
-- [ ] **Live elapsed timer** — running `⌚ Xs` counter in the player chyron while a model is thinking (not just after the move)
-- [ ] **Timeout prominence** — ⏱ banner + distinct card border when a model times out, instead of just a chip
-- [ ] **Human player click-to-move** — use the existing `cm-chessboard` input event system to accept moves by clicking board squares instead of requiring UCI notation
-- [ ] **Coherence trend sparkline** — coherence score sparkline in the player chyron alongside the existing quality sparkline (uses `renderSparkline` in `viewer_utils.js`)
+- [x] **Candidate arrow rank-coding** — color board arrows by rank during thinking: gold = #1, silver = #2, dimmer for #3–5
+- [x] **Live elapsed timer** — running `⌚ Xs` counter in the player chyron while a model is thinking (not just after the move)
+- [x] **Timeout prominence** — ⏱ banner + distinct card border when a model times out, instead of just a chip
+- [x] **Human player click-to-move** — use the existing `cm-chessboard` input event system to accept moves by clicking board squares instead of requiring UCI notation
+- [x] **Coherence trend sparkline** — coherence score sparkline in the player chyron alongside the existing quality sparkline (uses `renderSparkline` in `viewer_utils.js`)
 
 ---
 

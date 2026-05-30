@@ -497,6 +497,11 @@ let gameState = {
   // Per-player elapsed_ms accumulators (reset each game)
   elapsedSum:   { white: 0, black: 0 },
   elapsedCount: { white: 0, black: 0 },
+  // Live thinking timer
+  thinkTimer:    null,
+  thinkingStart: 0,
+  // Per-game coherence score history (for sparkline)
+  coherenceHist: { white: [], black: [] },
 };
 
 let tournamentStatus = 'idle';
@@ -681,6 +686,14 @@ function updatePlayers() {
   document.getElementById('thinkBlack').classList.toggle('on', llmThinkingBlack);
   document.getElementById('boardWrap').classList.toggle('thinking', llmThinkingWhite || llmThinkingBlack);
 
+  // Coherence sparklines
+  const csW = document.getElementById('cohSparkWhite');
+  const csB = document.getElementById('cohSparkBlack');
+  if (csW) csW.innerHTML = gameState.coherenceHist.white.length >= 2
+    ? _buildValueSparkline(gameState.coherenceHist.white, 48, 12, 'var(--accent)') : '';
+  if (csB) csB.innerHTML = gameState.coherenceHist.black.length >= 2
+    ? _buildValueSparkline(gameState.coherenceHist.black, 48, 12, 'var(--accent)') : '';
+
   // Live eval readout — show current centipawn advantage in each player strip
   const cp  = gameState.lastEvalCp;
   const ewEl = document.getElementById('evalWhite');
@@ -808,7 +821,7 @@ function addMoveCard(data) {
     : '';
 
   const card = document.createElement('div');
-  card.className = `move-card ${q}${isBook ? ' book' : ''}`;
+  card.className = `move-card ${q}${isBook ? ' book' : ''}${data.timed_out ? ' timed-out' : ''}`;
   card.innerHTML = `
     <div class="move-top">
       <span class="move-num-label">${label}</span>
@@ -1687,10 +1700,16 @@ function onGameStart(d) {
   _allLessons = {};
   _lessonsRendered.clear();
   evalHistory = [];
-  gameState.elapsedSum   = { white: 0, black: 0 };
-  gameState.elapsedCount = { white: 0, black: 0 };
+  gameState.elapsedSum    = { white: 0, black: 0 };
+  gameState.elapsedCount  = { white: 0, black: 0 };
+  gameState.coherenceHist = { white: [], black: [] };
+  if (gameState.thinkTimer) { clearInterval(gameState.thinkTimer); gameState.thinkTimer = null; }
   document.getElementById('latencyWhite').textContent = '';
   document.getElementById('latencyBlack').textContent = '';
+  const csW = document.getElementById('cohSparkWhite');
+  const csB = document.getElementById('cohSparkBlack');
+  if (csW) csW.innerHTML = '';
+  if (csB) csB.innerHTML = '';
   document.getElementById('evalPane').style.display = 'none';
   document.getElementById('historyPane').innerHTML = '';
   document.getElementById('overlay').classList.remove('show');
@@ -1757,7 +1776,7 @@ function onThinking(d) {
     }
   }
 
-  // Draw candidate arrows (clear old ones first; skip in blind mode — no arrows)
+  // Draw candidate arrows with rank-based colors (clear old ones first)
   if (_cmcb.ready && _cmcb.board) {
     _cmcb.board.removeArrows();
     if (!d.is_blind_move) {
@@ -1765,10 +1784,26 @@ function onThinking(d) {
         const uci = cand.uci || cand.move || '';
         if (uci.length >= 4) {
           const from = uci.slice(0, 2), to = uci.slice(2, 4);
-          _cmcb.board.addArrow(i === 0 ? _cmcb.ARROW_TYPE.default : _cmcb.ARROW_TYPE.secondary, from, to);
+          // Rank 1: gold, Rank 2: silver, Rank 3+: dim
+          const type = i === 0 ? { class: 'arrow-rank1' }
+                     : i === 1 ? { class: 'arrow-rank2' }
+                               : { class: 'arrow-rank3' };
+          _cmcb.board.addArrow(type, from, to);
         }
       });
     }
+  }
+
+  // Live elapsed timer — start counting from when thinking began
+  if (gameState.thinkTimer) { clearInterval(gameState.thinkTimer); gameState.thinkTimer = null; }
+  if (!d.is_human_turn) {
+    gameState.thinkingStart = Date.now();
+    const capColor = d.color[0].toUpperCase() + d.color.slice(1);
+    const timerEl  = document.getElementById(`latency${capColor}`);
+    gameState.thinkTimer = setInterval(() => {
+      const s = ((Date.now() - gameState.thinkingStart) / 1000).toFixed(1);
+      if (timerEl) timerEl.textContent = `⌚ ${s}s`;
+    }, 200);
   }
 
   updatePlayers(); updateAnalysis(); _cmcbRender(false);
@@ -1784,6 +1819,13 @@ function onMove(d) {
   const banner = document.getElementById('humanTurnBanner');
   if (banner) banner.classList.remove('show');
   if (d.score_cp_white != null) gameState.lastEvalCp = d.score_cp_white;
+  // Stop live thinking timer
+  if (gameState.thinkTimer) { clearInterval(gameState.thinkTimer); gameState.thinkTimer = null; }
+  // Accumulate coherence score for sparkline
+  if (d.coherence_score != null && !d.is_book_move) {
+    const col = d.move_number % 2 === 1 ? 'white' : 'black';
+    gameState.coherenceHist[col].push(d.coherence_score);
+  }
   // Accumulate per-player avg response time (skip book moves and timeouts)
   if (d.elapsed_ms != null && !d.is_book_move && !d.timed_out) {
     const col = (d.move_number % 2 === 1) ? 'white' : 'black';
