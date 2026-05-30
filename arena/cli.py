@@ -201,14 +201,19 @@ def main():
 
     display_host = "localhost" if host in ("127.0.0.1", "::1") else host
 
-    # S-1: Warn when binding on a non-loopback interface — all endpoints are
-    # unauthenticated, so LAN exposure is an explicit choice the operator
-    # should be aware of.
+    # S-1: When binding on a non-loopback interface, enable API-key auth to
+    # protect state-mutating endpoints.  The key is auto-generated (or read
+    # from NIMZO_API_KEY) and printed once to stderr so the operator can copy
+    # it into the viewer settings.
     if host not in ("127.0.0.1", "::1", "localhost"):
+        import secrets
         import sys
+        _st._api_key = os.environ.get("NIMZO_API_KEY") or secrets.token_hex(16)
         print(
-            f"\n  ⚠  WARNING: Nimzo is listening on {host} (all interfaces). "
-            "There is no authentication — only run this on a trusted private network.\n",
+            f"\n  🔒  LAN mode: API key authentication enabled.\n"
+            f"      API key: {_st._api_key}\n"
+            f"      Enter this in the viewer Settings → API Key field.\n"
+            f"      (Override with NIMZO_API_KEY env var.)\n",
             file=sys.stderr,
         )
 

@@ -72,6 +72,11 @@ _active_human_players: dict = {}
 # Per-model portrait generation cooldown tracker: model_id → epoch time
 _portrait_last_generated: dict[str, float] = {}
 
+# Optional authentication token.  None = no auth enforced (loopback mode).
+# Set by cli.py when binding to a non-loopback interface (NIMZO_HOST=0.0.0.0).
+# Can be overridden via the NIMZO_API_KEY env var.
+_api_key: str | None = None
+
 # Last successfully broadcast JSON string.  Identical consecutive messages are
 # suppressed — prevents redundant sends during client reconnects or accidental
 # double-fires from game code without affecting the normal distinct-event stream.

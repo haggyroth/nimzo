@@ -264,7 +264,20 @@ function applySettings() {
   }
 }
 
+function onApiKeyChange(value) {
+  _apiKey = value.trim();
+  if (_apiKey) {
+    localStorage.setItem('nimzo_api_key', _apiKey);
+  } else {
+    localStorage.removeItem('nimzo_api_key');
+  }
+}
+
 function syncSettingsUI() {
+  // API key input — pre-fill from viewer_utils.js shared state (loaded from localStorage)
+  const akEl = document.getElementById('apiKeyInput');
+  if (akEl && _apiKey) akEl.value = _apiKey;
+
   // Theme swatches
   document.querySelectorAll('.theme-swatch').forEach(el => {
     el.classList.toggle('active', el.dataset.theme === _settings.theme);
@@ -597,7 +610,7 @@ async function submitHumanMove(uci) {
   try {
     const res = await fetch(`${API}/api/human-move`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ uci }),
     });
     if (!res.ok) {
@@ -1228,7 +1241,7 @@ async function startTournament() {
 
   const res = await fetch(`${API}/api/tournament/start`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(cfg),
   }).then(r=>r.json());
 
@@ -1265,7 +1278,7 @@ async function startBracketTournament() {
 
   const res = await fetch(`${API}/api/tournament/start`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(cfg),
   }).then(r=>r.json());
 
@@ -1273,16 +1286,16 @@ async function startBracketTournament() {
 }
 
 async function pauseTournament() {
-  await fetch(`${API}/api/tournament/pause`, { method: 'POST' });
+  await fetch(`${API}/api/tournament/pause`, { method: 'POST', headers: authHeaders() });
 }
 
 async function resumeTournament() {
-  await fetch(`${API}/api/tournament/resume`, { method: 'POST' });
+  await fetch(`${API}/api/tournament/resume`, { method: 'POST', headers: authHeaders() });
 }
 
 async function stopTournament() {
   if (!confirm('Stop the current tournament?')) return;
-  await fetch(`${API}/api/tournament/stop`, { method: 'POST' });
+  await fetch(`${API}/api/tournament/stop`, { method: 'POST', headers: authHeaders() });
 }
 
 function updateTournamentUI(status, gameNumber, totalGames) {
@@ -1530,7 +1543,7 @@ function onGameStart(d) {
 async function fetchPortrait(modelId, color) {
   if (_portraitQuotaExhausted) return;
   try {
-    const r = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' });
+    const r = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST', headers: authHeaders() });
     const j = await r.json();
     if (j.quota_exhausted) _portraitQuotaExhausted = true;
     if (j.portrait_url) {
@@ -2232,7 +2245,7 @@ async function handlePortraitUpload(event) {
   fd.append('file', file);
   try {
     const r = await fetch(`${API}/api/models/${encodeURIComponent(_mcCurrentModelId)}/portrait/upload`, {
-      method: 'POST', body: fd,
+      method: 'POST', headers: authHeaders(), body: fd,
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
@@ -2261,7 +2274,7 @@ async function regenPortrait(modelId) {
   const placeholder = document.getElementById('mcCard').querySelector('.mc-portrait, .mc-portrait-placeholder');
   if (placeholder) placeholder.outerHTML = `<div class="mc-portrait-generating"><div class="spinner"></div>Painting…</div>`;
   try {
-    const r = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST' });
+    const r = await fetch(`${API}/api/models/${encodeURIComponent(modelId)}/portrait`, { method: 'POST', headers: authHeaders() });
     const j = await r.json();
     if (j.quota_exhausted) {
       _portraitQuotaExhausted = true;
@@ -2647,7 +2660,7 @@ buildUiThemeSwatches();
 
     const res = await fetch(`${API}/api/puzzle/start`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(cfg),
     }).then(r => r.json());
 
