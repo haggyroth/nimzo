@@ -91,3 +91,9 @@ async def api_stats_h2h():
 @router.get("/api/achievements/catalogue")
 async def api_achievement_catalogue():
     return ACHIEVEMENT_CATALOGUE
+
+
+@router.get("/api/stats/openings")
+async def api_top_openings(limit: int = 15):
+    """Top openings by games played with W/D/L breakdown."""
+    return await asyncio.to_thread(database.get_top_openings, limit)

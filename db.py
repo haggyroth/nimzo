@@ -701,6 +701,34 @@ def get_openings_for_model(model_id: str, limit: int = 8) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_top_openings(limit: int = 15) -> list[dict]:
+    """Top openings by games played across all games, with W/D/L breakdown.
+
+    Returns ``{eco_code, opening_name, games, white_wins, black_wins, draws}``
+    dicts ordered by game count descending.  Only games with a recognised
+    opening (non-NULL, non-empty ``eco_code``) are included.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                eco_code,
+                opening_name,
+                COUNT(*)  AS games,
+                SUM(CASE WHEN result = '1-0'     THEN 1 ELSE 0 END) AS white_wins,
+                SUM(CASE WHEN result = '0-1'     THEN 1 ELSE 0 END) AS black_wins,
+                SUM(CASE WHEN result = '1/2-1/2' THEN 1 ELSE 0 END) AS draws
+            FROM games
+            WHERE eco_code IS NOT NULL AND eco_code != ''
+            GROUP BY eco_code, opening_name
+            ORDER BY games DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # ── Lessons ──────────────────────────────────────────────────────────────
 
 def record_lesson(
