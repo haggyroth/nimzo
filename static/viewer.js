@@ -127,6 +127,45 @@ function saveSettings() {
   localStorage.setItem('nimzo_settings', JSON.stringify(_settings));
 }
 
+// ── Match form state persistence ─────────────────────────────────────────
+// Saves/restores the match setup form fields so users don't re-pick models
+// on every page reload. Model selects are restored by setting their value
+// before fetchModels() runs — fetchModels captures prev and re-selects it.
+const _FORM_KEY = 'nimzo_form_state';
+
+function saveFormState() {
+  const ids = [
+    'whiteName','whiteBackend','whiteUrl','whiteModel','whiteStyle',
+    'whiteThinking','whiteCandidates','whiteBlindMoves','whiteBlind',
+    'blackName','blackBackend','blackUrl','blackModel','blackStyle',
+    'blackThinking','blackCandidates','blackBlindMoves','blackBlind',
+    'tutorBackend','tutorUrl','tutorModel',
+    'judgeBackend','judgeUrl','judgeModel',
+    'gamesCount','adaptiveDifficulty','maxMoves','moveTimeout','openingPgn',
+  ];
+  const state = {};
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    state[id] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  localStorage.setItem(_FORM_KEY, JSON.stringify(state));
+}
+
+function loadFormState() {
+  let state;
+  try { state = JSON.parse(localStorage.getItem(_FORM_KEY) || 'null'); } catch(_) {}
+  if (!state) return;
+  const ids = Object.keys(state);
+  // Set non-model fields immediately; model selects are handled by fetchModels
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === 'checkbox') { el.checked = state[id]; }
+    else { el.value = state[id]; }
+  });
+}
+
 function applyUiTheme(id) {
   const theme = UI_THEMES[id] || UI_THEMES.nimzo;
   const root  = document.documentElement;
@@ -787,6 +826,21 @@ function addMoveCard(data) {
     toggle.addEventListener('click', () => body.classList.toggle('open'));
   }
 
+  // Reasoning expand/collapse — only show toggle if text is actually clamped
+  if (showReason && !isBook) {
+    const reason = card.querySelector('.move-reason');
+    if (reason && reason.scrollHeight > reason.clientHeight + 2) {
+      const exp = document.createElement('span');
+      exp.className = 'reason-expand';
+      exp.textContent = '▾ more';
+      reason.after(exp);
+      exp.addEventListener('click', () => {
+        reason.classList.toggle('expanded');
+        exp.textContent = reason.classList.contains('expanded') ? '▴ less' : '▾ more';
+      });
+    }
+  }
+
   pane.prepend(card);
 }
 
@@ -1255,6 +1309,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Tournament controls ───────────────────────────────────────────────────
 async function startTournament() {
+  saveFormState();
   const wBackend = document.getElementById('whiteBackend').value;
   const bBackend = document.getElementById('blackBackend').value;
   const wModel   = wBackend === 'human' ? (document.getElementById('whiteName').value || 'Human') : document.getElementById('whiteModel').value;
@@ -2574,8 +2629,10 @@ function renderEvalGraph() {
   if (evalHistory.length < 2) { pane.style.display = 'none'; return; }
   pane.style.display = '';
 
-  const W = 280, H = 46, MID = H / 2, MAX = 800;
+  const W = 280, H = 56, MID = H / 2, MAX = 800;
   const n = evalHistory.length;
+  // Update viewBox to match new height
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
 
   const pts = evalHistory.map((e, i) => {
     const x = (i / (n - 1)) * W;
@@ -2585,17 +2642,18 @@ function renderEvalGraph() {
   });
 
   // Filled area: white advantage above mid, black below
-  const polyPts = pts.map(([x,y]) => `${x},${y}`).join(' ');
-  const fillAbove = `M 0,${MID} ` + pts.map(([x,y]) => `L ${x},${Math.min(y,MID)}`).join(' ') + ` L ${W},${MID} Z`;
-  const fillBelow = `M 0,${MID} ` + pts.map(([x,y]) => `L ${x},${Math.max(y,MID)}`).join(' ') + ` L ${W},${MID} Z`;
+  const polyPts = pts.map(([x,y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const fillAbove = `M 0,${MID} ` + pts.map(([x,y]) => `L ${x.toFixed(1)},${Math.min(y,MID).toFixed(1)}`).join(' ') + ` L ${W},${MID} Z`;
+  const fillBelow = `M 0,${MID} ` + pts.map(([x,y]) => `L ${x.toFixed(1)},${Math.max(y,MID).toFixed(1)}`).join(' ') + ` L ${W},${MID} Z`;
+  const gold = getComputedStyle(document.documentElement).getPropertyValue('--gold').trim() || '#c8921e';
 
   svg.innerHTML = `
-    <rect width="${W}" height="${MID}" fill="rgba(255,255,255,0.025)"/>
-    <rect y="${MID}" width="${W}" height="${MID}" fill="rgba(0,0,0,0.25)"/>
-    <path d="${fillAbove}" fill="rgba(232,184,74,0.18)"/>
-    <path d="${fillBelow}" fill="rgba(22,22,22,0.5)"/>
-    <line x1="0" y1="${MID}" x2="${W}" y2="${MID}" stroke="#1a2535" stroke-width="1"/>
-    <polyline points="${polyPts}" fill="none" stroke="${getComputedStyle(document.documentElement).getPropertyValue('--gold').trim() || '#c8921e'}" stroke-width="1.5" stroke-linejoin="round"/>`;
+    <rect width="${W}" height="${MID}" fill="rgba(220,200,160,0.06)"/>
+    <rect y="${MID}" width="${W}" height="${MID}" fill="rgba(0,0,0,0.35)"/>
+    <path d="${fillAbove}" fill="rgba(232,184,74,0.35)"/>
+    <path d="${fillBelow}" fill="rgba(60,80,110,0.55)"/>
+    <line x1="0" y1="${MID}" x2="${W}" y2="${MID}" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+    <polyline points="${polyPts}" fill="none" stroke="${gold}" stroke-width="2" stroke-linejoin="round"/>`;
 }
 
 // ── Utility — escHtml() defined in js/viewer_utils.js ─────────────────────
@@ -2663,6 +2721,7 @@ buildUiThemeSwatches();
   sizeBoard();
   connect();
   loadProviders();
+  loadFormState();  // restore saved match form state before onBackendChange fires
   // Apply initial backend UI state for all sides (onBackendChange only fires on DOM change events)
   ['white', 'black', 'tutor', 'judge', 'trnTutor', 'trnJudge'].forEach(s => {
     if (document.getElementById(s + 'Backend')) onBackendChange(s);

@@ -355,6 +355,7 @@
     }
 
     .analysis-pane { border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .analysis-section { flex-shrink: 0; }
     .analysis-body {
       padding: 9px 12px;
       min-height: 110px;
@@ -442,6 +443,14 @@
       font-size: 9px; font-style: italic; color: var(--text-mid); line-height: 1.5; margin-top: 3px;
       display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
     }
+    .move-reason.expanded {
+      display: block; -webkit-line-clamp: unset; overflow: visible;
+    }
+    .reason-expand {
+      display: inline-block; font-size: 8px; color: var(--text-dim); cursor: pointer;
+      margin-top: 2px; user-select: none; letter-spacing: .5px;
+    }
+    .reason-expand:hover { color: var(--gold); }
     .move-think-toggle {
       font-size: 8px; color: var(--text-dim); cursor: pointer; margin-top: 3px;
       user-select: none; display: inline-block;
@@ -456,7 +465,7 @@
 
     /* ── Eval graph ──────────────────────────────────────────────── */
     .eval-pane { border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    .eval-svg  { display: block; width: 100%; height: 46px; }
+    .eval-svg  { display: block; width: 100%; height: 56px; }
 
     /* ── Collapsible panels ──────────────────────────────────────── */
     .ctrl-head { cursor: pointer; user-select: none; }
