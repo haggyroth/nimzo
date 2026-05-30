@@ -18,7 +18,6 @@ from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -210,14 +209,14 @@ class TestWebSocketNotBlocked:
     """A-7 — WS upgrade arrives as GET; must not be blocked by auth middleware."""
 
     def test_ws_connect_allowed_no_auth(self, client_no_auth):
-        with client_no_auth.websocket_connect("/ws") as ws:
+        with client_no_auth.websocket_connect("/ws") as _ws:
             # If we get here the upgrade was not rejected by auth middleware.
             # Close immediately.
             pass  # TestClient raises on error, so success = no exception
 
     def test_ws_connect_allowed_with_auth_configured(self, client_with_auth):
         """WS should still connect even when API key auth is enabled."""
-        with client_with_auth.websocket_connect("/ws") as ws:
+        with client_with_auth.websocket_connect("/ws") as _ws:
             pass
 
 

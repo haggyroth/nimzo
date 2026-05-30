@@ -502,7 +502,6 @@ class TestLANWarning:
     def test_warning_in_cli_main(self, monkeypatch, capsys):
         """The LAN auth notice appears in real cli.main() output when host=0.0.0.0."""
         import arena.cli as cli
-        import arena.state as _st
 
         # Patch uvicorn.run to do nothing so we don't actually start a server
         monkeypatch.setattr("uvicorn.run", lambda *a, **kw: None)
