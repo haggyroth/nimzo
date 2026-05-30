@@ -34,10 +34,10 @@ Features that directly improve the live game experience.
 Deeper post-game insight without requiring external tools.
 
 - [ ] **Per-game Stockfish annotation** — after a game ends, re-run the PGN at depth 20 and store blunder/mistake/inaccuracy annotations as a second quality layer; surface in the replay modal
-- [ ] **Opening explorer** — "Opening Explorer" section in Results: ECO codes each model plays, win rate by opening, from stored game PGNs
-- [ ] **PGN export from live view** — one-click download of the current game PGN from the header (not just from the history table)
-- [ ] **Replay modal eval bar** — show stored per-move centipawn scores as a mini eval bar in the replay modal's move strip
-- [ ] **Puzzle gauntlet results page** — full results for puzzle gauntlet mode: solve rate by difficulty, time-to-solve distribution, model comparison
+- [x] **Opening explorer** — "Opening Explorer" section in Results: ECO codes each model plays, win rate by opening, from stored game PGNs
+- [x] **PGN export from live view** — one-click download of the current game PGN from the header (not just from the history table)
+- [x] **Replay modal eval bar** — show stored per-move centipawn scores as a mini eval bar in the replay modal's move strip
+- [x] **Puzzle gauntlet results page** — full results for puzzle gauntlet mode: time-to-solve distribution and per-puzzle model comparison; expandable gauntlet rows in Gauntlet History
 
 ---
 

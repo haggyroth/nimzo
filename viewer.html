@@ -29,6 +29,7 @@
       <button class="hdr-btn" id="btnPause"  onclick="pauseTournament()">⏸ Pause</button>
       <button class="hdr-btn" id="btnResume" onclick="resumeTournament()">▶ Resume</button>
       <button class="hdr-btn danger" id="btnStop" onclick="stopTournament()">■ Stop</button>
+      <button class="hdr-btn show" id="btnHdrPgn" style="display:none" onclick="downloadGamePgn(gameState.lastGameId)" title="Download last game PGN">↓ PGN</button>
     </div>
   </div>
 
@@ -596,6 +597,8 @@
         </div>
       </div>
       <div id="puzzleHistoryBody"><div class="lb-empty">No gauntlets yet</div></div>
+      <!-- Puzzle detail panel — populated when a gauntlet row is expanded -->
+      <div id="puzzleDetailPanel" style="display:none"></div>
     </div>
 
     <!-- Leaderboard section -->
@@ -610,6 +613,18 @@
       <div id="leaderboardBody">
         <div class="lb-empty">No games yet</div>
       </div>
+    </div>
+
+    <!-- Opening Explorer section -->
+    <div class="ctrl-section collapsed" id="openingsSection">
+      <div class="ctrl-head" onclick="toggleSection('openingsSection')">
+        Opening Explorer
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadOpenings()">↻</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div id="openingsBody"><div class="lb-empty">No games yet</div></div>
     </div>
 
     <!-- Head-to-Head section -->

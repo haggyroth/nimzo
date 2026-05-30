@@ -1866,6 +1866,8 @@ function onGameOver(d) {
     ? `${d.opening_eco} · ${d.opening_name}` : '';
   document.getElementById('ovDownloadBtn').style.display = d.game_id ? '' : 'none';
   document.getElementById('ovLichessBtn').style.display  = d.game_id ? '' : 'none';
+  const hdrPgnBtn = document.getElementById('btnHdrPgn');
+  if (hdrPgnBtn) hdrPgnBtn.style.display = d.game_id ? '' : 'none';
 
   // ELO delta — compute before gameState.white/black.elo is updated below
   function _eloDeltaChip(before, after) {
@@ -2808,6 +2810,7 @@ buildUiThemeSwatches();
   loadLeaderboard();
   loadHistory();
   loadTournamentHistory();
+  loadOpenings();
   setInterval(loadLeaderboard, 30000);
 
   // ── Puzzle gauntlet ────────────────────────────────────────────────────
@@ -3025,16 +3028,148 @@ buildUiThemeSwatches();
       }
       el.innerHTML = gauntlets.map(g => {
         const date = g.started_at ? g.started_at.slice(0, 10) : '?';
-        const scoresHtml = (g.scores || [])
-          .map(s => `<div class="puzzle-hist-score">${escHtml(s.name)}: ${s.solved}/${s.total} (${(s.fraction*100).toFixed(0)}%)</div>`)
-          .join('');
-        return `<div class="puzzle-hist-entry">
-          <div class="puzzle-hist-head">${date} · ${g.puzzle_count} puzzles · ${g.status}</div>
+        // Rank players by solve fraction for medal display
+        const sorted = [...(g.scores || [])].sort((a, b) => (b.fraction||0) - (a.fraction||0));
+        const scoresHtml = sorted.map((s, i) => {
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+          const pct   = (s.fraction * 100).toFixed(0);
+          const avgMs = s.avg_elapsed_ms ? `${(s.avg_elapsed_ms / 1000).toFixed(1)}s avg` : '';
+          return `<div class="puzzle-hist-score">
+            ${medal} <strong>${escHtml(s.name || s.player || '')}</strong>
+            &nbsp;${s.solved}/${s.total} (${pct}%)${avgMs ? ` · ⌚ ${avgMs}` : ''}
+          </div>`;
+        }).join('');
+        return `<div class="puzzle-hist-entry" id="phist-${g.id}">
+          <div class="puzzle-hist-head" onclick="togglePuzzleDetail(${g.id})" style="cursor:pointer">
+            ${date} · ${g.puzzle_count} puzzles
+            <span class="puzzle-detail-chevron" id="pdetail-chev-${g.id}">▸</span>
+          </div>
           ${scoresHtml}
+          <div class="puzzle-detail-body" id="pdetail-${g.id}" style="display:none"></div>
         </div>`;
       }).join('');
     } catch (_) {
       el.innerHTML = '<div class="lb-empty">Failed to load</div>';
+    }
+  }
+
+  async function togglePuzzleDetail(gauntletId) {
+    const body = document.getElementById(`pdetail-${gauntletId}`);
+    const chev = document.getElementById(`pdetail-chev-${gauntletId}`);
+    if (!body) return;
+    if (body.style.display !== 'none') {
+      body.style.display = 'none';
+      if (chev) chev.textContent = '▸';
+      return;
+    }
+    // Lazy-load detail
+    if (!body.dataset.loaded) {
+      body.innerHTML = '<div class="lb-empty">Loading…</div>';
+      body.style.display = '';
+      if (chev) chev.textContent = '▾';
+      try {
+        const rows = await fetch(`${API}/api/puzzle/results/${gauntletId}`).then(r => r.json());
+        body.innerHTML = renderPuzzleDetail(rows);
+        body.dataset.loaded = '1';
+      } catch (_) {
+        body.innerHTML = '<div class="lb-empty">Failed to load detail</div>';
+      }
+    } else {
+      body.style.display = '';
+      if (chev) chev.textContent = '▾';
+    }
+  }
+
+  function renderPuzzleDetail(rows) {
+    if (!rows || rows.length === 0) return '<div class="lb-empty">No detail available</div>';
+    // Group by puzzle_index
+    const byPuzzle = {};
+    for (const r of rows) {
+      if (!byPuzzle[r.puzzle_index]) byPuzzle[r.puzzle_index] = [];
+      byPuzzle[r.puzzle_index].push(r);
+    }
+    const puzzleIdxs = Object.keys(byPuzzle).map(Number).sort((a, b) => a - b);
+    const players = [...new Set(rows.map(r => r.name))].sort();
+
+    // Header row
+    const thPlayers = players.map(p => `<th title="${escHtml(p)}">${escHtml(p.slice(0, 8))}</th>`).join('');
+    const tRows = puzzleIdxs.map(idx => {
+      const puzzleRows = byPuzzle[idx];
+      const cells = players.map(name => {
+        const r = puzzleRows.find(x => x.name === name);
+        if (!r) return '<td>—</td>';
+        const icon  = r.solved ? '✓' : '✗';
+        const cls   = r.solved ? 'pz-solved' : 'pz-missed';
+        const t     = r.elapsed_ms != null ? `${(r.elapsed_ms / 1000).toFixed(1)}s` : '';
+        return `<td class="${cls}" title="${t}">${icon}${t ? ` <small>${t}</small>` : ''}</td>`;
+      }).join('');
+      return `<tr><td class="pz-idx">${idx + 1}</td>${cells}</tr>`;
+    }).join('');
+
+    // Time distribution summary per player
+    const timeSummary = players.map(name => {
+      const times = rows.filter(r => r.name === name && r.elapsed_ms != null).map(r => r.elapsed_ms);
+      if (times.length === 0) return '';
+      const avg = (times.reduce((a, b) => a + b, 0) / times.length / 1000).toFixed(1);
+      const min = (Math.min(...times) / 1000).toFixed(1);
+      const max = (Math.max(...times) / 1000).toFixed(1);
+      return `<div class="pz-time-row"><strong>${escHtml(name)}</strong>: ⌚ avg ${avg}s · min ${min}s · max ${max}s</div>`;
+    }).filter(Boolean).join('');
+
+    return `
+      <div class="pz-detail-wrap">
+        <table class="pz-detail-table">
+          <thead><tr><th>#</th>${thPlayers}</tr></thead>
+          <tbody>${tRows}</tbody>
+        </table>
+        ${timeSummary ? `<div class="pz-time-summary">${timeSummary}</div>` : ''}
+      </div>`;
+  }
+
+  // ── Opening Explorer ──────────────────────────────────────────────────
+
+  async function loadOpenings() {
+    const el = document.getElementById('openingsBody');
+    if (!el) return;
+    el.innerHTML = '<div class="lb-empty">Loading…</div>';
+    try {
+      const rows = await fetch(`${API}/api/stats/openings`).then(r => r.json());
+      if (!rows || rows.length === 0) {
+        el.innerHTML = '<div class="lb-empty">No games with recognised openings yet</div>';
+        return;
+      }
+      const tableRows = rows.map(r => {
+        const total  = r.games;
+        const wPct   = total ? ((r.white_wins / total) * 100).toFixed(0) : 0;
+        const dPct   = total ? ((r.draws       / total) * 100).toFixed(0) : 0;
+        const bPct   = total ? ((r.black_wins  / total) * 100).toFixed(0) : 0;
+        const name   = r.opening_name || r.eco_code || '?';
+        return `<tr>
+          <td class="op-eco">${escHtml(r.eco_code || '')}</td>
+          <td class="op-name" title="${escHtml(name)}">${escHtml(name.length > 22 ? name.slice(0, 22) + '…' : name)}</td>
+          <td class="op-games">${total}</td>
+          <td class="op-bar">
+            <div class="op-bar-wrap">
+              <div class="op-seg op-w" style="width:${wPct}%" title="White wins ${wPct}%"></div>
+              <div class="op-seg op-d" style="width:${dPct}%" title="Draws ${dPct}%"></div>
+              <div class="op-seg op-b" style="width:${bPct}%" title="Black wins ${bPct}%"></div>
+            </div>
+          </td>
+          <td class="op-pcts">${wPct}·${dPct}·${bPct}</td>
+        </tr>`;
+      }).join('');
+      el.innerHTML = `
+        <div style="font-size:9px;color:var(--text-dim);margin-bottom:4px;padding:0 2px">
+          W · D · B %
+        </div>
+        <table class="openings-table">
+          <thead><tr>
+            <th>ECO</th><th>Opening</th><th>G</th><th></th><th>%</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>`;
+    } catch (_) {
+      el.innerHTML = '<div class="lb-empty">Failed to load openings</div>';
     }
   }
 
@@ -3044,6 +3179,8 @@ buildUiThemeSwatches();
   window.fetchPzModels      = fetchPzModels;
   window.startPuzzleGauntlet= startPuzzleGauntlet;
   window.loadPuzzleHistory  = loadPuzzleHistory;
+  window.togglePuzzleDetail = togglePuzzleDetail;
+  window.loadOpenings       = loadOpenings;
 
   // ── End puzzle gauntlet section ────────────────────────────────────────
 
