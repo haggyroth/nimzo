@@ -115,6 +115,15 @@
   <!-- ── Right control panel ──────────────────────────────────────── -->
   <div class="right-panel" id="rightPanel">
 
+    <!-- Tab bar -->
+    <div class="rp-tab-bar">
+      <button class="rp-tab active" id="rpTabConfigure" onclick="setRightTab('configure')">Configure</button>
+      <button class="rp-tab" id="rpTabResults" onclick="setRightTab('results')">Results</button>
+    </div>
+
+    <!-- Configure content -->
+    <div id="rpConfigureContent">
+
     <!-- Tournament section -->
     <div class="ctrl-section" id="tournamentSection">
       <div class="ctrl-head" onclick="toggleSection('tournamentSection')">
@@ -455,92 +464,6 @@
       </div>
     </div>
 
-    <!-- Live standings (tournament mode only) -->
-    <div class="ctrl-section" id="standingsSection" style="display:none">
-      <div class="ctrl-head" onclick="toggleSection('standingsSection')">
-        Live Standings <span class="chevron">▾</span>
-      </div>
-      <div id="standingsBody"></div>
-    </div>
-
-    <!-- Elimination bracket (shown during/after elimination tournament) -->
-    <div class="ctrl-section" id="bracketSection" style="display:none">
-      <div class="ctrl-head" onclick="toggleSection('bracketSection')">
-        Bracket <span class="chevron">▾</span>
-      </div>
-      <div id="bracketBody" style="overflow-x:auto"></div>
-    </div>
-
-    <!-- Puzzle scoreboard (shown during/after gauntlet) -->
-    <div class="ctrl-section" id="puzzleScoreSection" style="display:none">
-      <div class="ctrl-head" onclick="toggleSection('puzzleScoreSection')">
-        Puzzle Scores <span class="chevron">▾</span>
-      </div>
-      <div id="puzzleScoreBody"></div>
-    </div>
-
-    <!-- Puzzle history -->
-    <div class="ctrl-section" id="puzzleHistorySection" style="display:none">
-      <div class="ctrl-head" onclick="toggleSection('puzzleHistorySection')">
-        Gauntlet History
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadPuzzleHistory()">↻</span>
-          <span class="chevron">▾</span>
-        </div>
-      </div>
-      <div id="puzzleHistoryBody"><div class="lb-empty">No gauntlets yet</div></div>
-    </div>
-
-    <!-- Leaderboard section -->
-    <div class="ctrl-section" id="leaderboardSection">
-      <div class="ctrl-head" onclick="toggleSection('leaderboardSection')">
-        Leaderboard
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadLeaderboard()">↻</span>
-          <span class="chevron">▾</span>
-        </div>
-      </div>
-      <div id="leaderboardBody">
-        <div class="lb-empty">No games yet</div>
-      </div>
-    </div>
-
-    <!-- Head-to-Head section -->
-    <div class="ctrl-section collapsed" id="h2hSection">
-      <div class="ctrl-head" onclick="toggleSection('h2hSection')">
-        Head to Head <span class="chevron">▾</span>
-      </div>
-      <div class="h2h-form">
-        <select class="ctrl-select" id="h2hPlayerA" style="flex:1"><option value="">— Player A —</option></select>
-        <select class="ctrl-select" id="h2hPlayerB" style="flex:1"><option value="">— Player B —</option></select>
-        <button class="start-btn" style="margin-top:4px;padding:5px" onclick="runH2H()">Compare</button>
-      </div>
-      <div id="h2hBody"></div>
-    </div>
-
-    <!-- Lessons section -->
-    <div class="ctrl-section" id="lessonsSection">
-      <div class="ctrl-head" onclick="toggleSection('lessonsSection')">Latest Lessons <span class="chevron">▾</span></div>
-      <div id="lessonsBody">
-        <div class="lessons-empty">Lessons appear here after each game</div>
-      </div>
-    </div>
-
-    <!-- Recent games section -->
-    <div class="ctrl-section" id="historySection">
-      <div class="ctrl-head" onclick="toggleSection('historySection')">
-        Recent Games
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadHistory()">↻</span>
-          <span title="Export all games as PGN" style="font-size:10px;color:var(--text-dim);cursor:pointer" onclick="event.stopPropagation();exportAllPgn()">⬇ PGN</span>
-          <span class="chevron">▾</span>
-        </div>
-      </div>
-      <div id="historyBody">
-        <div class="lb-empty">No games yet</div>
-      </div>
-    </div>
-
     <!-- Settings section -->
     <div class="ctrl-section" id="settingsSection">
       <div class="ctrl-head" onclick="toggleSection('settingsSection')">
@@ -636,6 +559,97 @@
       </div>
     </div>
 
+    </div><!-- end rpConfigureContent -->
+
+    <!-- Results content -->
+    <div id="rpResultsContent" style="display:none">
+
+    <!-- Live standings (tournament mode only) -->
+    <div class="ctrl-section" id="standingsSection" style="display:none">
+      <div class="ctrl-head" onclick="toggleSection('standingsSection')">
+        Live Standings <span class="chevron">▾</span>
+      </div>
+      <div id="standingsBody"></div>
+    </div>
+
+    <!-- Elimination bracket (shown during/after elimination tournament) -->
+    <div class="ctrl-section" id="bracketSection" style="display:none">
+      <div class="ctrl-head" onclick="toggleSection('bracketSection')">
+        Bracket <span class="chevron">▾</span>
+      </div>
+      <div id="bracketBody" style="overflow-x:auto"></div>
+    </div>
+
+    <!-- Puzzle scoreboard (shown during/after gauntlet) -->
+    <div class="ctrl-section" id="puzzleScoreSection" style="display:none">
+      <div class="ctrl-head" onclick="toggleSection('puzzleScoreSection')">
+        Puzzle Scores <span class="chevron">▾</span>
+      </div>
+      <div id="puzzleScoreBody"></div>
+    </div>
+
+    <!-- Puzzle history -->
+    <div class="ctrl-section" id="puzzleHistorySection" style="display:none">
+      <div class="ctrl-head" onclick="toggleSection('puzzleHistorySection')">
+        Gauntlet History
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadPuzzleHistory()">↻</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div id="puzzleHistoryBody"><div class="lb-empty">No gauntlets yet</div></div>
+    </div>
+
+    <!-- Leaderboard section -->
+    <div class="ctrl-section" id="leaderboardSection">
+      <div class="ctrl-head" onclick="toggleSection('leaderboardSection')">
+        Leaderboard
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadLeaderboard()">↻</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div id="leaderboardBody">
+        <div class="lb-empty">No games yet</div>
+      </div>
+    </div>
+
+    <!-- Head-to-Head section -->
+    <div class="ctrl-section collapsed" id="h2hSection">
+      <div class="ctrl-head" onclick="toggleSection('h2hSection')">
+        Head to Head <span class="chevron">▾</span>
+      </div>
+      <div class="h2h-form">
+        <select class="ctrl-select" id="h2hPlayerA" style="flex:1"><option value="">— Player A —</option></select>
+        <select class="ctrl-select" id="h2hPlayerB" style="flex:1"><option value="">— Player B —</option></select>
+        <button class="start-btn" style="margin-top:4px;padding:5px" onclick="runH2H()">Compare</button>
+      </div>
+      <div id="h2hBody"></div>
+    </div>
+
+    <!-- Lessons section -->
+    <div class="ctrl-section" id="lessonsSection">
+      <div class="ctrl-head" onclick="toggleSection('lessonsSection')">Latest Lessons <span class="chevron">▾</span></div>
+      <div id="lessonsBody">
+        <div class="lessons-empty">Lessons appear here after each game</div>
+      </div>
+    </div>
+
+    <!-- Recent games section -->
+    <div class="ctrl-section" id="historySection">
+      <div class="ctrl-head" onclick="toggleSection('historySection')">
+        Recent Games
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:8px;color:var(--text-dim)" onclick="event.stopPropagation();loadHistory()">↻</span>
+          <span title="Export all games as PGN" style="font-size:10px;color:var(--text-dim);cursor:pointer" onclick="event.stopPropagation();exportAllPgn()">⬇ PGN</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div id="historyBody">
+        <div class="lb-empty">No games yet</div>
+      </div>
+    </div>
+
     <!-- Tournament history section -->
     <div class="ctrl-section" id="tournamentHistorySection">
       <div class="ctrl-head" onclick="toggleSection('tournamentHistorySection')">
@@ -649,6 +663,8 @@
         <div class="lb-empty">No tournaments yet</div>
       </div>
     </div>
+
+    </div><!-- end rpResultsContent -->
 
   </div>
 </main>
