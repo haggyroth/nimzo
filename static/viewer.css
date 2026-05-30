@@ -485,6 +485,30 @@
     .right-panel::-webkit-scrollbar { width: 2px; }
     .right-panel::-webkit-scrollbar-thumb { background: var(--border-hi); }
 
+    /* ── Right-panel tab bar ─────────────────────────────────────── */
+    .rp-tab-bar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .rp-tab {
+      flex: 1;
+      padding: 8px 4px;
+      font-family: var(--ui-font);
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+      text-align: center;
+    }
+    .rp-tab.active       { color: var(--gold); border-bottom-color: var(--gold); }
+    .rp-tab:hover:not(.active) { color: var(--text); }
+
     .ctrl-section {
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
@@ -653,6 +677,11 @@
     }
     .lesson-item.improve  { border-left-color: var(--q-blunder); }
     .lesson-item.strength { border-left-color: var(--q-excellent); }
+    @keyframes lessonGlow {
+      0%   { background: rgba(200,146,30,.18); }
+      100% { background: var(--bg-card); }
+    }
+    .lesson-item.new { animation: lessonGlow 1.5s ease-out forwards; }
     .lesson-type-label { font-size: 7px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 2px; }
     .lesson-type-label.improve  { color: var(--q-blunder); }
     .lesson-type-label.strength { color: var(--q-excellent); }

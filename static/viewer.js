@@ -770,12 +770,29 @@ function addMoveCard(data) {
   pane.prepend(card);
 }
 
+// ── Right-panel tab ───────────────────────────────────────────────────────
+let _rightTab = 'configure';
+const _lessonsRendered = new Set();  // tracks which player names have been shown at least once
+
+function setRightTab(tab) {
+  _rightTab = tab;
+  document.getElementById('rpTabConfigure').classList.toggle('active', tab === 'configure');
+  document.getElementById('rpTabResults').classList.toggle('active', tab === 'results');
+  document.getElementById('rpConfigureContent').style.display = tab === 'configure' ? '' : 'none';
+  document.getElementById('rpResultsContent').style.display   = tab === 'results'   ? '' : 'none';
+}
+
 // ── Lessons panel ─────────────────────────────────────────────────────────
 let _allLessons = {};   // keyed by player name
 
 function showLessons(playerName, color, improve, strength) {
   _allLessons[playerName] = { color, improve, strength };
   renderLessons();
+  // Surface the lessons: switch to Results tab, uncollapse section, scroll to it
+  setRightTab('results');
+  const sec = document.getElementById('lessonsSection');
+  if (sec && sec.classList.contains('collapsed')) sec.classList.remove('collapsed');
+  setTimeout(() => sec && sec.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
 }
 
 function renderLessons() {
@@ -787,17 +804,20 @@ function renderLessons() {
   }
   let html = '<div class="lessons-body">';
   for (const [name, { improve, strength }] of entries) {
+    const isNew = !_lessonsRendered.has(name);
+    const newCls = isNew ? ' new' : '';
     html += `<div class="lesson-player">${escHtml(name)}</div>`;
     if (improve.length) {
       html += '<div class="lesson-type-label improve">Areas to improve</div><div class="lesson-group">';
-      improve.forEach(l => { html += `<div class="lesson-item improve">${escHtml(l)}</div>`; });
+      improve.forEach(l => { html += `<div class="lesson-item improve${newCls}">${escHtml(l)}</div>`; });
       html += '</div>';
     }
     if (strength.length) {
       html += '<div class="lesson-type-label strength">Strengths</div><div class="lesson-group">';
-      strength.forEach(l => { html += `<div class="lesson-item strength">${escHtml(l)}</div>`; });
+      strength.forEach(l => { html += `<div class="lesson-item strength${newCls}">${escHtml(l)}</div>`; });
       html += '</div>';
     }
+    _lessonsRendered.add(name);
   }
   html += '</div>';
   body.innerHTML = html;
@@ -1367,6 +1387,9 @@ function updateTournamentUI(status, gameNumber, totalGames) {
     document.getElementById('progressFill').style.width = pct + '%';
     info.textContent = `Game ${gameNumber}/${totalGames}`;
   }
+
+  // Auto-switch to Results when the match/tournament finishes
+  if (status === 'idle') setRightTab('results');
 }
 
 // ── Model fetching ────────────────────────────────────────────────────────
@@ -1560,6 +1583,7 @@ function onGameStart(d) {
   // d.human_assisted is undefined, which would always coerce to true and
   // override the value already set by tournament_status.
   _allLessons = {};
+  _lessonsRendered.clear();
   evalHistory = [];
   gameState.elapsedSum   = { white: 0, black: 0 };
   gameState.elapsedCount = { white: 0, black: 0 };
