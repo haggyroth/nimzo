@@ -176,6 +176,10 @@
                     <span>Candidates</span>
                     <input type="number" id="whiteCandidates" value="0" min="0" max="20" style="width:52px" placeholder="5">
                   </div>
+                  <div class="games-row" title="Sampling temperature (0 = deterministic, 1 = default, 2 = very random). Leave blank to use the model default (0.3).">
+                    <span>Temperature</span>
+                    <input type="number" id="whiteTemperature" value="" min="0" max="2" step="0.05" style="width:52px" placeholder="0.3">
+                  </div>
                   <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
                     <span>Blind opening moves</span>
                     <input type="number" id="whiteBlindMoves" value="0" min="0" max="20" style="width:52px">
@@ -218,6 +222,10 @@
                   <div class="games-row" title="Stockfish candidates shown to this model (0 = default 5). Raise for weaker models, lower for stronger ones to create balanced handicap matches.">
                     <span>Candidates</span>
                     <input type="number" id="blackCandidates" value="0" min="0" max="20" style="width:52px" placeholder="5">
+                  </div>
+                  <div class="games-row" title="Sampling temperature (0 = deterministic, 1 = default, 2 = very random). Leave blank to use the model default (0.3).">
+                    <span>Temperature</span>
+                    <input type="number" id="blackTemperature" value="" min="0" max="2" step="0.05" style="width:52px" placeholder="0.3">
                   </div>
                   <div class="games-row" title="Withhold Stockfish candidates for the first N full moves; model plays from its own chess knowledge">
                     <span>Blind opening moves</span>

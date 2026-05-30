@@ -594,6 +594,54 @@ def get_game_moves(game_id: int) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_reasoning_dataset(
+    limit: int = 10000,
+    quality: Optional[str] = None,
+    model_id: Optional[str] = None,
+) -> list[dict]:
+    """
+    Return move records suitable for fine-tuning / research export.
+
+    Fields: game_id, move_number, san, uci, fen_after, quality,
+    candidate_rank, score_cp, reasoning, thinking_content,
+    model_id, model_name.
+    """
+    params: list = []
+    filters: list[str] = ["m.reasoning IS NOT NULL", "m.reasoning != ''"]
+    if quality:
+        filters.append("m.quality = ?")
+        params.append(quality)
+    if model_id:
+        filters.append("p.model_id = ?")
+        params.append(model_id)
+    where = "WHERE " + " AND ".join(filters)
+    params.append(limit)
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT m.game_id,
+                   m.move_number,
+                   m.move_san        AS san,
+                   m.move_uci        AS uci,
+                   m.fen_after,
+                   m.quality,
+                   m.candidate_rank,
+                   m.score_cp,
+                   m.reasoning,
+                   m.thinking_content,
+                   p.model_id,
+                   p.name            AS model_name
+            FROM moves m
+            JOIN players p ON m.player_id = p.id
+            {where}
+            ORDER BY m.game_id DESC, m.move_number ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_coherence_stats(model_id: str) -> dict:
     """
     Return average coherence score and timeout rate for a model.

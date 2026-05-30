@@ -136,9 +136,9 @@ const _FORM_KEY = 'nimzo_form_state';
 function saveFormState() {
   const ids = [
     'whiteName','whiteBackend','whiteUrl','whiteModel','whiteStyle',
-    'whiteThinking','whiteCandidates','whiteBlindMoves','whiteBlind',
+    'whiteThinking','whiteCandidates','whiteTemperature','whiteBlindMoves','whiteBlind',
     'blackName','blackBackend','blackUrl','blackModel','blackStyle',
-    'blackThinking','blackCandidates','blackBlindMoves','blackBlind',
+    'blackThinking','blackCandidates','blackTemperature','blackBlindMoves','blackBlind',
     'tutorBackend','tutorUrl','tutorModel',
     'judgeBackend','judgeUrl','judgeModel',
     'gamesCount','adaptiveDifficulty','maxMoves','moveTimeout','openingPgn',
@@ -1366,6 +1366,8 @@ async function startTournament() {
     black_blind: document.getElementById('blackBlind')?.checked ?? false,
     white_candidate_count: parseInt(document.getElementById('whiteCandidates')?.value) || null,
     black_candidate_count: parseInt(document.getElementById('blackCandidates')?.value) || null,
+    white_temperature: parseFloat(document.getElementById('whiteTemperature')?.value) || null,
+    black_temperature: parseFloat(document.getElementById('blackTemperature')?.value) || null,
     max_moves:                parseInt(document.getElementById('maxMoves')?.value) || 0,
     move_timeout:             parseInt(document.getElementById('moveTimeout')?.value) || 0,
     opening_pgn:              (document.getElementById('openingPgn')?.value || '').trim(),
@@ -3202,5 +3204,26 @@ buildUiThemeSwatches();
     const pathMatch = location.pathname.match(/\/watch\/(\d+)$/);
     const gameIdStr = pathMatch ? pathMatch[1] : new URLSearchParams(location.search).get('game');
     if (gameIdStr) openReplay(parseInt(gameIdStr, 10));
+  })();
+
+  // ── Spectator mode (?spectate or ?spectate=true) ───────────────────
+  (function _initSpectatorMode() {
+    const params = new URLSearchParams(location.search);
+    if (!params.has('spectate') && params.get('spectate') !== 'true') return;
+    document.body.classList.add('spectate-mode');
+    // Hide the right-side control panel
+    const rightCol = document.querySelector('.rp-board-col');
+    if (rightCol) rightCol.style.display = 'none';
+    // Hide header controls and toggle buttons
+    ['hdr-controls', 'header-center'].forEach(cls => {
+      document.querySelectorAll(`.${cls}`).forEach(el => { el.style.display = 'none'; });
+    });
+    ['btnToggleCenter', 'btnToggleRight', 'btnHdrPgn'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    // Expand center analysis panel if it was hidden
+    const boardCol = document.getElementById('boardCol');
+    if (boardCol) boardCol.classList.remove('center-hidden');
   })();
 })();
