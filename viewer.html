@@ -140,6 +140,7 @@
           <button class="mode-tab active" id="tabMatch"      onclick="setMode('match')">Match</button>
           <button class="mode-tab"        id="tabTournament" onclick="setMode('tournament')">Tournament</button>
           <button class="mode-tab"        id="tabPuzzle"     onclick="setMode('puzzle')">Puzzles</button>
+          <button class="mode-tab"        id="tabLadder"     onclick="setMode('ladder')">Ladder</button>
         </div>
 
         <!-- ── Match mode ── -->
@@ -410,6 +411,37 @@
           </div>
         </div>
 
+        <!-- ── Ladder mode ── -->
+        <div id="ladderForm" style="display:none">
+          <div class="ctrl-body">
+
+            <p style="font-size:10px;color:var(--text-dim);margin:0 0 8px;line-height:1.5">
+              Continuous round-robin: always plays the pair with fewest games.
+              ELO updates after every game. Set games/pair to 0 for endless play.
+            </p>
+
+            <!-- Games per pair -->
+            <div class="games-row" title="Stop after every pair has played this many games. 0 = run indefinitely until stopped.">
+              <span>Games / pair</span>
+              <input type="number" id="ladderGamesPair" value="0" min="0" max="100" style="width:52px" placeholder="∞">
+            </div>
+
+            <div class="games-row" title="Per-move time limit in seconds. 0 = no limit.">
+              <span>Move timeout (s)</span>
+              <input type="number" id="ladderMoveTimeout" value="0" min="0" max="3600" style="width:60px" placeholder="0">
+            </div>
+
+            <hr class="divider">
+
+            <!-- Dynamic player list -->
+            <div id="ladderPlayerList" style="display:flex;flex-direction:column;gap:8px"></div>
+            <button class="trn-add-btn" onclick="ladderAddPlayer()">+ Add Player</button>
+
+            <hr class="divider">
+            <button class="start-btn" id="ladderStartBtn" onclick="startLadder()">▶ Start Ladder</button>
+          </div>
+        </div>
+
         <!-- ── Puzzle Gauntlet mode ── -->
         <div id="puzzleForm" style="display:none">
           <div class="ctrl-body">
@@ -570,6 +602,14 @@
     <!-- Results group (collapsed by default) -->
     <div class="rp-group collapsed" id="rpResultsGroup">
     <div class="ctrl-head" onclick="toggleSection('rpResultsGroup')">Results <span class="chevron">▾</span></div>
+
+    <!-- Ladder standings (ladder mode only) -->
+    <div class="ctrl-section" id="ladderSection" style="display:none">
+      <div class="ctrl-head" onclick="toggleSection('ladderSection')">
+        Ladder Standings <span class="chevron">▾</span>
+      </div>
+      <div id="ladderBody"></div>
+    </div>
 
     <!-- Live standings (tournament mode only) -->
     <div class="ctrl-section" id="standingsSection" style="display:none">

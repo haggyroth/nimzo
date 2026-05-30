@@ -1287,6 +1287,130 @@ async def run_tournament(
     await _arena.broadcast({"type": "tournament_status", **_arena._state})
 
 
+# ── ELO ladder runner ─────────────────────────────────────────────────────
+
+
+async def run_ladder(
+    players: list[ChessPlayer],
+    tutor: "TutorConfig | None" = None,
+    judge: "JudgeConfig | None" = None,
+    games_per_pair: int = 0,
+    adaptive_difficulty: bool = False,
+    max_moves: int = 0,
+):
+    """
+    Run a continuous round-robin ELO ladder.
+
+    On each iteration the pair with the fewest games played is selected
+    (ties broken by earliest index order) and one game is run.  Colors
+    alternate every time the same pair is matched up.
+
+    ``games_per_pair=0`` means run indefinitely until a stop is requested.
+    A positive value stops when every pair has reached that count.
+
+    Broadcasts ``tournament_status`` before each game (same payload as a
+    normal tournament) and ``ladder_update`` after each game with the
+    current standings sorted by ELO descending.
+    """
+    n = len(players)
+    # Map sorted (a, b) pair index tuple → games played
+    pair_counts: dict[tuple[int, int], int] = {
+        (a, b): 0
+        for a, b in itertools.combinations(range(n), 2)
+    }
+
+    game_number = 0
+    total_pairs = len(pair_counts)
+    total_games = total_pairs * games_per_pair if games_per_pair > 0 else 0
+
+    with StockfishEngine() as stockfish:
+        while True:
+            await _arena._pause_event.wait()
+            if _arena._stop["requested"]:
+                break
+
+            # Lowest play-count among all pairs
+            min_count = min(pair_counts.values())
+
+            # Stop condition: every pair has reached games_per_pair
+            if games_per_pair > 0 and min_count >= games_per_pair:
+                break
+
+            # Pick first pair (lowest indices) that is tied for minimum
+            a_idx, b_idx = next(
+                (pair for pair, cnt in pair_counts.items() if cnt == min_count)
+            )
+
+            # Alternate colors: even count → (a, b) as (white, black)
+            pair_count = pair_counts[(a_idx, b_idx)]
+            if pair_count % 2 == 0:
+                white, black = players[a_idx], players[b_idx]
+            else:
+                white, black = players[b_idx], players[a_idx]
+
+            game_number += 1
+            pair_counts[(a_idx, b_idx)] += 1
+
+            _arena._state.update({
+                "status":      "running",
+                "game_number": game_number,
+                "total_games": total_games,
+                "white":       white.config.name,
+                "black":       black.config.name,
+                "white_elo":   round(white.elo),
+                "black_elo":   round(black.elo),
+                "format":      "ladder",
+                "standings":   None,
+            })
+            await _arena.broadcast({"type": "tournament_status", **_arena._state})
+
+            logger.info(
+                "Ladder game %d: %s (W) vs %s (B)",
+                game_number, white.config.name, black.config.name,
+            )
+            try:
+                summary = await play_game(
+                    white, black, stockfish, game_number,
+                    tutor, judge,
+                    adaptive_difficulty=adaptive_difficulty,
+                    max_moves=max_moves or 500,
+                )
+            except _arena.TournamentAborted:
+                logger.info("Ladder stopped by user.")
+                break
+
+            logger.info(
+                "Result: %s in %d moves | ELO: %s=%d %s=%d",
+                summary["result"], summary["moves"],
+                white.config.name, round(white.elo),
+                black.config.name, round(black.elo),
+            )
+
+            # Broadcast ladder standings (ELO descending)
+            standings = sorted(
+                [
+                    {
+                        "name":     p.config.name,
+                        "model_id": p.config.model_id,
+                        "elo":      round(p.elo),
+                    }
+                    for p in players
+                ],
+                key=lambda x: -x["elo"],
+            )
+            await _arena.broadcast({
+                "type":        "ladder_update",
+                "standings":   standings,
+                "game_number": game_number,
+            })
+
+            if not _arena._mode["headless"]:
+                await asyncio.sleep(2)
+
+    _arena._state["status"] = "idle"
+    await _arena.broadcast({"type": "tournament_status", **_arena._state})
+
+
 # ── Puzzle gauntlet runner ────────────────────────────────────────────────
 
 
