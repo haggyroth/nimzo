@@ -1089,41 +1089,178 @@ async function runH2H() {
   }
 }
 
+// ── Model comparison modal ────────────────────────────────────────────────
+
+async function openCompareModal(modelIdA, modelIdB) {
+  if (!modelIdA || !modelIdB) { alert('Select two players to compare.'); return; }
+  if (modelIdA === modelIdB) { alert('Select two different players.'); return; }
+  const modal = document.getElementById('compareModal');
+  const body  = document.getElementById('cmpBody');
+  if (!modal || !body) return;
+  modal.classList.add('show');
+  body.innerHTML = '<div style="padding:20px;color:var(--text-mid);font-size:10px;text-align:center">Loading comparison…</div>';
+  try {
+    const data = await fetch(`${API}/api/compare?a=${encodeURIComponent(modelIdA)}&b=${encodeURIComponent(modelIdB)}`).then(r => {
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    });
+    _renderCompareModal(data);
+  } catch(e) {
+    body.innerHTML = `<div style="padding:20px;color:var(--text-mid);font-size:10px;text-align:center">Failed to load comparison data.</div>`;
+  }
+}
+
+function closeCompareModal() {
+  const modal = document.getElementById('compareModal');
+  if (modal) modal.classList.remove('show');
+}
+
+function _renderCompareModal(data) {
+  const body = document.getElementById('cmpBody');
+  if (!body) return;
+  const a = data.a, b = data.b, h2h = data.h2h || {};
+
+  function _col(p, h2hWins, h2hDraws, h2hLosses) {
+    const m = p.moves  || {};
+    const c = p.color  || {};
+    const g = p.games  || {};
+    const total  = m.total_moves || 0;
+    const wins   = (c.white_wins||0)  + (c.black_wins||0);
+    const draws  = (c.white_draws||0) + (c.black_draws||0);
+    const losses = (c.white_losses||0)+ (c.black_losses||0);
+    const wdlTot = wins + draws + losses;
+
+    const qLabels = ['best','excellent','good','inaccuracy','mistake','blunder'];
+    const qColors = ['var(--q-best)','var(--q-excellent)','var(--q-good)','var(--q-inaccuracy)','var(--q-mistake)','var(--q-blunder)'];
+    const qKeys   = ['q_best','q_excellent','q_good','q_inaccuracy','q_mistake','q_blunder'];
+    const qualBars = total ? qKeys.map((k, i) => {
+      const pct = Math.round(((m[k]||0)/total)*100);
+      return `<div class="cmp-qbar-row">
+        <span class="cmp-qlabel">${qLabels[i]}</span>
+        <div class="cmp-qbar-track"><div class="cmp-qbar-fill" style="width:${pct}%;background:${qColors[i]}"></div></div>
+        <span class="cmp-qpct">${pct}%</span>
+      </div>`;
+    }).join('') : '<div style="color:var(--text-dim);font-size:9px">No move data</div>';
+
+    const coh = p.coherence || {};
+    const cohAvg = coh.avg_coherence != null ? Number(coh.avg_coherence).toFixed(1) : '—';
+    const avgRank = m.avg_rank != null ? Number(m.avg_rank).toFixed(2) : '—';
+    const avgMs   = m.avg_elapsed_ms != null ? Math.round(m.avg_elapsed_ms/1000)+'s' : '—';
+
+    const hist = (p.elo_history || []).slice(-15).map(e => typeof e === 'number' ? e : (e.elo_after ?? 0));
+    const spark = hist.length >= 2
+      ? `<div style="margin:4px 0 8px">${_buildValueSparkline(hist, 120, 22, 'var(--gold)')}</div>`
+      : '';
+
+    const topOpenings = (p.openings || []).slice(0, 4).map(o =>
+      `<div class="cmp-opening">${escHtml(o.eco_code||'')} ${escHtml(o.opening_name||'')} <span style="color:var(--text-dim)">${o.games}g</span></div>`
+    ).join('') || '<div style="color:var(--text-dim);font-size:9px">No openings data</div>';
+
+    const portraitHtml = p.portrait_url
+      ? `<img src="${escHtml(p.portrait_url)}" class="cmp-portrait" alt="">`
+      : `<div class="cmp-portrait-placeholder">♟</div>`;
+
+    return `<div class="cmp-col">
+      ${portraitHtml}
+      <div class="cmp-name">${escHtml(p.name || p.model_id)}</div>
+      <div class="cmp-elo">${Math.round(p.elo ?? 0)}</div>
+      ${spark}
+      <div class="cmp-section-label">Record</div>
+      <div class="cmp-wdl">${wins}W / ${draws}D / ${losses}L</div>
+      <div class="cmp-section-label">vs opponent</div>
+      <div class="cmp-wdl">${h2hWins}W / ${h2hDraws}D / ${h2hLosses}L</div>
+      <div class="cmp-section-label">Move quality</div>
+      <div class="cmp-qbars">${qualBars}</div>
+      <div class="cmp-section-label">Stats</div>
+      <div class="cmp-stat-row"><span>Avg candidate rank</span><span>${avgRank}</span></div>
+      <div class="cmp-stat-row"><span>Avg move time</span><span>${avgMs}</span></div>
+      <div class="cmp-stat-row"><span>Coherence avg</span><span>${cohAvg}</span></div>
+      <div class="cmp-section-label">Top openings</div>
+      ${topOpenings}
+    </div>`;
+  }
+
+  const winsA = h2h.wins ?? 0, winsB = h2h.losses ?? 0, draws = h2h.draws ?? 0;
+  const nameA = a.name || a.model_id, nameB = b.name || b.model_id;
+
+  body.innerHTML = `
+    <div class="cmp-title">Model Comparison</div>
+    <div class="cmp-vs">${escHtml(nameA)} <span style="color:var(--text-dim)">vs</span> ${escHtml(nameB)}</div>
+    <div class="cmp-h2h-banner">${winsA} – ${draws} – ${winsB} <span style="color:var(--text-dim);font-size:9px">(${winsA+draws+winsB} games)</span></div>
+    <div class="cmp-grid">
+      ${_col(a, winsA, draws, winsB)}
+      ${_col(b, winsB, draws, winsA)}
+    </div>`;
+}
+
 // ── Recent games ──────────────────────────────────────────────────────────
 let _historyLimit = 10;
+let _recentGamesAll = [];   // all fetched games; filter runs over this
+
+function _renderHistoryRows(games) {
+  const body = document.getElementById('historyBody');
+  if (!body) return;
+  if (!games.length) { body.innerHTML = '<div class="lb-empty">No games match</div>'; return; }
+  const resultLabel = { '1-0':'1-0','0-1':'0-1','1/2-1/2':'½-½' };
+  let html = '';
+  games.forEach(g => {
+    const res = resultLabel[g.result] || g.result;
+    const openingTag = (g.eco_code || g.opening_name)
+      ? `<span class="game-opening" title="${escHtml(g.opening_name||'')}">` +
+        `${escHtml(g.eco_code||'')}${g.eco_code && g.opening_name ? ' · ' : ''}${escHtml(g.opening_name||'')}</span>`
+      : '';
+    html += `<div class="game-row" onclick="openReplay(${g.id}, window._recentGamesMeta[${g.id}])">
+      <span class="game-result">${res}</span>
+      <span class="game-names">${escHtml(g.white_name)} vs ${escHtml(g.black_name)}</span>
+      <span class="game-moves">${g.total_moves}m</span>
+      ${openingTag}
+      <a class="game-lichess" title="Analyse on Lichess" target="_blank" rel="noopener"
+         onclick="event.stopPropagation(); openLichessById(${g.id})">↗</a>
+      <button class="game-pgn-btn" title="Download PGN" onclick="event.stopPropagation(); downloadGamePgn(${g.id})">↓</button>
+    </div>`;
+  });
+  // "load more" only when not actively filtering
+  const filterVal = document.getElementById('historyFilter')?.value || '';
+  if (!filterVal && games.length >= _historyLimit) {
+    html += `<div class="hist-more-btn" onclick="_historyLimit+=10; loadHistory(true)">↓ load more</div>`;
+  }
+  body.innerHTML = html;
+}
+
+function filterHistory(query) {
+  const clearBtn = document.getElementById('historyFilterClear');
+  if (clearBtn) clearBtn.style.display = query ? '' : 'none';
+  if (!query) { _renderHistoryRows(_recentGamesAll); return; }
+  const q = query.toLowerCase();
+  const RESULT_ALIASES = { 'w': '1-0', 'white': '1-0', '1-0': '1-0', 'b': '0-1', 'black': '0-1', '0-1': '0-1', 'd': '1/2-1/2', 'draw': '1/2-1/2', '½': '1/2-1/2' };
+  const resultFilter = RESULT_ALIASES[q] || null;
+  const filtered = _recentGamesAll.filter(g => {
+    if (resultFilter) return g.result === resultFilter;
+    return (g.white_name||'').toLowerCase().includes(q) ||
+           (g.black_name||'').toLowerCase().includes(q) ||
+           (g.eco_code||'').toLowerCase().includes(q) ||
+           (g.opening_name||'').toLowerCase().includes(q);
+  });
+  _renderHistoryRows(filtered);
+}
+
+function clearHistoryFilter() {
+  const inp = document.getElementById('historyFilter');
+  if (inp) { inp.value = ''; filterHistory(''); }
+}
 
 async function loadHistory(append = false) {
   try {
     const games = await fetch(`${API}/api/games?limit=${_historyLimit}`).then(r=>r.json());
     const body  = document.getElementById('historyBody');
     if (!games.length) { body.innerHTML='<div class="lb-empty">No games yet</div>'; return; }
-    let html = '';
-    const resultLabel = { '1-0':'1-0','0-1':'0-1','1/2-1/2':'½-½' };
     // Store game metadata keyed by id for click handler
     window._recentGamesMeta = window._recentGamesMeta || {};
     games.forEach(g => { window._recentGamesMeta[g.id] = g; });
-
-    games.forEach(g => {
-      const res = resultLabel[g.result] || g.result;
-      const openingTag = (g.eco_code || g.opening_name)
-        ? `<span class="game-opening" title="${escHtml(g.opening_name||'')}">` +
-          `${escHtml(g.eco_code||'')}${g.eco_code && g.opening_name ? ' · ' : ''}${escHtml(g.opening_name||'')}</span>`
-        : '';
-      html += `<div class="game-row" onclick="openReplay(${g.id}, window._recentGamesMeta[${g.id}])">
-        <span class="game-result">${res}</span>
-        <span class="game-names">${escHtml(g.white_name)} vs ${escHtml(g.black_name)}</span>
-        <span class="game-moves">${g.total_moves}m</span>
-        ${openingTag}
-        <a class="game-lichess" title="Analyse on Lichess" target="_blank" rel="noopener"
-           onclick="event.stopPropagation(); openLichessById(${g.id})">↗</a>
-        <button class="game-pgn-btn" title="Download PGN" onclick="event.stopPropagation(); downloadGamePgn(${g.id})">↓</button>
-      </div>`;
-    });
-    // Show "load more" button if we got a full page (could be more)
-    if (games.length >= _historyLimit) {
-      html += `<div class="hist-more-btn" onclick="_historyLimit+=10; loadHistory(true)">↓ load more</div>`;
-    }
-    body.innerHTML = html;
+    _recentGamesAll = games;
+    // Apply current filter (if any)
+    const filterVal = document.getElementById('historyFilter')?.value || '';
+    filterHistory(filterVal);
   } catch(e) {}
 }
 

@@ -174,17 +174,19 @@ class TestViewerJsWaveB:
         assert "h2hPlayerB" in lb_section
 
     def test_load_history_renders_opening_tag(self):
-        """B-6: loadHistory emits game-opening span for eco_code/opening_name."""
+        """B-6: loadHistory/_renderHistoryRows emits game-opening span for eco_code."""
         src = self._src()
-        history_section = src[src.index("async function loadHistory"):
+        # Rendering moved to _renderHistoryRows which precedes loadHistory;
+        # check the whole recent-games block up to downloadGamePgn.
+        history_section = src[src.index("_renderHistoryRows"):
                                src.index("async function downloadGamePgn")]
         assert "game-opening" in history_section
         assert "eco_code" in history_section
 
     def test_load_history_renders_pgn_button(self):
-        """B-7: loadHistory emits game-pgn-btn button per game row."""
+        """B-7: loadHistory/_renderHistoryRows emits game-pgn-btn button per row."""
         src = self._src()
-        history_section = src[src.index("async function loadHistory"):
+        history_section = src[src.index("_renderHistoryRows"):
                                src.index("async function downloadGamePgn")]
         assert "game-pgn-btn" in history_section
         assert "downloadGamePgn" in history_section
